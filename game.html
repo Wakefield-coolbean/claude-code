@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Snake</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: 'Courier New', monospace;
+    color: #e0e0e0;
+  }
+  h1 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #4ade80;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  #scoreboard {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 1rem;
+    font-size: 1rem;
+  }
+  #scoreboard span { color: #94a3b8; }
+  #scoreboard strong { color: #f1f5f9; }
+  canvas {
+    border: 2px solid #334155;
+    border-radius: 4px;
+    display: block;
+  }
+  #message {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: #64748b;
+    text-align: center;
+    line-height: 1.6;
+  }
+  #message b { color: #4ade80; }
+</style>
+</head>
+<body>
+<h1>Snake</h1>
+<div id="scoreboard">
+  <div><span>Score </span><strong id="score">0</strong></div>
+  <div><span>Best </span><strong id="best">0</strong></div>
+  <div><span>Level </span><strong id="level">1</strong></div>
+</div>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="message"><b>Arrow keys</b> or <b>WASD</b> to move &nbsp;·&nbsp; <b>Space</b> to pause<br>Press any key to start</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const COLS = 20, ROWS = 20;
+const CELL = canvas.width / COLS;
+
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+const levelEl = document.getElementById('level');
+const msgEl = document.getElementById('message');
+
+let snake, dir, next, food, score, best, level, speed, loop, state;
+
+const COLORS = {
+  head: '#4ade80',
+  body: '#22c55e',
+  tail: '#16a34a',
+  food: '#f97316',
+  foodGlow: '#fed7aa',
+  grid: '#1e293b',
+  bg: '#0f172a',
+};
+
+function init() {
+  snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+  dir = { x: 1, y: 0 };
+  next = { x: 1, y: 0 };
+  score = 0;
+  level = 1;
+  speed = 150;
+  placeFood();
+  scoreEl.textContent = 0;
+  levelEl.textContent = 1;
+}
+
+function placeFood() {
+  const occupied = new Set(snake.map(s => `${s.x},${s.y}`));
+  let pos;
+  do {
+    pos = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+  } while (occupied.has(`${pos.x},${pos.y}`));
+  food = pos;
+}
+
+function step() {
+  dir = next;
+  const head = { x: (snake[0].x + dir.x + COLS) % COLS, y: (snake[0].y + dir.y + ROWS) % ROWS };
+
+  if (snake.some(s => s.x === head.x && s.y === head.y)) {
+    endGame();
+    return;
+  }
+
+  snake.unshift(head);
+
+  if (head.x === food.x && head.y === food.y) {
+    score += level * 10;
+    scoreEl.textContent = score;
+    if (score > best) { best = score; bestEl.textContent = best; }
+    const newLevel = Math.floor(score / 100) + 1;
+    if (newLevel !== level) {
+      level = newLevel;
+      levelEl.textContent = level;
+      speed = Math.max(60, 150 - (level - 1) * 15);
+      clearInterval(loop);
+      loop = setInterval(step, speed);
+    }
+    placeFood();
+  } else {
+    snake.pop();
+  }
+
+  draw();
+}
+
+function draw() {
+  ctx.fillStyle = COLORS.bg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // grid
+  ctx.strokeStyle = COLORS.grid;
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= COLS; x++) {
+    ctx.beginPath(); ctx.moveTo(x * CELL, 0); ctx.lineTo(x * CELL, canvas.height); ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    ctx.beginPath(); ctx.moveTo(0, y * CELL); ctx.lineTo(canvas.width, y * CELL); ctx.stroke();
+  }
+
+  // food glow
+  const gx = food.x * CELL + CELL / 2, gy = food.y * CELL + CELL / 2;
+  const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, CELL);
+  grad.addColorStop(0, COLORS.foodGlow);
+  grad.addColorStop(1, 'transparent');
+  ctx.fillStyle = grad;
+  ctx.fillRect(food.x * CELL - CELL, food.y * CELL - CELL, CELL * 3, CELL * 3);
+
+  // food
+  ctx.fillStyle = COLORS.food;
+  roundRect(food.x * CELL + 2, food.y * CELL + 2, CELL - 4, CELL - 4, 3);
+
+  // snake
+  snake.forEach((seg, i) => {
+    if (i === 0) ctx.fillStyle = COLORS.head;
+    else if (i === snake.length - 1) ctx.fillStyle = COLORS.tail;
+    else ctx.fillStyle = COLORS.body;
+    roundRect(seg.x * CELL + 1, seg.y * CELL + 1, CELL - 2, CELL - 2, i === 0 ? 5 : 3);
+  });
+
+  // eyes on head
+  const h = snake[0];
+  ctx.fillStyle = '#0f172a';
+  const eyeOff = { x: dir.y * 3, y: dir.x * 3 };
+  const ex = h.x * CELL + CELL / 2 + dir.x * 4, ey = h.y * CELL + CELL / 2 + dir.y * 4;
+  ctx.beginPath(); ctx.arc(ex + eyeOff.x, ey - eyeOff.y, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ex - eyeOff.x, ey + eyeOff.y, 2, 0, Math.PI * 2); ctx.fill();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function endGame() {
+  state = 'over';
+  clearInterval(loop);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#f97316';
+  ctx.font = 'bold 2rem Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 16);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '1rem Courier New';
+  ctx.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 + 16);
+  msgEl.innerHTML = 'Press <b>Space</b> or any key to play again';
+}
+
+function startGame() {
+  init();
+  draw();
+  state = 'running';
+  clearInterval(loop);
+  loop = setInterval(step, speed);
+  msgEl.innerHTML = '<b>Arrow keys</b> or <b>WASD</b> to move &nbsp;·&nbsp; <b>Space</b> to pause';
+}
+
+document.addEventListener('keydown', e => {
+  if (state === 'idle' || state === 'over') {
+    startGame(); return;
+  }
+  if (e.key === ' ') {
+    if (state === 'running') {
+      state = 'paused';
+      clearInterval(loop);
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#4ade80';
+      ctx.font = 'bold 2rem Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+      msgEl.innerHTML = 'Press <b>Space</b> to resume';
+    } else if (state === 'paused') {
+      state = 'running';
+      loop = setInterval(step, speed);
+      msgEl.innerHTML = '<b>Arrow keys</b> or <b>WASD</b> to move &nbsp;·&nbsp; <b>Space</b> to pause';
+    }
+    e.preventDefault(); return;
+  }
+  const moves = {
+    ArrowUp: { x: 0, y: -1 }, w: { x: 0, y: -1 }, W: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 }, s: { x: 0, y: 1 }, S: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 }, a: { x: -1, y: 0 }, A: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 }, d: { x: 1, y: 0 }, D: { x: 1, y: 0 },
+  };
+  const m = moves[e.key];
+  if (m && !(m.x === -dir.x && m.y === -dir.y)) {
+    next = m;
+    e.preventDefault();
+  }
+});
+
+// touch support
+let touchStart = null;
+canvas.addEventListener('touchstart', e => { touchStart = e.touches[0]; e.preventDefault(); }, { passive: false });
+canvas.addEventListener('touchend', e => {
+  if (!touchStart) return;
+  const dx = e.changedTouches[0].clientX - touchStart.clientX;
+  const dy = e.changedTouches[0].clientY - touchStart.clientY;
+  if (state === 'idle' || state === 'over') { startGame(); return; }
+  if (Math.abs(dx) > Math.abs(dy)) {
+    const m = dx > 0 ? { x: 1, y: 0 } : { x: -1, y: 0 };
+    if (!(m.x === -dir.x)) next = m;
+  } else {
+    const m = dy > 0 ? { x: 0, y: 1 } : { x: 0, y: -1 };
+    if (!(m.y === -dir.y)) next = m;
+  }
+  touchStart = null;
+  e.preventDefault();
+}, { passive: false });
+
+best = 0;
+state = 'idle';
+init();
+draw();
+</script>
+</body>
+</html>
