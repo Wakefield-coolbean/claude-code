@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlockCraft Sound Test</title>
+<style>
+  :root { --bg: #1b1d22; --panel: #25282f; --text: #e6e6e6; --dim: #9aa0aa; --btn: #3a3f4a; --btn-hi: #4d5566; --accent: #6fbf4a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 10px 16px; border-bottom: 1px solid #000; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+  h1 { font-size: 16px; margin: 0 8px 0 0; }
+  main { padding: 12px 16px 40px; max-width: 1400px; }
+  section { margin: 14px 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 0 0 6px; }
+  button { background: var(--btn); color: var(--text); border: 1px solid #111; border-radius: 4px; padding: 5px 9px; margin: 2px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  button:hover { background: var(--btn-hi); }
+  button.alias { opacity: .75; font-style: italic; }
+  button.primary { background: #3d5a2c; }
+  label { color: var(--dim); display: inline-flex; gap: 6px; align-items: center; }
+  input[type=range] { width: 110px; }
+  #status { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .vols { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  select { background: var(--btn); color: var(--text); border: 1px solid #111; padding: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BlockCraft Sound Test</h1>
+  <button id="unlock" class="primary">Enable audio</button>
+  <span id="status">audio locked — click anywhere</span>
+</header>
+<main id="main">
+  <section>
+    <h2>Music</h2>
+    <div class="row">
+      <button data-music="menu">Menu music</button>
+      <button data-music="game">Game music (starts now)</button>
+      <button data-music="game-wait">Game music (normal 20–60 s wait)</button>
+      <button data-music="stop">Stop music (2 s fade)</button>
+      <span id="music"></span>
+    </div>
+  </section>
+  <section>
+    <h2>Playback options</h2>
+    <div class="row">
+      <label>volume <input id="vol" type="range" min="0" max="2" step="0.05" value="1"><span id="volv">1.00</span></label>
+      <label>pitch <input id="pitch" type="range" min="0.5" max="2" step="0.05" value="1"><span id="pitchv">1.00</span></label>
+      <label><input id="pos" type="checkbox"> positional</label>
+      <label>angle <input id="ang" type="range" min="-180" max="180" step="5" value="90"><span id="angv">90°</span></label>
+      <label>distance <input id="dist" type="range" min="0" max="24" step="0.5" value="4"><span id="distv">4</span></label>
+      <label><input id="under" type="checkbox"> underground (cave ambience ~every 45–145 s)</label>
+    </div>
+  </section>
+  <section>
+    <h2>Block sounds (playBlock)</h2>
+    <div class="row" id="blocks"></div>
+  </section>
+  <section>
+    <h2>Volumes</h2>
+    <div class="vols" id="vols"></div>
+  </section>
+  <div id="sounds"></div>
+</main>
+<script type="module">
+import { SoundManager, listSounds, BLOCK_SOUND_GROUPS, CATEGORIES } from '../src/audio/sound.js';
+
+const nocontrols = new URLSearchParams(location.search).has('nocontrols');
+const sound = new SoundManager();
+window.sound = sound;
+const $ = (id) => document.getElementById(id);
+
+function unlock() { sound.unlock(); }
+if (!nocontrols) {
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', unlock);
+}
+$('unlock').onclick = unlock;
+
+const opts = () => {
+  const o = { volume: +$('vol').value, pitch: +$('pitch').value };
+  if ($('pos').checked) {
+    // listener at origin looking toward -Z (yaw 0); angle measured clockwise from forward
+    const a = +$('ang').value * Math.PI / 180, d = +$('dist').value;
+    o.x = Math.sin(a) * d; o.y = 0; o.z = -Math.cos(a) * d;
+  }
+  return o;
+};
+for (const id of ['vol', 'pitch', 'ang', 'dist']) {
+  $(id).oninput = () => { $(id + 'v').textContent = id === 'ang' ? $(id).value + '°' : (+$(id).value).toFixed(id === 'dist' ? 1 : 2); };
+}
+
+// sound buttons, grouped by prefix
+const groups = new Map();
+for (const s of listSounds()) {
+  const parts = s.name.split('.');
+  const g = parts[0] === 'mob' ? parts.slice(0, 2).join('.') : parts[0];
+  if (!groups.has(g)) groups.set(g, []);
+  groups.get(g).push(s);
+}
+const host = $('sounds');
+for (const [g, list] of groups) {
+  const sec = document.createElement('section');
+  sec.innerHTML = `<h2>${g}</h2>`;
+  for (const s of list) {
+    const b = document.createElement('button');
+    b.textContent = s.name + (s.variants > 1 ? ` (${s.variants})` : '');
+    b.title = `${s.cat}${s.alias ? ' — alias of ' + s.alias : ''}`;
+    if (s.alias) b.classList.add('alias');
+    b.onclick = () => { unlock(); sound.play(s.name, opts()); };
+    sec.appendChild(b);
+  }
+  host.appendChild(sec);
+}
+
+// playBlock
+const sel = document.createElement('select');
+for (const g of [...Object.keys(BLOCK_SOUND_GROUPS), 'none']) sel.add(new Option(g, g));
+$('blocks').appendChild(sel);
+for (const k of ['break', 'place', 'step', 'hit', 'fall']) {
+  const b = document.createElement('button');
+  b.textContent = k;
+  b.onclick = () => { unlock(); const o = opts(); sound.playBlock(k, sel.value, o.x ?? 0, o.y ?? 0, o.z ?? -1.5); };
+  $('blocks').appendChild(b);
+}
+const walk = document.createElement('button');
+walk.textContent = 'walk (8 steps)';
+walk.onclick = () => { unlock(); for (let i = 0; i < 8; i++) setTimeout(() => sound.playBlock('step', sel.value, 0, -1.6, 0), i * 380); };
+$('blocks').appendChild(walk);
+const mine = document.createElement('button');
+mine.textContent = 'mine (hits then break)';
+mine.onclick = () => { unlock(); for (let i = 0; i < 6; i++) setTimeout(() => sound.playBlock('hit', sel.value, 0, 0, -2), i * 200); setTimeout(() => sound.playBlock('break', sel.value, 0, 0, -2), 1250); };
+$('blocks').appendChild(mine);
+
+// volumes
+for (const c of CATEGORIES) {
+  const l = document.createElement('label');
+  l.innerHTML = `${c} <input type="range" min="0" max="1" step="0.05" value="1">`;
+  l.querySelector('input').oninput = (e) => sound.setVolume(c, +e.target.value);
+  $('vols').appendChild(l);
+}
+
+// music
+document.querySelectorAll('[data-music]').forEach((b) => {
+  b.onclick = () => {
+    unlock();
+    const m = b.dataset.music;
+    if (m === 'stop') sound.stopMusic();
+    else if (m === 'menu') sound.startMusic('menu');
+    else if (m === 'game') { sound.stopMusic(); sound.startMusic('game', { delay: 0.5 }); }
+    else { sound.stopMusic(); sound.startMusic('game'); }
+  };
+});
+
+// frame loop
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(0.1, (t - last) / 1000); last = t;
+  if (!nocontrols) {
+    sound.setListener(0, 0, 0, 0, 0);
+    sound.update(dt, { underground: $('under').checked, time: 6000 });
+    if (sound.ctx) {
+      $('status').textContent = `${sound.ctx.state} · ${sound.ctx.sampleRate} Hz · voices ${sound.activeVoices} · buffers ${sound._buffers.size} · worker ${sound._backend.worker ? 'yes' : 'no'}`;
+      const m = sound.musicState;
+      $('music').textContent = m.state === 'off' ? 'music off' : m.state === 'waiting' ? `${m.kind}: next piece in ${m.nextIn.toFixed(0)} s` : `${m.kind}: playing ${m.piece}`;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "blockcraft",
+  "version": "1.18.2",
+  "private": true,
+  "description": "A Minecraft-style voxel sandbox game (Java Edition 1.18 feature set) that runs in the browser with WebGL2.",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server -p 8080 -c-1 .",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
