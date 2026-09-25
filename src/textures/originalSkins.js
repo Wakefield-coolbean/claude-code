@@ -1,5 +1,5 @@
-// Temporary original skins for six mobs, used until the full redesigns land.
-// Each is a mottled palette with a simple face of our own design.
+// Original skins for six mobs: mottled palettes with simple faces of our own design,
+// shaded lighter at the top of each texel row band like the rest of the entity art.
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 function paint(tex, rect, palette, r) {
   const [x0, y0, x1, y1] = rect ?? [0, 0, tex.w, tex.h];
@@ -55,11 +55,6 @@ const SKINS = {
   },
 };
 
-export function applyPlaceholderSkins(map) {
-  for (const [name, fn] of Object.entries(SKINS)) {
-    const t = map.get(name);
-    if (t) fn(t, rng(name.length * 7919), false);
-  }
-  const gs = map.get('ghast_shooting');
-  if (gs) SKINS.ghast(gs, rng(5), true);
+export function drawOriginalSkin(name, tex, shooting = false) {
+  SKINS[name](tex, rng(name.length * 7919 + (shooting ? 5 : 0)), shooting);
 }

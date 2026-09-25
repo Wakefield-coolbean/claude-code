@@ -37,6 +37,8 @@ const EXPECT_ENTITY = {
   player: [64, 64], zombie: [64, 64], skeleton: [64, 32], creeper: [64, 32], spider: [64, 32],
   pig: [64, 64], cow: [64, 64], sheep: [64, 64], sheep_fur: [64, 64], chicken: [64, 32],
   enderman: [64, 32], shield: [64, 64],
+  zombified_piglin: [64, 64], ghast: [64, 64], ghast_shooting: [64, 64], blaze: [64, 32],
+  magma_cube: [64, 32], enchanting_table_book: [64, 32],
 };
 for (const m of MATS) { EXPECT_ENTITY[`armor_${m}_1`] = [64, 32]; EXPECT_ENTITY[`armor_${m}_2`] = [64, 32]; }
 
@@ -119,14 +121,16 @@ const norm = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / 
 
 // Local texel-space face definitions: origin = corner of texel (0,0), u = +1 column, v = +1 row.
 // Convention: +z = front, -x = creature's right, +y = up.
-function faceDefs(u, v, W, H, D) {
+// (Wg, Hg, Dg) are the geometric sizes: a zero-thickness box (book covers, pages) gets a tiny
+// thickness so its front and back faces don't z-fight; its zero-width faces have no texels.
+function faceDefs(u, v, W, H, D, Wg = W, Hg = H, Dg = D) {
   return [
-    { rect: [u + D, v + D, W, H], o: [0, H, D], du: [1, 0, 0], dv: [0, -1, 0] }, // front
-    { rect: [u + 2 * D + W, v + D, W, H], o: [W, H, 0], du: [-1, 0, 0], dv: [0, -1, 0] }, // back
-    { rect: [u, v + D, D, H], o: [0, H, 0], du: [0, 0, 1], dv: [0, -1, 0] }, // right (-x)
-    { rect: [u + D + W, v + D, D, H], o: [W, H, D], du: [0, 0, -1], dv: [0, -1, 0] }, // left (+x)
-    { rect: [u + D, v, W, D], o: [0, H, 0], du: [1, 0, 0], dv: [0, 0, 1] }, // top
-    { rect: [u + D + W, v, W, D], o: [0, 0, D], du: [1, 0, 0], dv: [0, 0, -1] }, // bottom
+    { rect: [u + D, v + D, W, H], o: [0, Hg, Dg], du: [1, 0, 0], dv: [0, -1, 0] }, // front
+    { rect: [u + 2 * D + W, v + D, W, H], o: [Wg, Hg, 0], du: [-1, 0, 0], dv: [0, -1, 0] }, // back
+    { rect: [u, v + D, D, H], o: [0, Hg, 0], du: [0, 0, 1], dv: [0, -1, 0] }, // right (-x)
+    { rect: [u + D + W, v + D, D, H], o: [Wg, Hg, Dg], du: [0, 0, -1], dv: [0, -1, 0] }, // left (+x)
+    { rect: [u + D, v, W, D], o: [0, Hg, 0], du: [1, 0, 0], dv: [0, 0, 1] }, // top
+    { rect: [u + D + W, v, W, D], o: [0, 0, Dg], du: [1, 0, 0], dv: [0, 0, -1] }, // bottom
   ];
 }
 
@@ -150,10 +154,11 @@ function render(boxes, texMap, { yaw = 35, pitch = 25, scale = 8, pad = 12, bg =
   const quads = [];
   for (const b of boxes) {
     const [W, H, D] = b.size, inf = b.inflate ?? 0;
-    const sx = (W + 2 * inf) / W, sy = (H + 2 * inf) / H, sz = (D + 2 * inf) / D;
+    const Wg = W || 0.05, Hg = H || 0.05, Dg = D || 0.05;
+    const sx = (Wg + 2 * inf) / Wg, sy = (Hg + 2 * inf) / Hg, sz = (Dg + 2 * inf) / Dg;
     const T = (l) => {
       // mirror = Minecraft's mirrored box: the whole box is flipped in x (right/left faces swap)
-      const lx = b.mirror ? W - l[0] : l[0];
+      const lx = b.mirror ? Wg - l[0] : l[0];
       let p = [b.pos[0] - inf + lx * sx, b.pos[1] - inf + l[1] * sy, b.pos[2] - inf + l[2] * sz];
       if (b.rot) {
         const pv = b.pivot ?? [0, 0, 0];
@@ -165,7 +170,7 @@ function render(boxes, texMap, { yaw = 35, pitch = 25, scale = 8, pad = 12, bg =
     };
     const tex = texMap.get(b.tex);
     if (!tex) fail(`render: unknown texture ${b.tex}`);
-    for (const fd of faceDefs(b.uv[0], b.uv[1], W, H, D)) {
+    for (const fd of faceDefs(b.uv[0], b.uv[1], W, H, D, Wg, Hg, Dg)) {
       const O = T(fd.o);
       const U = sub(T([fd.o[0] + fd.du[0], fd.o[1] + fd.du[1], fd.o[2] + fd.du[2]]), O);
       const V = sub(T([fd.o[0] + fd.dv[0], fd.o[1] + fd.dv[1], fd.o[2] + fd.dv[2]]), O);
@@ -280,6 +285,15 @@ function quadLegs(tex, uv, size, xs, zs, extra = {}) {
   return out;
 }
 
+function ghastModel(tex) {
+  const list = [B(tex, [0, 0], [16, 16, 16], [-8, 9, -8])];
+  for (let i = 0; i < 9; i++) {
+    const col = i % 3, row = Math.floor(i / 3);
+    list.push(B(tex, [0, 32], [2, 9, 2], [-6 + col * 5 - (row % 2), 0, -6 + row * 5]));
+  }
+  return list;
+}
+
 const spiderLegs = () => {
   const legs = [];
   const zs = [1, 0, -1, -2];
@@ -355,13 +369,72 @@ const MODELS = {
     B('shield', [0, 0], [12, 22, 1], [-6, 0, 0]),
     B('shield', [26, 0], [2, 6, 6], [-1, 8, -6]),
   ],
+  zombified_piglin: [
+    B('zombified_piglin', [0, 16], [4, 12, 4], [-4, 0, -2]),
+    B('zombified_piglin', [16, 48], [4, 12, 4], [0, 0, -2]),
+    B('zombified_piglin', [16, 16], [8, 12, 4], [-4, 12, -2]),
+    B('zombified_piglin', [40, 16], [4, 12, 4], [-8, 12, -2]),
+    B('zombified_piglin', [32, 48], [4, 12, 4], [4, 12, -2]),
+    B('zombified_piglin', [0, 0], [10, 8, 8], [-5, 24, -4]),
+    B('zombified_piglin', [31, 1], [4, 4, 1], [-2, 24, 4]),
+    B('zombified_piglin', [39, 6], [1, 5, 4], [-5.5, 25, -2], { pivot: [-4.5, 30, 0], rot: [['z', -30]] }),
+    B('zombified_piglin', [51, 6], [1, 5, 4], [4.5, 25, -2], { pivot: [4.5, 30, 0], rot: [['z', 30]] }),
+  ],
+  ghast: ghastModel('ghast'),
+  ghast_shooting: ghastModel('ghast_shooting'),
+  blaze: [
+    B('blaze', [0, 0], [8, 8, 8], [-4, 22, -4]),
+    ...[0, 1, 2].flatMap((ring) => [0, 1, 2, 3].map((k) => {
+      const a = (k * 90 + ring * 45 + 22) * Math.PI / 180, rad = [8, 6.5, 4.5][ring];
+      return B('blaze', [0, 16], [2, 8, 2], [Math.cos(a) * rad - 1, [15, 8, 1][ring], Math.sin(a) * rad - 1]);
+    })),
+  ],
+  // the core sits inside the crust in-game; drawn beside it here so it can be inspected
+  magma_cube: [
+    B('magma_cube', [0, 0], [8, 8, 8], [-4, 0, -4]),
+    B('magma_cube', [32, 0], [4, 4, 4], [7, 0, -2]),
+  ],
+  enchanting_table_book: [
+    // open book facing +z: covers splay back in a V, pages sit on their inner sides
+    B('enchanting_table_book', [0, 0], [6, 10, 0], [0, 0, 0], { pivot: [0, 0, 0], rot: [['y', 160]] }),
+    B('enchanting_table_book', [16, 0], [6, 10, 0], [-6, 0, 0], { pivot: [0, 0, 0], rot: [['y', 200]] }),
+    B('enchanting_table_book', [12, 0], [2, 10, 0], [-1, 0, -0.2], { pivot: [0, 0, -0.2], rot: [['y', 180]] }),
+    B('enchanting_table_book', [0, 10], [5, 8, 1], [-5, 1, 0.1], { pivot: [0, 0, 0], rot: [['y', -20]] }),
+    B('enchanting_table_book', [12, 10], [5, 8, 1], [0, 1, 0.1], { pivot: [0, 0, 0], rot: [['y', 20]] }),
+    B('enchanting_table_book', [24, 10], [5, 8, 0], [0, 1, 1.2], { pivot: [0, 0, 1.2], rot: [['y', -75]] }),
+  ],
 };
 for (const m of MATS) MODELS['armor_' + m] = armored(m);
+
+// Distinct boxes of one texture must not claim the same texels (catches UV-layout collisions).
+function checkOverlap(name, boxes) {
+  const seen = new Map();
+  for (const b of boxes) {
+    const key = `${b.tex}|${b.uv}|${b.size}`;
+    if (seen.has(key)) continue;
+    seen.set(key, b);
+  }
+  const owner = new Map();
+  for (const [key, b] of seen) {
+    const [u, v] = b.uv, [W, H, D] = b.size;
+    const rects = [[u + D, v, W, D], [u + D + W, v, W, D], [u, v + D, D, H], [u + D, v + D, W, H], [u + D + W, v + D, D, H], [u + 2 * D + W, v + D, W, H]];
+    const tex = entity.get(b.tex);
+    for (const [rx, ry, rw, rh] of rects) for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) {
+      if (x >= tex.w || y >= tex.h) fail(`${name}: box ${key} texel (${x},${y}) is outside the ${tex.w}x${tex.h} texture`);
+      const k = `${b.tex}:${x},${y}`;
+      const prev = owner.get(k);
+      if (prev && prev !== key) fail(`${name}: UV overlap at ${k} between ${prev} and ${key}`);
+      owner.set(k, key);
+    }
+  }
+}
+for (const [name, boxes] of Object.entries(MODELS)) if (!name.startsWith('armor_')) checkOverlap(name, boxes);
+console.log('no UV overlaps between distinct boxes');
 
 const all = new Map([...entity]);
 const renders = [];
 for (const [name, boxes] of Object.entries(MODELS)) {
-  const big = ['enderman'].includes(name) ? 6 : 8;
+  const big = { enderman: 6, ghast: 6, ghast_shooting: 6, enchanting_table_book: 16, magma_cube: 12 }[name] ?? 8;
   const views = [
     render(boxes, all, { yaw: 35, pitch: 22, scale: big }),
     render(boxes, all, { yaw: 0, pitch: 0, scale: big }),

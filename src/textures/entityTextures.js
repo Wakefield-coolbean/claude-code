@@ -8,6 +8,7 @@
 //   left   [u+D+W,   u+2D+W)   x [v+D, v+D+H)
 //   back   [u+2D+W,  u+2D+2W)  x [v+D, v+D+H)
 // Pure JS, deterministic, no DOM.
+import { drawOriginalSkin } from './originalSkins.js';
 import { PixelCanvas, mix, toRGBA } from './pixel.js';
 import { hashFloat } from '../util/rng.js';
 import { Noise } from '../util/noise.js';
@@ -234,105 +235,6 @@ function drawPlayer(c) {
 // Zombie — 64x64 humanoid layout
 // ---------------------------------------------------------------------------------------------
 
-function drawZombie(c) {
-  const seed = seedOf('zombie');
-  const nz = new Noise(seed);
-  const SKIN = P('#2F4E20', '#3E6429', '#4F7C35', '#5F9142', '#71A551', '#86B865');
-  const SCALP = P('#1F3316', '#28401C', '#2F4A21', '#385627', '#42632E');
-  const SHIRT = P('#0F504E', '#166966', '#1E817D', '#279793', '#35ABA6', '#4BBDB7');
-  const PANTS = P('#241D55', '#2F2769', '#3A317E', '#463C92', '#5448A6');
-  const SHOE = P('#1A1A1A', '#262626', '#333333', '#404040');
-  const EYE = C('#070B06'), EYE2 = C('#141F12');
-
-  const skin = (x, y, z, b = 0, s = 0) => tone(SKIN, 0.6 + b + nz.noise3(x * 0.55 + s, y * 0.55, z * 0.55) * 0.2
-    + (rnd(seed + s, x, y, z) - 0.5) * 0.24);
-  const cloth = (pal, x, y, z, b = 0, s = 0) => tone(pal, 0.55 + b + nz.noise3(x * 0.5 + s + 60, y * 0.5, z * 0.5) * 0.14
-    + (rnd(seed + 50 + s, x, y, z) - 0.5) * 0.22);
-
-  // ---- head ----
-  const FACE = [
-    'HHHHHHHH',
-    'HhHHHHhH',
-    'ssssssrs',
-    'sDDssDDs',
-    'sKkssKKs',
-    'sssnnsss',
-    'ssMMMMss',
-    'ssssssss',
-  ];
-  paintBox(c, 0, 0, 8, 8, 8, ({ x, y, z }) => {
-    const jt = 7 - y;
-    if (z === 7) {
-      const ch = FACE[jt][x];
-      if (ch === 'H') return tone(SCALP, 0.4 + rnd(seed, x, y, z) * 0.5);
-      if (ch === 'h') return SCALP[4];
-      if (ch === 'D') return SKIN[1];
-      if (ch === 'K') return EYE;
-      if (ch === 'k') return EYE2;
-      if (ch === 'n') return SKIN[1];
-      if (ch === 'M') return x === 2 || x === 5 ? SKIN[1] : C('#1C2E14');
-      if (ch === 'r') return SKIN[2];
-      return skin(x, y, z, jt === 7 ? -0.08 : 0);
-    }
-    const scalpRows = z === 0 ? 3 : (z >= 5 ? 1 : 2);
-    if (y === 7 || jt <= scalpRows || (jt === scalpRows + 1 && rnd(seed + 3, x, y, z) > 0.55)) {
-      return tone(SCALP, 0.35 + nz.noise3(x * 0.7, y * 0.7, z * 0.7) * 0.3 + rnd(seed + 4, x, y, z) * 0.4);
-    }
-    if ((x === 0 || x === 7) && z === 4 && (jt === 4 || jt === 5)) return SKIN[jt === 5 ? 0 : 1]; // ear
-    if (x === 7 && z === 2 && jt === 5) return SKIN[1]; // wound
-    return skin(x, y, z, y === 0 ? -0.18 : -0.04);
-  });
-
-  // ---- body (16,16): torn shirt, ragged hem, trouser waist ----
-  const TEARS = new Set(['5,4,3', '6,5,3', '5,5,3', '1,6,0', '2,7,0', '0,3,2', '7,6,1']);
-  paintBox(c, 16, 16, 8, 12, 4, ({ face, x, y, z }) => {
-    const jt = 11 - y;
-    const front = z === 3 && face !== 'top' && face !== 'bottom';
-    if (face === 'top' && x >= 2 && x <= 5 && z >= 1 && z <= 2) return SKIN[1];
-    if (front && jt === 0 && x >= 3 && x <= 4) return skin(x, y, z);
-    if (front && jt === 1 && x === 3) return skin(x, y, z, -0.1); // ripped collar
-    if (jt >= 10) return cloth(PANTS, x, y, z, jt === 11 ? -0.1 : 0);
-    const key = `${x},${jt},${z}`;
-    if (TEARS.has(key)) return skin(x, y, z, -0.12);
-    if (jt === 9) return rnd(seed + 9, x, y, z) > 0.45 ? cloth(SHIRT, x, y, z, -0.12) : skin(x, y, z, -0.1);
-    if (jt === 8 && rnd(seed + 10, x, y, z) > 0.8) return skin(x, y, z, -0.1);
-    let b = -jt * 0.012;
-    if (front && (x === 1 || x === 6) && jt >= 3) b -= 0.1;
-    if (face === 'top') b += 0.06;
-    return cloth(SHIRT, x, y, z, b);
-  });
-
-  // ---- arms: torn sleeves then rotting skin ----
-  const arm = (u, v, isLeft) => paintBox(c, u, v, 4, 12, 4, ({ face, x, y, z }) => {
-    const jt = 11 - y;
-    const inner = (isLeft ? x === 0 : x === 3) && face !== 'top' && face !== 'bottom' ? -0.1 : 0;
-    const s = isLeft ? 70 : 80;
-    const sleeveEnd = 2 + (rnd(seed + s, x, 0, z) > 0.5 ? 1 : 0) + (rnd(seed + s + 1, x, 0, z) > 0.75 ? 1 : 0);
-    if (face === 'top' || jt <= sleeveEnd) return cloth(SHIRT, x, y, z, inner + (jt === sleeveEnd ? -0.12 : 0), s);
-    let b = inner;
-    if (jt >= 10) b -= 0.08;
-    if (face === 'bottom') b -= 0.12;
-    if (jt === 11 && z === 3 && face !== 'bottom') return SKIN[0]; // dark nails
-    return skin(x, y, z, b, s);
-  });
-  arm(40, 16, false);
-  arm(32, 48, true);
-
-  // ---- legs ----
-  const leg = (u, v, isLeft) => paintBox(c, u, v, 4, 12, 4, ({ face, x, y, z }) => {
-    const jt = 11 - y;
-    const inner = (isLeft ? x === 0 : x === 3) && face !== 'top' && face !== 'bottom' ? -0.12 : 0;
-    const s = isLeft ? 90 : 100;
-    if (jt >= 10) return tone(SHOE, jt === 11 || face === 'bottom' ? 0.05 : 0.45 + rnd(seed + s, x, y, z) * 0.5);
-    if (!isLeft && z === 3 && face !== 'top' && ((jt === 5 && x >= 1 && x <= 2) || (jt === 6 && x === 2))) {
-      return skin(x, y, z, -0.1, s); // torn knee
-    }
-    if (jt === 9 && rnd(seed + s + 5, x, y, z) > 0.7) return cloth(PANTS, x, y, z, -0.2, s);
-    return cloth(PANTS, x, y, z, inner - (jt >= 8 ? 0.06 : 0), s);
-  });
-  leg(0, 16, false);
-  leg(16, 48, true);
-}
 
 // ---------------------------------------------------------------------------------------------
 // Skeleton — 64x32
@@ -417,43 +319,6 @@ function drawSkeleton(c) {
 // Creeper — 64x32
 // ---------------------------------------------------------------------------------------------
 
-function drawCreeper(c) {
-  const seed = seedOf('creeper');
-  const nz = new Noise(seed);
-  const CAMO = P('#1A4F1A', '#246622', '#2F7F2B', '#3D9636', '#4EAA44', '#66BC59', '#86CE77', '#A9DC9A');
-  const PALE = P('#8E968C', '#B5BCB2', '#D2D8CF');
-  const camo = (x, y, z, b = 0, s = 0) => {
-    const r = rnd(seed + s, x, y, z);
-    if (r > 0.982) return tone(PALE, rnd(seed + s + 1, x, y, z));
-    const t = 0.55 + b + nz.noise3(x * 0.5 + s * 13, y * 0.5, z * 0.5) * 0.36 + (r - 0.5) * 0.54;
-    return tone(CAMO, t);
-  };
-  const FACE = [
-    '........',
-    '........',
-    '.AB..BA.',
-    '.BK..KB.',
-    '...KK...',
-    '..KMMK..',
-    '..KMMK..',
-    '..K..K..',
-  ];
-  const FACE_COL = { A: C('#1C1F1C'), B: C('#0E0F0E'), K: C('#050505'), M: C('#000000') };
-  paintBox(c, 0, 0, 8, 8, 8, ({ face, x, y, z }) => {
-    const jt = 7 - y;
-    if (face === 'front') {
-      const ch = FACE[jt][x];
-      if (ch !== '.') return FACE_COL[ch];
-    }
-    return camo(x, y, z, face === 'bottom' ? -0.15 : 0.02, 1);
-  });
-  paintBox(c, 16, 16, 8, 12, 4, ({ face, x, y, z }) => camo(x, y, z, (face === 'bottom' ? -0.15 : 0) - (11 - y) * 0.008, 2));
-  paintBox(c, 0, 16, 4, 6, 4, ({ face, x, y, z }) => {
-    const jt = 5 - y;
-    if (face === 'bottom') return camo(x, y, z, -0.3, 3);
-    return camo(x, y, z, jt === 5 ? -0.16 : jt === 4 ? -0.06 : 0, 3);
-  });
-}
 
 // ---------------------------------------------------------------------------------------------
 // Spider — 64x32
@@ -814,28 +679,6 @@ function drawChicken(c) {
 // Enderman — 64x32
 // ---------------------------------------------------------------------------------------------
 
-function drawEnderman(c) {
-  const seed = seedOf('enderman');
-  const nz = new Noise(seed);
-  const DARK = P('#050505', '#0A0A0A', '#0F0F0F', '#141414', '#1A1A1A', '#222222');
-  const dark = (x, y, z, b = 0, s = 0) => {
-    const r = rnd(seed + s, x, y, z);
-    if (r > 0.985) return C('#1A1220'); // faint violet fleck
-    return tone(DARK, 0.4 + b + nz.noise3(x * 0.5 + s * 9, y * 0.5, z * 0.5) * 0.3 + (r - 0.5) * 0.45);
-  };
-  const EYE = [C('#B330E6'), C('#E27CFA'), C('#B330E6')];
-  paintBox(c, 0, 0, 8, 8, 8, ({ face, x, y, z }) => {
-    const jt = 7 - y;
-    if (face === 'front') {
-      if (jt === 4 && x <= 2) return EYE[x];
-      if (jt === 4 && x >= 5) return EYE[x - 5];
-      if ((jt === 3 || jt === 5) && (x === 1 || x === 6)) return C('#241030'); // glow bleed
-    }
-    return dark(x, y, z, face === 'top' ? 0.05 : 0, 1);
-  });
-  paintBox(c, 32, 16, 8, 12, 4, ({ x, y, z }) => dark(x, y, z, 0, 2));
-  paintBox(c, 56, 0, 2, 30, 2, ({ face, x, y, z }) => dark(x, y, z, face === 'bottom' ? -0.1 : 0, 3));
-}
 
 // ---------------------------------------------------------------------------------------------
 // Armor layers — 64x32
@@ -1016,6 +859,156 @@ function drawShield(c) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Zombified piglin — 64x64 (humanoid body, 10x8x8 head, snout, floppy ears)
+// ---------------------------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------------------------
+// Ghast — 64x64 (16x16x16 body + 2x9x2 tentacle); calm and shooting faces
+// ---------------------------------------------------------------------------------------------
+
+const GHAST_CALM = [
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '...ee......ee...',
+  '..EEEE....EEEE..',
+  '...Tt......tT...',
+  '...T.......tT...',
+  '...Tt.......T...',
+  '...T........T...',
+  '......MMMM..T...',
+  '...t...mm...t...',
+  '................',
+  '................',
+  '................',
+];
+const GHAST_SHOOT = [
+  '................',
+  '................',
+  '..DD........DD..',
+  '....DD....DD....',
+  '..RRRR....RRRR..',
+  '..RhrR....RrhR..',
+  '..RrrR....RrrR..',
+  '..RRRR....RRRR..',
+  '...T........T...',
+  '...T..MMMM..T...',
+  '...tMMmmmmMMT...',
+  '....MmmmmmmMt...',
+  '....MmmmmmmM....',
+  '.....MMMMMM.....',
+  '................',
+  '................',
+];
+
+
+// ---------------------------------------------------------------------------------------------
+// Blaze — 64x32 (8x8x8 head, 2x8x2 rod)
+// ---------------------------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------------------------
+// Magma cube — 64x32 (8x8x8 layered crust + 4x4x4 glowing core)
+// ---------------------------------------------------------------------------------------------
+
+function drawMagmaCube(c) {
+  const seed = seedOf('magma_cube');
+  const nz = new Noise(seed);
+  const CRUST = P('#140403', '#220705', '#330B06', '#471108', '#5E180B');
+  const GLOW = P('#A8280A', '#E2560E', '#FF8A18', '#FFBC34', '#FFE474');
+  paintBox(c, 0, 0, 8, 8, 8, ({ face, x, y, z }) => {
+    const jt = 7 - y;
+    const r = rnd(seed, x, y, z);
+    if (face === 'front' && jt >= 3 && jt <= 4 && (x === 1 || x === 2 || x === 5 || x === 6)) {
+      return jt === 3 ? GLOW[(x === 1 || x === 6) ? 4 : 3] : GLOW[2]; // eyes
+    }
+    if (face === 'front' && jt === 5 && (x === 1 || x === 2 || x === 5 || x === 6)) return GLOW[0]; // eye glow
+    // horizontal layered bands with glowing seams between them
+    const band = jt % 2;
+    const crack = nz.noise3(x * 0.55, y * 2.2, z * 0.55);
+    if (face !== 'top' && face !== 'bottom' && band === 1 && crack > 0.12) {
+      return GLOW[Math.min(4, Math.floor((crack - 0.12) * 7))];
+    }
+    if (face !== 'top' && face !== 'bottom' && band === 0 && crack > 0.62 && r > 0.4) return GLOW[1]; // vertical fissure
+    if (face === 'top') {
+      const cr = nz.noise3(x * 0.8 + 30, 0, z * 0.8);
+      if (Math.abs(cr) < 0.07) return GLOW[2]; // cracks across the top
+    }
+    let t = (band ? 0.28 : 0.58) + (r - 0.5) * 0.36;
+    if (face === 'bottom') t -= 0.2;
+    return tone(CRUST, t);
+  });
+  paintBox(c, 32, 0, 4, 4, 4, ({ face, x, y, z }) => {
+    const r = rnd(seed + 1, x, y, z);
+    const edge = (x === 0 || x === 3) + (y === 0 || y === 3) + (z === 0 || z === 3);
+    let t = 0.78 - edge * 0.12 + (r - 0.5) * 0.3 + nz.noise3(x * 0.9 + 50, y * 0.9, z * 0.9) * 0.15;
+    if (face === 'bottom') t -= 0.1;
+    return tone(GLOW, t);
+  }, { light: false });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Enchanting table book — 64x32 (zero-thickness covers, spine and flipping page)
+// ---------------------------------------------------------------------------------------------
+
+function drawEnchantingBook(c) {
+  const seed = seedOf('enchanting_table_book');
+  const LEATHER = P('#27130A', '#381D0E', '#492814', '#5A331B', '#6C4024');
+  const INNER = P('#6A4629', '#7E5634', '#936743', '#A67A53');
+  const PAPER = P('#CDBF9C', '#DDD1B3', '#EBE2CA', '#F5EEDC', '#FCF8EE');
+  const LINE = C('#D8CDB0');
+  const GOLD = P('#9A6C12', '#D6A42A', '#F6D56A');
+  const leatherAt = (i, j, w, h) => {
+    const border = i === 0 || j === 0 || i === w - 1 || j === h - 1;
+    const inset = (i === 1 || i === w - 2) && j >= 1 && j <= h - 2 || (j === 1 || j === h - 2) && i >= 1 && i <= w - 2;
+    const r = rnd(seed, i, j, w * 31 + h);
+    if (border) return LEATHER[0];
+    if (inset) return LEATHER[3]; // embossed frame
+    return tone(LEATHER, 0.45 + (r - 0.5) * 0.4);
+  };
+  const innerAt = (i, j, w, h) => {
+    const r = rnd(seed + 1, i, j, w * 17 + h);
+    if (i === 0 || j === 0 || i === w - 1 || j === h - 1) return INNER[0];
+    return tone(INNER, 0.55 + (r - 0.5) * 0.35);
+  };
+  const cover = (u, w) => paintBox(c, u, 0, w, 10, 0, ({ face, i, j }) => {
+    if (face === 'front') {
+      if (w === 2) { // spine: leather with gilded bands
+        if (j === 1 || j === 8) return GOLD[i === 0 ? 2 : 1];
+        return j === 0 || j === 9 ? LEATHER[0] : LEATHER[2 + ((i + j) % 2)];
+      }
+      if (i === w - 2 && j === 5) return GOLD[1]; // clasp stud
+      return leatherAt(i, j, w, 10);
+    }
+    return innerAt(i, j, w, 10);
+  }, { light: false });
+  cover(0, 6);
+  cover(12, 2);
+  cover(16, 6);
+  // text-like faint lines on a page face (deterministic per page)
+  const pageFace = (i, j, s, white) => {
+    const r = rnd(seed + s, i, j, 3);
+    if (i >= 1 && i <= 3 && (j === 1 || j === 3 || j === 5 || j === 6 && s % 2)) {
+      const len = 1 + Math.floor(rnd(seed + s, 0, j, 9) * 3);
+      if (i <= len) return LINE;
+    }
+    return PAPER[white ? 4 : (r > 0.8 ? 2 : 3)];
+  };
+  const pages = (u, v, s) => paintBox(c, u, v, 5, 8, 1, ({ face, i, j }) => {
+    if (face === 'front' || face === 'back') return pageFace(i, j, s + (face === 'back' ? 1 : 0), false);
+    // page edges: stacked sheets
+    if (face === 'top' || face === 'bottom') return PAPER[(i % 2) ? 1 : 3];
+    return PAPER[(j % 2) ? 1 : 2];
+  }, { light: false });
+  pages(0, 10, 10);
+  pages(12, 10, 20);
+  paintBox(c, 24, 10, 5, 8, 0, ({ face, i, j }) => pageFace(i, j, face === 'front' ? 30 : 31, true), { light: false });
+}
+
+// ---------------------------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------------------------
 
@@ -1023,6 +1016,8 @@ export const ENTITY_TEXTURE_SIZES = {
   player: [64, 64], zombie: [64, 64], skeleton: [64, 32], creeper: [64, 32], spider: [64, 32],
   pig: [64, 64], cow: [64, 64], sheep: [64, 64], sheep_fur: [64, 64], chicken: [64, 32],
   enderman: [64, 32], shield: [64, 64],
+  zombified_piglin: [64, 64], ghast: [64, 64], ghast_shooting: [64, 64], blaze: [64, 32],
+  magma_cube: [64, 32], enchanting_table_book: [64, 32],
 };
 export const ARMOR_MATERIALS = ['leather', 'chainmail', 'iron', 'golden', 'diamond', 'netherite'];
 for (const m of ARMOR_MATERIALS) {
@@ -1031,9 +1026,11 @@ for (const m of ARMOR_MATERIALS) {
 }
 
 const DRAWERS = {
-  player: drawPlayer, zombie: drawZombie, skeleton: drawSkeleton, creeper: drawCreeper,
+  player: drawPlayer, zombie: (c) => drawOriginalSkin('zombie', c), skeleton: drawSkeleton, creeper: (c) => drawOriginalSkin('creeper', c),
   spider: drawSpider, pig: drawPig, cow: drawCow, sheep: drawSheep, sheep_fur: drawSheepFur,
-  chicken: drawChicken, enderman: drawEnderman, shield: drawShield,
+  chicken: drawChicken, enderman: (c) => drawOriginalSkin('enderman', c), shield: drawShield,
+  zombified_piglin: (c) => drawOriginalSkin('zombified_piglin', c), ghast: (c) => drawOriginalSkin('ghast', c), ghast_shooting: (c) => drawOriginalSkin('ghast', c, true),
+  blaze: (c) => drawOriginalSkin('blaze', c), magma_cube: drawMagmaCube, enchanting_table_book: drawEnchantingBook,
 };
 
 /** @returns {Map<string, {w:number, h:number, data:Uint8ClampedArray}>} */
