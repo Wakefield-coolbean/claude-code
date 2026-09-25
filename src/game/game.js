@@ -14,6 +14,7 @@ import { Effects } from '../render/particles.js';
 import { IconCache } from '../render/icons.js';
 import { Gui, imageToCanvas } from '../ui/gui.js';
 import { Hud } from '../ui/hud.js';
+import { IntroScreen } from '../ui/intro.js';
 import { TitleScreen, PauseScreen, DeathScreen, LoadingScreen, ChatScreen, SleepScreen } from '../ui/screens.js';
 import { InventoryScreen, CreativeScreen, CraftingScreen, FurnaceScreen, ChestScreen, EnchantmentScreen, AnvilScreen, fuelOf } from '../ui/containers.js';
 import { Input } from '../input/input.js';
@@ -126,7 +127,7 @@ export class Game {
     window.addEventListener('keydown', unlock);
     this.onResize();
     progress('Done', 1);
-    this.setScreen(new TitleScreen(this));
+    this.setScreen(new IntroScreen(this));
     this.startPanorama();
     this.last = performance.now();
     this.acc = 0;

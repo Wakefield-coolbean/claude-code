@@ -6,7 +6,7 @@ import { makeCanvas } from '../ui/gui.js';
 
 const TINTS = { grass: [0x91, 0xbd, 0x59], foliage: [0x77, 0xab, 0x2f], birch: [0x80, 0xa7, 0x55], spruce: [0x61, 0x99, 0x61], water: [0x3f, 0x76, 0xe4], lily: [0x20, 0x80, 0x30] };
 
-function rgbaToCanvas(data, w = 16, h = 16, tint = null) {
+export function rgbaToCanvas(data, w = 16, h = 16, tint = null) {
   const c = makeCanvas(w, h);
   const ctx = c.getContext('2d');
   const id = ctx.createImageData(w, h);

@@ -636,7 +636,7 @@ class Animal extends Mob {
       this.panicTime--;
       if (!this.navigating) {
         const tx = this.x + (Math.random() * 2 - 1) * 5, tz = this.z + (Math.random() * 2 - 1) * 5;
-        this.moveTo(tx, this.y, tz, 2.0);
+        this.moveTo(tx, this.y, tz, 1.5);
       }
       return;
     }

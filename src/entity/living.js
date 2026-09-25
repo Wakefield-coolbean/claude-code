@@ -146,6 +146,8 @@ export class LivingEntity extends Entity {
       this.actuallyHurt(source, amount);
       this.hurtDuration = 10;
       this.hurtTime = blocked ? 0 : 10;
+      // mobs stagger after a hit: half speed for 2 seconds
+      if (!blocked && !this.isPlayer) this.hitSlow = 40;
     }
     this.lastDamageSource = source;
     if (source.entity) { this.lastHurtBy = source.entity; this.lastHurtByTime = 100; }
@@ -224,6 +226,7 @@ export class LivingEntity extends Entity {
   tick() {
     this.baseTick();
     if (this.hurtTime > 0) this.hurtTime--;
+    if (this.hitSlow > 0) this.hitSlow--;
     if (this.invulnerableTime > 0) this.invulnerableTime--;
     if (this.lastHurtByTime > 0 && --this.lastHurtByTime === 0) this.lastHurtBy = null;
     if (this.dead) {
@@ -360,6 +363,7 @@ export class LivingEntity extends Entity {
 
   effectiveSpeed() {
     let s = this.speed;
+    if (this.hitSlow > 0) s *= 0.5;
     if (this.sprinting) s *= 1.3;
     const sp = this.effectAmp('speed');
     if (sp >= 0) s *= 1 + 0.2 * (sp + 1);
