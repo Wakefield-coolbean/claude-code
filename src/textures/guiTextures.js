@@ -309,6 +309,9 @@ const BUTTON_STYLES = {
   normal: { outline: '#000000', base: '#727272', hi: '#aaaaaa', hi2: '#8e8e8e', lo: '#565656', lo2: '#474747', noise: 0.09 },
   highlighted: { outline: '#ffffff', base: '#7c86be', hi: '#bec8ff', hi2: '#9aa4dc', lo: '#5a6296', lo2: '#4a5282', noise: 0.08 },
   disabled: { outline: '#000000', base: '#2e2e2e', hi: '#414141', hi2: '#373737', lo: '#262626', lo2: '#202020', noise: 0.06 },
+  enchant: { outline: '#3a2c18', base: '#c2ab80', hi: '#eadcb8', hi2: '#d6c49c', lo: '#96805a', lo2: '#7a6444', noise: 0.035 },
+  enchant_highlighted: { outline: '#3a2448', base: '#c9aed6', hi: '#f4e6fa', hi2: '#dfcae8', lo: '#9e80ae', lo2: '#806292', noise: 0.035 },
+  enchant_disabled: { outline: '#2a241c', base: '#8a8070', hi: '#a39a8a', hi2: '#968d7d', lo: '#6e6658', lo2: '#5c5548', noise: 0.03 },
 };
 
 function button(w, h, style, seed) {
@@ -538,6 +541,114 @@ function recipeBookButton() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// enchanting table & anvil
+// ---------------------------------------------------------------------------------------------
+const DIGITS_3x5 = {
+  1: ['.#.', '##.', '.#.', '.#.', '###'],
+  2: ['##.', '..#', '.#.', '#..', '###'],
+  3: ['##.', '..#', '.#.', '..#', '##.'],
+};
+
+// glowing orb badge with a level numeral (green = affordable, gray = disabled)
+function enchantLevel(n, disabled) {
+  const c = sprite(16, 16);
+  const ramp = disabled
+    ? { o: '#262626', d: '#4e4e4e', m: '#707070', l: '#929292', h: '#b8b8b8', core: '#a4a4a4', dig: '#dedede', dout: '#303030' }
+    : { o: '#123a04', d: '#2e7a0e', m: '#4eb41e', l: '#86e24a', h: '#d2ffa8', core: '#b4f47a', dig: '#ffffff', dout: '#164a06' };
+  const cx = 7.5, cy = 7.5, r = 7;
+  const inside = (x, y) => (x - cx) ** 2 + (y - cy) ** 2 <= r * r;
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    if (!inside(x, y)) continue;
+    const edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+    if (edge) { c.set(x, y, ramp.o); continue; }
+    const dx = (x - cx) / r, dy = (y - cy) / r;
+    const dist = Math.hypot(dx, dy);
+    const lit = -(dx * 0.6 + dy * 0.8);
+    let col = dist < 0.42 ? ramp.core : lit > 0.45 ? ramp.l : lit > -0.25 ? ramp.m : ramp.d;
+    if (Math.abs(dx + 0.42) < 0.1 && Math.abs(dy + 0.46) < 0.1) col = ramp.h;
+    c.set(x, y, col);
+  }
+  // numeral with a dark outline so it reads on the glow
+  const g = DIGITS_3x5[n];
+  const ox = 6, oy = 5;
+  for (let y = -1; y <= 5; y++) for (let x = -1; x <= 3; x++) {
+    const on = (X, Y) => Y >= 0 && Y < 5 && X >= 0 && X < 3 && g[Y][X] === '#';
+    if (on(x, y)) continue;
+    let near = false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (on(x + dx, y + dy)) near = true;
+    if (near) c.set(ox + x, oy + y, ramp.dout);
+  }
+  g.forEach((row, y) => { for (let x = 0; x < 3; x++) if (row[x] === '#') c.set(ox + x, oy + y, ramp.dig); });
+  return c;
+}
+
+const ANVIL_ARROW = (() => {
+  const rows = [];
+  for (let r = 0; r < 15; r++) {
+    const last = 14 + (7 - Math.abs(r - 7));
+    let row = '';
+    for (let x = 0; x < 22; x++) row += (x >= 13 && x <= last) || (r >= 5 && r <= 9 && x < 13) ? 'a' : '.';
+    rows.push(row);
+  }
+  return rows;
+})();
+
+function anvilArrow() { return paint(sprite(22, 15), ANVIL_ARROW, { a: '#8b8b8b' }); }
+
+function anvilError() {
+  const c = sprite(28, 21);
+  paint(c, ANVIL_ARROW, { a: '#8b8b8b' }, 3, 3);
+  // bold red X over the arrow
+  const cx = 13.5, cy = 10, half = 7.5;
+  for (let y = 0; y < 21; y++) for (let x = 0; x < 28; x++) {
+    const dx = x - cx, dy = y - cy;
+    if (Math.abs(dx) > half + 1.2 || Math.abs(dy) > half + 1.2) continue;
+    const d1 = Math.abs(dx - dy) / Math.SQRT2, d2 = Math.abs(dx + dy) / Math.SQRT2;
+    const d = Math.min(d1, d2);
+    const inX = Math.abs(dx) <= half && Math.abs(dy) <= half;
+    if (d <= 1.25 && inX) c.set(x, y, d <= 0.6 ? '#ff4a3a' : '#d81c14');
+    else if (d <= 2.2) c.set(x, y, '#4a0000');
+  }
+  return c;
+}
+
+// recessed dark area behind the spinning book, with the enchanting table top as a pedestal
+function enchantingBookBackground() {
+  const W = 52, H = 51;
+  const c = sprite(W, H);
+  const rnd = seeded('enchant-bg');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = y / H;
+    const v = rnd();
+    const base = mix('#1a1222', '#2c1f33', t);
+    c.set(x, y, v < 0.05 ? mix(base, '#000000', 0.35) : base);
+  }
+  // faint drifting rune sparks
+  for (let i = 0; i < 14; i++) {
+    const x = 3 + Math.floor(rnd() * (W - 6)), y = 3 + Math.floor(rnd() * 30);
+    c.set(x, y, rnd() < 0.5 ? [180, 130, 230, 150] : [230, 210, 255, 120]);
+  }
+  // pedestal: carpet-topped obsidian block seen slightly from above
+  const px0 = 9, px1 = 42, top = 36;
+  for (let y = top; y < H - 1; y++) for (let x = px0; x <= px1; x++) {
+    let col;
+    if (y < top + 4) col = (y === top) ? '#c83434' : (x + y) % 5 === 0 ? '#8e1e1e' : '#a82828';
+    else col = rnd() < 0.18 ? '#3a2654' : rnd() < 0.5 ? '#1c1228' : '#150d1e';
+    c.set(x, y, col);
+  }
+  // diamond corners on the carpet
+  for (const [x, y] of [[px0, top], [px0 + 1, top], [px0, top + 1], [px1, top], [px1 - 1, top], [px1, top + 1]]) c.set(x, y, '#6ef0dc');
+  hline(c, px0, px1, top + 4, '#0a0610');
+  vline(c, px0 - 1, top, H - 2, '#0a0610'); vline(c, px1 + 1, top, H - 2, '#0a0610');
+  hline(c, px0 - 1, px1 + 1, top - 1, '#0a0610');
+  // recessed slot-style bevel
+  hline(c, 0, W - 1, 0, '#373737'); vline(c, 0, 0, H - 1, '#373737');
+  hline(c, 1, W - 1, H - 1, '#ffffff'); vline(c, W - 1, 1, H - 1, '#ffffff');
+  c.set(W - 1, 0, '#8b8b8b'); c.set(0, H - 1, '#8b8b8b');
+  return c;
+}
+
+// ---------------------------------------------------------------------------------------------
 // public API
 // ---------------------------------------------------------------------------------------------
 function build() {
@@ -618,6 +729,18 @@ function build() {
   put('furnace_burn_empty', flame(false));
   put('furnace_arrow_progress', furnaceArrow(true));
   put('furnace_arrow_empty', furnaceArrow(false));
+
+  // enchanting table & anvil
+  put('enchanting_button', button(108, 19, 'enchant', 'enchant'));
+  put('enchanting_button_highlighted', button(108, 19, 'enchant_highlighted', 'enchant'));
+  put('enchanting_button_disabled', button(108, 19, 'enchant_disabled', 'enchant'));
+  for (const n of [1, 2, 3]) {
+    put(`enchanting_level_${n}`, enchantLevel(n, false));
+    put(`enchanting_level_${n}_disabled`, enchantLevel(n, true));
+  }
+  put('anvil_error', anvilError());
+  put('anvil_arrow', anvilArrow());
+  put('enchanting_book_background', enchantingBookBackground());
   return M;
 }
 
@@ -640,6 +763,10 @@ export const GUI_SPRITE_SIZES = {
   inventory_tab_selected: [28, 32], inventory_tab: [28, 32], scroller: [12, 15], scroller_disabled: [12, 15],
   furnace_burn_progress: [14, 14], furnace_burn_empty: [14, 14], furnace_arrow_progress: [24, 17], furnace_arrow_empty: [24, 17],
   checkbox: [20, 20], checkbox_selected: [20, 20],
+  enchanting_button: [108, 19], enchanting_button_highlighted: [108, 19], enchanting_button_disabled: [108, 19],
+  enchanting_level_1: [16, 16], enchanting_level_2: [16, 16], enchanting_level_3: [16, 16],
+  enchanting_level_1_disabled: [16, 16], enchanting_level_2_disabled: [16, 16], enchanting_level_3_disabled: [16, 16],
+  anvil_error: [28, 21], anvil_arrow: [22, 15], enchanting_book_background: [52, 51],
 };
 
 let cache = null;

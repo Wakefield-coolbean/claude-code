@@ -3,6 +3,7 @@ import { ID_MASK, packBlock, MIN_Y } from '../constants.js';
 import { BlockById, B, IS_OPAQUE, IS_SOLID, IS_REPLACEABLE } from '../registry/blocks.js';
 import { SB_ALL } from '../world/world.js';
 import { getCollisionBoxes } from '../registry/shapes.js';
+import { tryLightPortal, portalStillValid } from './portal.js';
 
 const HORIZ = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIRS6 = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
@@ -25,13 +26,20 @@ export class BlockLogic {
     // grass under a newly placed opaque block turns to dirt
     const below = w.getBlock(x, y - 1, z);
     if (idOf(below) === B.grass_block && IS_OPAQUE[idOf(newV)]) w.setBlock(x, y - 1, z, B.dirt);
-    void oldV;
+    // track enchanting tables for the floating book renderer
+    if (idOf(newV) === B.enchanting_table) this.game.enchTables?.set(`${x},${y},${z}`, { x, y, z });
+    else if (idOf(oldV) === B.enchanting_table) this.game.enchTables?.delete(`${x},${y},${z}`);
+    // fire placed inside an obsidian frame opens a nether portal
+    if (idOf(newV) === B.fire && idOf(oldV) !== B.fire && w.dimension !== 'end') {
+      const portal = tryLightPortal(w, x, y, z);
+      if (portal) this.game.registerPortalNear?.(w.dimension, portal.x0, portal.y0, portal.z0);
+    }
   }
 
   checkSelf(x, y, z, v) {
     const def = BlockById[idOf(v)];
     if (def.gravity) this.world.scheduleTick(x, y, z, 2);
-    if (def.liquid) this.world.scheduleTick(x, y, z, def.liquid === 'water' ? 5 : 30);
+    if (def.liquid) this.world.scheduleTick(x, y, z, this.fluidDelay(def.liquid));
   }
 
   neighborChanged(x, y, z, fx, fy, fz) {
@@ -39,12 +47,17 @@ export class BlockLogic {
     const v = w.getBlock(x, y, z);
     if (v === 0) return;
     const def = BlockById[idOf(v)];
-    if (def.liquid) { w.scheduleTick(x, y, z, def.liquid === 'water' ? 5 : 30); return; }
+    if (def.liquid) { w.scheduleTick(x, y, z, this.fluidDelay(def.liquid)); return; }
     if (def.waterlogged) w.scheduleTick(x, y, z, 5);
     if (def.gravity) { w.scheduleTick(x, y, z, 2); return; }
     if (def.support && !this.canSurvive(x, y, z, v, def)) {
       this.breakNaturally(x, y, z, v);
       return;
+    }
+    if (def.id === B.nether_portal && !portalStillValid(w, x, y, z, v)) { w.setBlock(x, y, z, 0); return; }
+    if (def.id === B.soul_fire) {
+      const bid = idOf(w.getBlock(x, y - 1, z));
+      if (bid !== B.soul_sand && bid !== B.soul_soil) { w.setBlock(x, y, z, 0); return; }
     }
     if (def.shape === 'door') this.checkDoor(x, y, z, v);
     if (def.shape === 'bed') this.checkBed(x, y, z, v);
@@ -70,6 +83,15 @@ export class BlockLogic {
         return bid === B.grass_block || bid === B.dirt || bid === B.podzol || bid === B.coarse_dirt || bid === B.farmland || bid === B.moss_block;
       }
       case 'farmland': return bid === B.farmland;
+      case 'soul_sand': return bid === B.soul_sand;
+      case 'nylium': return bid === B.crimson_nylium || bid === B.warped_nylium || bid === B.soul_soil || bid === B.grass_block || bid === B.dirt || bid === B.podzol || bid === B.coarse_dirt || bid === B.farmland || bid === B.moss_block;
+      case 'lantern': {
+        if (metaOf(v) & 2) { // hanging
+          const above = w.getBlock(x, y + 1, z);
+          return this.canSupportCenter(above) || this.isSturdy(above, 'side') || BlockById[idOf(above)].shape === 'wall';
+        }
+        return this.canSupportCenter(below) || BlockById[bid].shape === 'wall';
+      }
       case 'mushroom': return bdef.opaque && w.getBlockLight(x, y, z) < 13 || bid === B.podzol;
       case 'dead_bush': return bid === B.sand || bid === B.red_sand || bid === B.terracotta || bid === B.dirt || bid === B.podzol || bid === B.coarse_dirt || bid === B.grass_block;
       case 'sand': return (bid === B.sand || bid === B.red_sand || bid === B.cactus);
@@ -180,6 +202,8 @@ export class BlockLogic {
     return def.liquid === kind && metaOf(v) === 0;
   }
   fluidBlock(kind) { return kind === 'water' ? B.water : B.lava; }
+  // lava flows faster and further in ultrawarm dimensions (the Nether)
+  fluidDelay(kind) { return kind === 'water' ? 5 : this.world.ultrawarm ? 10 : 30; }
 
   newLiquidState(x, y, z, kind) {
     const w = this.world;
@@ -199,7 +223,7 @@ export class BlockLogic {
     }
     const above = w.getBlock(x, y + 1, z);
     if (this.fluidAmount(above, kind) > 0) return packBlock(this.fluidBlock(kind), 8);
-    const drop = kind === 'water' ? 1 : 2;
+    const drop = kind === 'water' || this.world.ultrawarm ? 1 : 2;
     const k = maxAmount - drop;
     if (k <= 0) return 0;
     return packBlock(this.fluidBlock(kind), 8 - k);
@@ -243,7 +267,7 @@ export class BlockLogic {
       this.game.dropBlockItems?.(nx, ny, nz, cur, null);
     }
     w.setBlock(nx, ny, nz, newV);
-    w.scheduleTick(nx, ny, nz, kind === 'water' ? 5 : 30);
+    w.scheduleTick(nx, ny, nz, this.fluidDelay(kind));
   }
 
   fizz(x, y, z) {
@@ -303,14 +327,14 @@ export class BlockLogic {
   }
 
   spreadSides(x, y, z, state, kind) {
-    const drop = kind === 'water' ? 1 : 2;
+    const drop = kind === 'water' || this.world.ultrawarm ? 1 : 2;
     let amount = this.fluidAmount(state, kind);
     if (metaOf(state) >= 8 && !this.isSource(state, kind)) amount = 8;
     amount -= drop;
     if (this.isSource(state, kind)) amount = 8 - drop;
     if (amount <= 0) return;
     const newV = packBlock(this.fluidBlock(kind), 8 - amount);
-    const slopeDist = kind === 'water' ? 4 : 2;
+    const slopeDist = kind === 'water' || this.world.ultrawarm ? 4 : 2;
     const dirs = [];
     let best = 1000;
     for (let i = 0; i < 4; i++) {
@@ -368,6 +392,11 @@ export class BlockLogic {
       if (!this.logNearby(x, y, z, 5)) {
         this.breakNaturally(x, y, z, v);
       }
+      return;
+    }
+    if (def.netherWart) {
+      const age = metaOf(v);
+      if (age < 3 && r() < 0.1) w.setBlock(x, y, z, packBlock(id, age + 1));
       return;
     }
     if (def.crop) {
@@ -479,7 +508,7 @@ export class BlockLogic {
     const w = this.world;
     const age = metaOf(v);
     const below = BlockById[idOf(w.getBlock(x, y - 1, z))];
-    const infinite = below.name === 'netherrack';
+    const infinite = below.name === 'netherrack' || below.name === 'magma_block';
     if (w.raining && w.canSeeSky(x, y, z) && Math.random() < 0.2 + age * 0.03) { w.setBlock(x, y, z, 0); return; }
     if (!infinite) {
       if (!this.hasFlammableNeighbour(x, y, z) && (!below.solid || age > 3)) { w.setBlock(x, y, z, 0); return; }

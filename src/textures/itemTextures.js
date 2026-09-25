@@ -1247,12 +1247,27 @@ function buildItems() {
   put('ender_eye', enderEye());
   put('totem_of_undying', totem());
 
+  // nether & enchanting materials
+  put('enchanted_book', enchantedBook());
+  put('quartz', quartz());
+  put('nether_wart', netherWart());
+  put('blaze_rod', blazeRod());
+  put('blaze_powder', dustPile('blaze_powder', ['#8a3800', '#cc6400', '#f09410', '#ffc62e', '#fff27a'], '#4a1800'));
+  put('ghast_tear', ghastTear());
+  put('magma_cream', magmaCream());
+  put('netherite_scrap', fromSprite('netherite_scrap', 'raw_ore', { o: '#170f0e', d: '#382823', m: '#503c36', l: '#6a554d', h: '#8a756a' }));
+  put('nether_brick', fromSprite('nether_brick', 'brick', { o: '#140506', d: '#2e0e12', m: '#44181d', l: '#60252b', h: '#7e353b' }));
+  put('fire_charge', fireCharge());
+
   // block items with flat sprites
   put('oak_door', oakDoor());
   put('red_bed', redBed());
 
   // ghost icons for empty equipment slots
   for (const [n, c] of Object.entries(emptySlotIcons())) put(n, c);
+  put('empty_slot_lapis_lazuli', ghostOf(T.get('lapis_lazuli')));
+  put('empty_slot_ingot', ghostOf(T.get('iron_ingot')));
+  put('empty_slot_sword', ghostOf(T.get('iron_sword')));
 
   return T;
 }
@@ -1791,6 +1806,161 @@ function totem() {
   return art('totem_of_undying', rows, { o: '#5a3200', d: '#c07a10', m: '#e6ac22', l: '#f8d850', h: '#fff4a8', g: '#2fb85a', k: '#0e4a22' });
 }
 
+function enchantedBook() {
+  const rows = [
+    '................',
+    '................',
+    '...ooooooooo....',
+    '..ohhlllllllo...',
+    '..ohglllllglo...',
+    '..olllgggllmpo..',
+    '..ollgllGgmmpo..',
+    '..ollgllGgmmpo..',
+    '..olllgGgllmpo..',
+    '..ollllllllmpo..',
+    '..oglllllllgpo..',
+    '..ommmmmmmmmpo..',
+    '..obbbbbbbbbpo..',
+    '...opppppppppo..',
+    '....oooooooooo..',
+    '................',
+  ];
+  return art('enchanted_book', rows, { o: '#220a1a', h: '#b0568e', l: '#8a3a6e', m: '#6a2854', b: '#40142e', p: '#f1ebdc', g: '#f0c850', G: '#b08a2a' });
+}
+
+function quartz() {
+  const rows = [
+    '................',
+    '................',
+    '.......oo.......',
+    '......ohwo......',
+    '......ohwlo.....',
+    '..oo..ohwlo.....',
+    '.ohwo.ohwlmo.oo.',
+    '.ohwloohllmoowlo',
+    '.ohllmohllmdohlo',
+    '..ohlmohlmmdolmo',
+    '..ohlmmhlmddlmdo',
+    '...olmmmlmdddmo.',
+    '...oolmmmmdddo..',
+    '.....oodddddo...',
+    '.......ooooo....',
+    '................',
+  ];
+  return art('quartz', rows, { o: '#5e5048', w: '#ffffff', h: '#f4efea', l: '#ddd4cc', m: '#bfb3aa', d: '#9c8e84' });
+}
+
+// Overlapping round lobes, each shaded on its own and separated by dark seams (nether wart).
+function lobes(name, circles, ramp, outline) {
+  const c = canvas();
+  const owner = new Int8Array(N * N).fill(-1);
+  circles.forEach(([cx, cy, r], i) => {
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if ((x - cx) ** 2 + (y - cy) ** 2 <= r * r) owner[y * N + x] = i;
+  });
+  const own = (x, y) => (x < 0 || y < 0 || x >= N || y >= N ? -1 : owner[y * N + x]);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = own(x, y);
+    if (i < 0) continue;
+    const [cx, cy, r] = circles[i];
+    // seam where a lobe sits on top of an earlier one (lower index = further back)
+    const seam = [[0, 1], [1, 0], [0, -1], [-1, 0]].some(([dx, dy]) => { const j = own(x + dx, y + dy); return j >= 0 && j < i && dy >= 0; });
+    const l = -((x - cx) / r * 0.62 + (y - cy) / r * 0.78);
+    let k = l > 0.5 ? 4 : l > 0.1 ? 3 : l > -0.35 ? 2 : 1;
+    if (seam) k = 0;
+    c.set(x, y, ramp[k]);
+  }
+  autoOutline(c, outline);
+  return c;
+}
+
+function netherWart() {
+  const lobesDef = [[5.5, 5, 2.5], [10.5, 5.5, 2.6], [8, 3.8, 2.3], [3.8, 9.2, 2.5], [12, 9.6, 2.4], [8, 8, 2.9], [6, 11.5, 2.4], [10, 11.6, 2.4]];
+  const c = lobes('nether_wart', lobesDef, ['#4a0a0c', '#7c1418', '#aa2226', '#d03a34', '#f06a56'], '#2a0506');
+  // a glint on each wart
+  for (const [cx, cy, r] of lobesDef) {
+    const x = Math.round(cx - r * 0.45), y = Math.round(cy - r * 0.45);
+    if (c.data[c.idx(x, y) + 3]) c.set(x, y, '#ff9e86');
+  }
+  // tiny dark stalk underneath
+  c.set(8, 14, '#5a1a10'); c.set(7, 14, '#2a0506'); c.set(9, 14, '#2a0506'); c.set(8, 15, '#2a0506');
+  return c;
+}
+
+function blazeRod() {
+  const rows = [
+    '................',
+    '................',
+    '............ooo.',
+    '...........ohlmo',
+    '..........ohlmdo',
+    '.........ohlmdo.',
+    '........ohhmdo..',
+    '.......ohlmdo...',
+    '......ohlmdo....',
+    '.....ohlmdo.....',
+    '....ohhmdo......',
+    '...ohlmdo.......',
+    '..ohlmdo........',
+    '.ohlmdo.........',
+    '.oddo...........',
+    '..oo............',
+  ];
+  return art('blaze_rod', rows, { o: '#7a3a00', d: '#e08400', m: '#ffbe1a', l: '#fff070', h: '#ffffd0' });
+}
+
+function ghastTear() {
+  const rows = [
+    '................',
+    '................',
+    '.......o........',
+    '......owo.......',
+    '......owo.......',
+    '.....owlmo......',
+    '.....owlmo......',
+    '....owwlmdo.....',
+    '....owllmdo.....',
+    '...owllmmddo....',
+    '...owlmmmddo....',
+    '...olmmmmddo....',
+    '....odmmddo.....',
+    '.....oooo.......',
+    '................',
+    '................',
+  ];
+  return art('ghast_tear', rows, { o: '#6a8494', w: '#ffffff', l: '#e4f2f8', m: '#bcd8e6', d: '#8eb2c6' });
+}
+
+function magmaCream() {
+  const c = shadedBlob(circle(7.5, 8, 5.4), ['#4a1000', '#a0280a', '#d24e10', '#ef7c1c', '#ffae42'], { cy: 8, r: 5.4, spec: false });
+  // molten yellow core showing through
+  for (const [x, y] of [[7, 8], [8, 8], [7, 9], [8, 9], [9, 9], [8, 10]]) c.set(x, y, '#ffd23a');
+  c.set(8, 9, '#fff4a0'); c.set(7, 8, '#fff4a0');
+  c.set(5, 5, '#ffe2b0'); c.set(6, 5, '#ffc070'); c.set(5, 6, '#ffc070');
+  return c;
+}
+
+function fireCharge() {
+  const c = shadedBlob(circle(7.5, 7.5, 5.6), ['#0c0806', '#1e1510', '#2e221a', '#433327', '#5a4636'], { r: 5.6, spec: false });
+  // glowing cracks
+  const hot = '#ff9a14', hotter = '#ffd84a';
+  for (const [x, y] of [[4, 5], [5, 6], [6, 6], [7, 7], [6, 8], [6, 9], [7, 10], [8, 11], [10, 4], [10, 5], [9, 6], [9, 7], [10, 8], [11, 9], [8, 7]]) c.set(x, y, hot);
+  for (const [x, y] of [[6, 6], [7, 7], [8, 7], [9, 7], [6, 9]]) c.set(x, y, hotter);
+  c.set(7, 7, '#fff6c0');
+  return c;
+}
+
+// Faint ghost silhouette of a sprite (for empty equipment/material slots).
+function ghostOf(src) {
+  const c = canvas();
+  const on = (x, y) => x >= 0 && y >= 0 && x < N && y < N && src.data[src.idx(x, y) + 3] > 0;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    if (!on(x, y)) continue;
+    const edge = !on(x - 1, y) || !on(x + 1, y) || !on(x, y - 1) || !on(x, y + 1);
+    c.set(x, y, edge ? GHOST_EDGE : GHOST_FILL);
+  }
+  return c;
+}
+
 function oakDoor() {
   const rows = [
     '....oooooooo....',
@@ -1835,10 +2005,11 @@ function redBed() {
   return art('red_bed', rows, { o: '#2a0a08', w: '#f2f2f2', W: '#c8c8c8', r: '#b8231c', R: '#861610', b: '#9a773a', B: '#684d1f' });
 }
 
+const GHOST_FILL = [255, 255, 255, 58], GHOST_EDGE = [55, 55, 55, 120];
+
 function emptySlotIcons() {
   // faint light-gray silhouettes drawn at partial alpha, like the vanilla ghost icons
-  const fill = [255, 255, 255, 58], edge = [55, 55, 55, 120];
-  const mk = (name, rows) => art(name, rows, { '#': fill, e: edge });
+  const mk = (name, rows) => art(name, rows, { '#': GHOST_FILL, e: GHOST_EDGE });
   return {
     empty_armor_slot_helmet: mk('empty_armor_slot_helmet', [
       '................',

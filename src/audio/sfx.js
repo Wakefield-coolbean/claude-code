@@ -6,7 +6,7 @@
 import {
   TAU, makeRng, hashString, rand, randLog, randInt, pick, chance, clamp, smooth,
   alloc, envFn, sampled, burst, grains, mode, modes, tone, bell, bubble, pluck, creak, voice, vowelPath,
-  reverb, lowpass, highpass, softClip, peakOf, layer, loopify, finalize,
+  reverb, lowpass, highpass, softClip, peakOf, layer, loopify, finalize, comb, periodic, loopBed, droneSines,
 } from './dsp.js';
 
 export const CATEGORIES = ['master', 'music', 'records', 'weather', 'blocks', 'hostile', 'neutral', 'players', 'ambient'];
@@ -52,7 +52,7 @@ export function synthesize(name, variant = 0, sr = 48000) {
   const r = makeRng(hashString(d.name + '#' + v));
   const raw = d.gen(rate, r, v);
   const data = finalize(raw, rate, {
-    target: d.target, peak: d.peak, trim: !d.loop, fadeOut: d.loop ? 0 : 0.012, fadeIn: d.loop ? 0 : 0.0005,
+    target: d.target, peak: d.peak, trim: !d.loop, fadeOut: d.loop ? 0 : 0.012, fadeIn: d.loop ? 0 : 0.0005, dc: d.loop ? 'mean' : true,
   });
   return { data, rate, base: d.name, variant: v };
 }
@@ -461,9 +461,9 @@ function ignite(sr, r) {
   burst(b, sr, r, { t0: 0.06, dur: 0.4, mode: 'lp', f: [300, 1400, 600], q: 0.7, env: { a: 0.12, d: 0.12, r: 0.05 }, amp: 0.12 });
   return b;
 }
-function crackles(b, sr, r, n, t0, span, fr = [900, 5000]) {
+function crackles(b, sr, r, n, t0, span, fr = [900, 5000], scale = 1) {
   for (let i = 0; i < n; i++) {
-    const t = t0 + r() * span, a = rand(r, 0.2, 1);
+    const t = t0 + r() * span, a = rand(r, 0.2, 1) * scale;
     burst(b, sr, r, { t0: t, dur: 0.025, mode: 'bp', f: randLog(r, fr[0], fr[1]), q: rand(r, 0.7, 2), a: 0.0002, d: randLog(r, 0.001, 0.005), amp: a });
     if (chance(r, 0.35)) burst(b, sr, r, { t0: t + rand(r, 0.008, 0.02), dur: 0.02, mode: 'bp', f: randLog(r, fr[0], fr[1]), q: 1, a: 0.0002, d: 0.002, amp: a * 0.5 });
   }
@@ -1111,6 +1111,478 @@ function portal(sr, r, v) {
   return b;
 }
 
+// ============================================================= NETHER ====
+// ---- block groups
+function squish(b, sr, r, t0, dur, f = 900, amp = 0.35) {
+  burst(b, sr, r, { t0, dur, mode: 'bp', f: [f * 1.3, f * 0.6], q: 1.4, a: 0.006, d: dur * 0.3, amp, am: { rate: 35, depth: 0.8 } });
+  for (let i = 0, n = randInt(r, 3, 6); i < n; i++) bubble(b, sr, t0 + rand(r, 0, dur * 0.6), randLog(r, f * 0.25, f * 0.6), rand(r, 0.5, 1.2), randLog(r, 0.01, 0.025), rand(r, 0.1, 0.25));
+  thud(b, sr, r, t0, 250, 0.02, amp * 0.6);
+}
+function netherrackBreak(sr, r) {
+  const b = stoneBreak(sr, r, { lo: 0.85, bright: 0.72, len: 0.95, dens: 1.1, thump: 1.2 });
+  grains(b, sr, r, { dur: 0.35, count: 90, dist: 1.5, f: [400, 2500], q: [1.2, 3], len: [0.0015, 0.008], amp: [0.15, 0.6], ampEnv: (u) => 1 - 0.7 * u });
+  return b;
+}
+function netherrackStep(sr, r) {
+  const b = stoneStep(sr, r, { lo: 0.85, bright: 0.72, tail: 0.05 });
+  grains(b, sr, r, { dur: 0.15, count: 35, f: [400, 2200], q: [1.2, 3], len: [0.0015, 0.006], amp: [0.15, 0.5], ampEnv: hump });
+  return b;
+}
+function brickKnock(b, sr, r, t0, level) {
+  layer(b, sr, level, (L) => {
+    modes(L, sr, t0, rand(r, 900, 1300), [1, 1.72, 2.63, 3.4], [0.018, 0.012, 0.009, 0.006], [1, 0.6, 0.4, 0.25], r, 0.03);
+    burst(L, sr, r, { t0, dur: 0.006, mode: 'hp', f: 2500, a: 0.0002, d: 0.001, amp: 1 });
+  });
+}
+function netherBricksBreak(sr, r) {
+  const b = stoneBreak(sr, r, { lo: 1.1, bright: 1.15, len: 0.8, thump: 0.8 });
+  brickKnock(b, sr, r, 0, 0.3);
+  return b;
+}
+function netherBricksStep(sr, r) {
+  const b = stoneStep(sr, r, { lo: 1.1, bright: 1.2 });
+  brickKnock(b, sr, r, 0, 0.3);
+  return b;
+}
+function soulWhisper(b, sr, r, dur, amp) {
+  burst(b, sr, r, { dur, mode: 'bp', f: [randLog(r, 450, 650), randLog(r, 800, 1100), randLog(r, 350, 500)], q: 3, color: 'pink', env: (t) => Math.pow(Math.sin(Math.PI * Math.min(1, t / dur)), 2), amp });
+}
+function soulSandBreak(sr, r) {
+  const b = sandBreak(sr, r);
+  soulWhisper(b, sr, r, 0.45, 0.14);
+  return b;
+}
+function soulSandStep(sr, r) {
+  const b = sandStep(sr, r);
+  soulWhisper(b, sr, r, 0.22, 0.1);
+  return b;
+}
+function soulSoilBreak(sr, r) {
+  const b = alloc(sr, 0.5);
+  thud(b, sr, r, 0, 220, 0.03, 0.3);
+  burst(b, sr, r, { dur: 0.4, mode: 'bp', f: [1200, 700], q: 0.6, a: 0.004, d: 0.1, amp: 0.3, am: { rate: 50, depth: 0.5 } });
+  grains(b, sr, r, { dur: 0.38, count: 150, dist: 1.4, f: [350, 2200], q: [1.2, 3], len: [0.002, 0.008], amp: [0.15, 0.7], ampEnv: (u) => 1 - 0.65 * u });
+  soulWhisper(b, sr, r, 0.45, 0.08);
+  return b;
+}
+function soulSoilStep(sr, r) {
+  const b = alloc(sr, 0.25);
+  thud(b, sr, r, 0, 200, 0.018, 0.3);
+  burst(b, sr, r, { dur: 0.2, mode: 'bp', f: [1100, 700], q: 0.6, a: 0.008, d: 0.045, amp: 0.25, am: { rate: 60, depth: 0.5 } });
+  grains(b, sr, r, { dur: 0.16, count: 50, f: [350, 2000], q: [1.2, 3], len: [0.002, 0.006], amp: [0.15, 0.6], ampEnv: hump });
+  return b;
+}
+function nyliumBreak(sr, r) {
+  const b = netherrackBreak(sr, r);
+  burst(b, sr, r, { dur: 0.32, mode: 'bp', f: [3600, 2600], q: 0.7, a: 0.003, d: 0.07, amp: 0.16, am: { rate: 140, depth: 0.85 } });
+  return b;
+}
+function nyliumStep(sr, r) {
+  const b = netherrackStep(sr, r);
+  burst(b, sr, r, { dur: 0.18, mode: 'bp', f: [3200, 2400], q: 0.7, a: 0.006, d: 0.04, amp: 0.14, am: { rate: 160, depth: 0.85 } });
+  return b;
+}
+function stemBreak(sr, r) {
+  const b = alloc(sr, 0.45);
+  const f1 = rand(r, 110, 160);
+  layer(b, sr, 0.35, (L) => {
+    modes(L, sr, 0, f1, [1, rand(r, 2.1, 2.5), rand(r, 3.5, 4.2), rand(r, 5.1, 6)], [0.06, 0.04, 0.025, 0.018], [1, 0.6, 0.4, 0.25], r, 0.03);
+    burst(L, sr, r, { dur: 0.02, mode: 'lp', f: 1400, a: 0.0005, d: 0.003, amp: 1 });
+  });
+  squish(b, sr, r, 0.005, 0.3, 1000, 0.22);
+  grains(b, sr, r, { dur: 0.18, count: 18, dist: 2, f: [1200, 4000], q: [2, 5], len: [0.0015, 0.006], amp: [0.1, 0.5] });
+  return b;
+}
+function stemStep(sr, r) {
+  const b = woodStep(sr, r, { hi: 0.75 });
+  squish(b, sr, r, 0.003, 0.14, 1100, 0.14);
+  return b;
+}
+function wartBlockBreak(sr, r) {
+  const b = alloc(sr, 0.45);
+  squish(b, sr, r, 0, 0.35, rand(r, 700, 900), 0.4);
+  thud(b, sr, r, 0, 180, 0.035, 0.35);
+  return b;
+}
+function wartBlockStep(sr, r) {
+  const b = alloc(sr, 0.22);
+  squish(b, sr, r, 0, 0.16, rand(r, 800, 1000), 0.35);
+  return b;
+}
+function shroomlightBreak(sr, r) {
+  const b = alloc(sr, 0.4);
+  squish(b, sr, r, 0, 0.3, rand(r, 1500, 1900), 0.35);
+  tone(b, sr, { dur: 0.08, f: [rand(r, 500, 600), rand(r, 1000, 1200)], env: { a: 0.001, d: 0.02 }, amp: 0.25 });
+  return b;
+}
+function shroomlightStep(sr, r) {
+  const b = alloc(sr, 0.2);
+  squish(b, sr, r, 0, 0.14, rand(r, 1500, 1900), 0.3);
+  return b;
+}
+function fungusBreak(sr, r) {
+  const b = alloc(sr, 0.3);
+  squish(b, sr, r, 0, 0.2, rand(r, 1300, 1700), 0.3);
+  grains(b, sr, r, { dur: 0.08, count: 10, dist: 1.5, f: [1800, 5000], q: [5, 10], len: [0.001, 0.003], amp: [0.5, 1] });
+  return b;
+}
+function fungusStep(sr, r) {
+  const b = alloc(sr, 0.16);
+  squish(b, sr, r, 0, 0.1, rand(r, 1400, 1800), 0.3);
+  return b;
+}
+function rootsBreak(sr, r) {
+  const b = alloc(sr, 0.35);
+  burst(b, sr, r, { dur: 0.28, mode: 'bp', f: [5200, 4000], q: 1, a: 0.002, d: 0.06, amp: 0.25, am: { rate: 180, depth: 0.9 } });
+  grains(b, sr, r, { dur: 0.25, count: 70, dist: 1.5, f: [2500, 9000], q: [2, 5], len: [0.0006, 0.0025], amp: [0.2, 0.9] });
+  thud(b, sr, r, 0, 350, 0.01, 0.1);
+  return b;
+}
+function rootsStep(sr, r) {
+  const b = alloc(sr, 0.2);
+  burst(b, sr, r, { dur: 0.16, mode: 'bp', f: [4800, 3800], q: 1, a: 0.005, d: 0.035, amp: 0.22, am: { rate: 180, depth: 0.9 } });
+  grains(b, sr, r, { dur: 0.13, count: 30, f: [2500, 8000], q: [2, 5], len: [0.0006, 0.002], amp: [0.2, 0.8], ampEnv: hump });
+  return b;
+}
+function netherWartBreak(sr, r) {
+  const b = alloc(sr, 0.35);
+  squish(b, sr, r, 0, 0.22, rand(r, 900, 1200), 0.3);
+  grains(b, sr, r, { dur: 0.1, count: 12, f: [1500, 4500], q: [4, 9], len: [0.001, 0.003], amp: [0.4, 1] });
+  return b;
+}
+const basaltBreak = (sr, r) => {
+  const b = stoneBreak(sr, r, { lo: 0.75, bright: 0.82, thump: 1.5, len: 1.05, dens: 0.9 });
+  grains(b, sr, r, { t0: 0.003, dur: 0.3, count: 16, dist: 1.5, f: [180, 700], q: [2, 5], len: [0.006, 0.02], amp: [0.2, 0.5] });
+  return b;
+};
+const basaltStep = (sr, r) => stoneStep(sr, r, { lo: 0.75, bright: 0.82, thump: 1.5 });
+function ancientDebrisBreak(sr, r) {
+  const b = stoneBreak(sr, r, { lo: 0.65, bright: 0.66, len: 1.1, thump: 1.8, dens: 1.2, tail: 0.3 });
+  layer(b, sr, 0.14, (L) => modes(L, sr, 0, rand(r, 280, 420), METAL_RATIOS, [0.25, 0.18, 0.13, 0.1, 0.07, 0.05], [1, 0.8, 0.6, 0.45, 0.3, 0.2], r, 0.02));
+  return b;
+}
+function ancientDebrisStep(sr, r) {
+  const b = stoneStep(sr, r, { lo: 0.68, bright: 0.7, thump: 1.7, tail: 0.1 });
+  layer(b, sr, 0.08, (L) => modes(L, sr, 0, rand(r, 350, 500), METAL_RATIOS.slice(0, 4), [0.1, 0.07, 0.05, 0.04], [1, 0.7, 0.5, 0.3], r, 0.02));
+  return b;
+}
+
+// ---- portal
+const edgeEnv = (dur, a, rl) => (t) => Math.max(0, Math.min(1, t / a, (dur - t) / rl));
+function portalAmbient(sr, r) {
+  const dur = 4.2;
+  const b = alloc(sr, dur + 1);
+  const sw = rand(r, 0.5, 0.9), edge = edgeEnv(dur, 0.6, 0.9);
+  burst(b, sr, r, { dur, mode: 'bp', f: (u) => 700 * Math.pow(2, 1.3 * Math.sin(TAU * sw * u * dur)), q: 3, env: sampled((t) => edge(t) * (0.6 + 0.4 * Math.sin(TAU * sw * 2 * t)), dur), amp: 0.12 });
+  burst(b, sr, r, { dur, mode: 'bp', f: (u) => 1800 * Math.pow(2, Math.sin(TAU * sw * 1.5 * u * dur + 1)), q: 5, env: edge, amp: 0.05 });
+  const f = randLog(r, 55, 75);
+  for (const [m, a] of [[1, 0.1], [1.007, 0.09], [2.01, 0.1], [3.02, 0.08], [4.5, 0.05], [6.01, 0.03]]) tone(b, sr, { dur, f: f * m, env: edge, amp: a, vib: { rate: 0.3, depth: 0.01 } });
+  reverb(b, sr, { room: 0.8, wet: 0.35, damp: 0.4 });
+  return b;
+}
+function portalTrigger(sr, r) {
+  const dur = rand(r, 3.6, 4.2);
+  const b = alloc(sr, dur + 1.2);
+  const rise = sampled((t) => Math.pow(smooth(t / dur), 1.3) * Math.max(0, Math.min(1, (dur - t) / 0.25)), dur);
+  burst(b, sr, r, { dur, mode: 'bp', f: (u) => 250 * Math.pow(2, 3.5 * u) * (1 + 0.25 * Math.sin(TAU * 5 * u * dur)), q: 4, color: 'pink', env: rise, amp: 0.4 });
+  burst(b, sr, r, { dur, mode: 'bp', f: (u) => 900 * Math.pow(2, 2.5 * u) * (1 + 0.3 * Math.sin(TAU * 8 * u * dur + 2)), q: 6, env: rise, amp: 0.12 });
+  tone(b, sr, { dur, f: [70, 110, 260], fm: { ratio: 1.5, index: [0.5, 2] }, env: rise, amp: 0.25, vib: { rate: 6, depth: 0.02 } });
+  tone(b, sr, { dur, f: [105, 170, 400], env: rise, amp: 0.1 });
+  reverb(b, sr, { room: 0.85, wet: 0.4, damp: 0.4 });
+  return b;
+}
+function portalTravel(sr, r) {
+  const dur = rand(r, 3.5, 4.2);
+  const b = alloc(sr, dur + 1.5);
+  burst(b, sr, r, { dur, mode: 'lp', f: [7000, 1500, 180], q: 0.9, a: 0.04, d: 0.9, amp: 0.55 });
+  burst(b, sr, r, { dur, mode: 'bp', f: (u) => 2500 * Math.pow(0.1, u) * (1 + 0.3 * Math.sin(TAU * 4 * u * dur)), q: 3, color: 'pink', a: 0.05, d: 1.1, amp: 0.3 });
+  tone(b, sr, { dur, f: [700, 180, 55], fm: { ratio: 1.5, index: [3, 1] }, env: { a: 0.05, d: 1.0, r: 0.3 }, amp: 0.3 });
+  burst(b, sr, r, { dur, mode: 'lp', f: 120, color: 'brown', a: 0.1, d: 1.2, amp: 0.6 });
+  reverb(b, sr, { room: 0.9, wet: 0.45, damp: 0.35 });
+  return b;
+}
+
+// ---- nether ambience beds (seamless loops) and additions
+const BED_L = 10, BED_XF = 1;
+const steady = () => 1;
+function drones(T, sr, L, parts) { // parts: [[freq, amp, swellCyclesPerLoop, phase]] — all periodic in L
+  droneSines(T, sr, parts.map(([f, a, k = 1, ph = 0]) => [periodic(f, L), a, k / L, ph]));
+}
+function events(n, tot, fn) { for (let i = 0; i < n; i++) fn(i); }
+function netherWastes(sr, r) {
+  return loopBed(sr, BED_L, BED_XF, (T, N, tot) => {
+    drones(T, sr, BED_L, [[41.2, 0.05, 1], [41.7, 0.045, 1, 2], [82.4, 0.08, 2, 1], [123.6, 0.07, 3, 0.5], [164.8, 0.05, 1, 3], [247.2, 0.025, 2, 2]]);
+    burst(N, sr, r, { dur: tot, mode: 'lp', f: 110, q: 0.9, stages: 2, color: 'brown', env: steady, amp: 0.12, am: { rate: 0.5, depth: 0.6 } });
+    burst(N, sr, r, { dur: tot, mode: 'bp', f: [randLog(r, 350, 550), randLog(r, 500, 800), randLog(r, 350, 550)], q: 1.6, env: steady, amp: 0.05, am: { rate: 0.6, depth: 0.7 } });
+    events(randInt(r, 2, 3), tot, () => {
+      const d = rand(r, 2, 3), t0 = rand(r, 0, tot - d), f = randLog(r, 160, 260);
+      tone(N, sr, { t0, dur: d, f: [f, f * rand(r, 1.1, 1.3), f * 0.85], wave: 'tri', vib: { rate: 4.5, depth: 0.015 }, env: { a: d * 0.4, d: d * 0.25, r: 0.4 }, amp: 0.2 });
+      tone(N, sr, { t0, dur: d, f: [f * 2.01, f * 2.4, f * 1.7], env: { a: d * 0.45, d: d * 0.2, r: 0.4 }, amp: 0.06 });
+    });
+    events(randInt(r, 1, 3), tot, () => thud(N, sr, r, rand(r, 0, tot - 1.5), 90, rand(r, 0.15, 0.3), rand(r, 0.2, 0.35)));
+    crackles(N, sr, r, randInt(r, 4, 8), 0, tot - 0.1, [600, 2500], 0.35);
+    reverb(N, sr, { room: 0.88, wet: 0.45, damp: 0.5 });
+  });
+}
+function crimsonForest(sr, r) {
+  return loopBed(sr, BED_L, BED_XF, (T, N, tot) => {
+    drones(T, sr, BED_L, [[55, 0.08, 1], [55.4, 0.07, 1, 1.5], [165.2, 0.06, 3], [220.5, 0.035, 2, 1]]);
+    const P = periodic(110.3, BED_L), throb = periodic(0.8, BED_L);
+    tone(T, sr, { dur: BED_L, f: P, env: (t) => Math.pow(0.5 + 0.5 * Math.sin(TAU * throb * t), 2), amp: 0.12 });
+    burst(N, sr, r, { dur: tot, mode: 'lp', f: 150, q: 0.8, stages: 2, color: 'brown', env: steady, amp: 0.2, am: { rate: 0.7, depth: 0.5 } });
+    burst(N, sr, r, { dur: tot, mode: 'bp', f: [randLog(r, 450, 650), randLog(r, 700, 900), randLog(r, 450, 650)], q: 1, env: steady, amp: 0.06, am: { rate: 0.6, depth: 0.6 } });
+    grains(N, sr, r, { dur: tot - 0.05, count: 90, f: [800, 3000], q: [2, 6], len: [0.002, 0.008], amp: [0.05, 0.25] });
+    events(randInt(r, 1, 2), tot, () => {
+      const d = rand(r, 2.5, 3.5), t0 = rand(r, 0, tot - d), f = randLog(r, 170, 240);
+      for (const m of [1, 1.059, 1.5]) tone(N, sr, { t0, dur: d, f: f * m, wave: 'tri', env: { a: d * 0.5, d: d * 0.2, r: 0.5 }, amp: 0.1 });
+    });
+    events(randInt(r, 2, 4), tot, () => burst(N, sr, r, { t0: rand(r, 0, tot - 0.6), dur: 0.6, mode: 'lp', f: [250, 450], q: 1.5, env: bellCurve(0.6), amp: 0.25 }));
+    reverb(N, sr, { room: 0.85, wet: 0.4, damp: 0.55 });
+  });
+}
+function warpedForest(sr, r) {
+  return loopBed(sr, BED_L, BED_XF, (T, N, tot) => {
+    drones(T, sr, BED_L, [[110, 0.06, 1], [220, 0.07, 2, 1], [233.1, 0.06, 2, 2.5], [330, 0.05, 3], [440.5, 0.025, 1, 1]]);
+    const wf = periodic(880, BED_L), vr = periodic(5, BED_L);
+    tone(T, sr, { dur: BED_L, f: wf, vib: { rate: vr, depth: 0.004 }, env: (t) => Math.pow(0.5 + 0.5 * Math.sin(TAU * 2 * t / BED_L), 3), amp: 0.035 });
+    burst(N, sr, r, { dur: tot, mode: 'lp', f: 120, q: 0.8, stages: 2, color: 'brown', env: steady, amp: 0.12, am: { rate: 0.5, depth: 0.5 } });
+    burst(N, sr, r, { dur: tot, mode: 'bp', f: 2600, q: 0.8, env: steady, amp: 0.05, am: { rate: 0.4, depth: 0.7 } });
+    events(randInt(r, 2, 3), tot, () => {
+      const d = rand(r, 1.2, 2), t0 = rand(r, 0, tot - d), f = randLog(r, 400, 900);
+      tone(N, sr, { t0, dur: d, f: [f, f * 1.5, f * 0.8], fm: { ratio: 2.01, index: [0.5, 2, 0.5] }, vib: { rate: 6, depth: 0.02 }, env: { a: d * 0.4, d: d * 0.25, r: 0.3 }, amp: 0.1 });
+    });
+    events(randInt(r, 1, 2), tot, () => {
+      const d = rand(r, 1, 1.6), t0 = rand(r, 0, tot - d);
+      burst(N, sr, r, { t0, dur: d, mode: 'bp', f: [800, 3000], q: 2, env: (t) => Math.pow(Math.min(1, t / (d * 0.9)), 2) * Math.min(1, (d - t) / 0.08), amp: 0.12 });
+    });
+    reverb(N, sr, { room: 0.9, wet: 0.55, damp: 0.3 });
+  });
+}
+function soulSandValley(sr, r) {
+  return loopBed(sr, BED_L, BED_XF, (T, N, tot) => {
+    drones(T, sr, BED_L, [[49, 0.07, 1], [98.2, 0.06, 2, 1], [147.3, 0.03, 1, 2]]);
+    const w = () => randLog(r, 300, 1000);
+    burst(N, sr, r, { dur: tot, mode: 'bp', f: [w(), w(), w(), w(), w(), w()], q: 2.5, color: 'pink', env: steady, amp: 0.35, am: { rate: 0.5, depth: 0.6 } });
+    burst(N, sr, r, { dur: tot, mode: 'bp', f: [randLog(r, 1200, 2000), randLog(r, 1200, 2000), randLog(r, 1200, 2000)], q: 5, env: steady, amp: 0.05, am: { rate: 0.7, depth: 0.8 } });
+    events(randInt(r, 2, 3), tot, () => {
+      const d = rand(r, 1.4, 2.2), t0 = rand(r, 0, tot - d), f = randLog(r, 260, 420);
+      layer(N, sr, 0.08, (L) => voice(L, sr, r, { t0, dur: d, f0: [f, f * rand(r, 1.1, 1.3), f * 0.8], vib: { rate: 5, depth: 0.025 }, jitter: 0.02, breath: 0.6, formants: vowelPath([[0, 'u'], [0.5, 'o'], [1, 'u']], 1.1), tilt: 2000, env: { a: d * 0.4, h: d * 0.1, d: d * 0.2, r: 0.3 } }));
+    });
+    reverb(N, sr, { room: 0.9, wet: 0.6, damp: 0.45 });
+  });
+}
+function basaltDeltas(sr, r) {
+  return loopBed(sr, BED_L, BED_XF, (T, N, tot) => {
+    drones(T, sr, BED_L, [[36.7, 0.06, 1], [73.1, 0.06, 2, 1], [110, 0.06, 3, 2], [146.8, 0.04, 1, 1]]);
+    burst(N, sr, r, { dur: tot, mode: 'lp', f: 180, q: 0.9, stages: 2, color: 'brown', env: steady, amp: 0.12, am: { rate: 1.2, depth: 0.6 } });
+    burst(N, sr, r, { dur: tot, mode: 'lp', f: 700, env: steady, amp: 0.06, am: { rate: 3, depth: 0.5 } });
+    crackles(N, sr, r, randInt(r, 40, 60), 0, tot - 0.05, [700, 5000], 0.8);
+    grains(N, sr, r, { dur: tot - 0.05, count: 45, f: [150, 700], q: [2, 5], len: [0.004, 0.015], amp: [0.15, 0.5] });
+    events(randInt(r, 3, 5), tot, () => { const d = rand(r, 0.5, 1.2); burst(N, sr, r, { t0: rand(r, 0, tot - d), dur: d, mode: 'bp', f: [5000, 3500], q: 0.7, a: 0.05, d: d * 0.4, amp: 0.15, am: { rate: 30, depth: 0.5 } }); });
+    events(randInt(r, 2, 3), tot, () => thud(N, sr, r, rand(r, 0, tot - 1.2), 80, rand(r, 0.12, 0.25), rand(r, 0.15, 0.3)));
+    reverb(N, sr, { room: 0.8, wet: 0.35, damp: 0.5 });
+  });
+}
+function netherAddition(sr, r, v) {
+  const kind = v % 8;
+  const b = alloc(sr, 6);
+  switch (kind) {
+    case 0: { // distant moan
+      const d = rand(r, 1.6, 2.4), f = randLog(r, 150, 300);
+      layer(b, sr, 0.3, (L) => voice(L, sr, r, { t0: 0.1, dur: d, f0: [f, f * 1.3, f * 0.8], vib: { rate: 5, depth: 0.03 }, jitter: 0.02, breath: 0.4, formants: vowelPath([[0, 'u'], [0.5, 'o'], [1, 'u']], 1.1), tilt: 2000, env: { a: d * 0.4, h: d * 0.1, d: d * 0.2, r: 0.3 } }));
+      lowpass(b, sr, 1500);
+      reverb(b, sr, { room: 0.9, wet: 0.6, damp: 0.4 });
+      break;
+    }
+    case 1: // deep rumble
+      burst(b, sr, r, { dur: 3.2, mode: 'lp', f: [130, 60], q: 1, stages: 2, color: 'brown', env: (t) => smooth(t / 1.2) * Math.exp(-Math.max(0, t - 1.2) / 0.7), amp: 1, am: { rate: 4, depth: 0.5 } });
+      reverb(b, sr, { room: 0.88, wet: 0.45, damp: 0.6 });
+      break;
+    case 2: // sizzle
+      burst(b, sr, r, { dur: 1.4, mode: 'bp', f: [5200, 4200], q: 0.7, a: 0.05, d: 0.4, amp: 0.4, am: { rate: 40, depth: 0.6 } });
+      crackles(b, sr, r, 10, 0.02, 1, [1000, 5000], 0.6);
+      reverb(b, sr, { room: 0.6, wet: 0.2 });
+      break;
+    case 3: // distant boom
+      thud(b, sr, r, 0.05, 70, 0.4, 1);
+      burst(b, sr, r, { t0: 0.05, dur: 2.5, mode: 'lp', f: [400, 80], color: 'brown', a: 0.02, d: 0.7, amp: 0.8 });
+      lowpass(b, sr, 800);
+      reverb(b, sr, { room: 0.92, wet: 0.6, damp: 0.5, pre: 0.05 });
+      break;
+    case 4: { // eerie chord swell
+      const f = randLog(r, 110, 180);
+      for (const [m, a] of [[1, 0.3], [1.059, 0.22], [1.414, 0.18], [2.01, 0.08]]) tone(b, sr, { t0: 0.1, dur: 3, f: [f * m, f * m * 0.97], wave: 'tri', env: { a: 1.4, d: 0.8, r: 0.5 }, amp: a });
+      lowpass(b, sr, 1200);
+      reverb(b, sr, { room: 0.9, wet: 0.55, damp: 0.4 });
+      break;
+    }
+    case 5: { // chittering warble
+      const f = randLog(r, 500, 900);
+      tone(b, sr, { t0: 0.05, dur: 0.9, f: [f, f * 1.3, f * 0.9], fm: { ratio: 1.01, index: 1.5 }, vib: { rate: 14, depth: 0.05 }, env: { a: 0.1, d: 0.3, r: 0.15 }, amp: 0.4 });
+      reverb(b, sr, { room: 0.85, wet: 0.5, damp: 0.3 });
+      break;
+    }
+    case 6: // whoosh
+      burst(b, sr, r, { t0: 0.05, dur: 1.6, mode: 'bp', f: [300, 2000, 400], q: 2, color: 'pink', env: bellCurve(1.6), amp: 0.5 });
+      reverb(b, sr, { room: 0.85, wet: 0.45 });
+      break;
+    default: // crackle burst
+      crackles(b, sr, r, 22, 0.02, 0.8, [600, 4000], 0.8);
+      thud(b, sr, r, 0.02, 120, 0.08, 0.4);
+      reverb(b, sr, { room: 0.8, wet: 0.35 });
+  }
+  return b;
+}
+
+// ---- nether mobs
+function ghastCall(sr, r, o) {
+  const b = alloc(sr, o.dur + 1.4);
+  vocal(b, sr, r, 0.3, { jitter: 0.02, breath: 0.2, creak: 0.1, fg: [1, 0.85, 0.55], direct: 0.18, bw: [110, 150, 220], tilt: 4500, drive: 1.3, ...o });
+  reverb(b, sr, { room: 0.87, wet: o.wet ?? 0.45, damp: 0.35, pre: 0.02 });
+  return b;
+}
+function ghastMoan(sr, r) {
+  const dur = rand(r, 1.2, 1.8);
+  const pts = []; for (let i = 0, k = randInt(r, 3, 4); i < k; i++) pts.push(randLog(r, 280, 520));
+  return ghastCall(sr, r, { dur, f0: pts, vib: { rate: rand(r, 4.5, 6), depth: 0.03, delay: 0.2 }, formants: vowelPath([[0, 'u'], [0.35, 'o'], [0.65, 'a'], [1, 'u']], 1.25), env: { a: dur * 0.35, h: dur * 0.2, d: dur * 0.2, r: 0.2 } });
+}
+function ghastScream(sr, r) {
+  const dur = rand(r, 0.6, 0.8), f = rand(r, 650, 800);
+  return ghastCall(sr, r, { dur, f0: [f, f * 1.2, f * 0.7], vib: { rate: 8, depth: 0.03 }, drive: 2.2, creak: 0.3, breath: 0.3, formants: vowelPath([[0, 'a'], [0.5, 'ae'], [1, 'a']], 1.3), env: { a: 0.02, h: dur * 0.35, d: dur * 0.25, r: 0.1 }, wet: 0.35 });
+}
+function ghastCharge(sr, r) {
+  const dur = rand(r, 0.8, 1.0);
+  return ghastCall(sr, r, { dur, f0: [420, 520, 900], vib: { rate: 7, depth: 0.04 }, drive: 1.8, formants: vowelPath([[0, 'i'], [1, 'a']], 1.3), env: { a: 0.1, h: dur * 0.5, d: dur * 0.2, r: 0.1 }, wet: 0.35 });
+}
+function ghastDeath(sr, r) {
+  return ghastCall(sr, r, { dur: 2.3, f0: [650, 720, 380, 160], vib: { rate: 7, depth: 0.05 }, drive: 1.8, formants: vowelPath([[0, 'a'], [0.5, 'o'], [1, 'u']], 1.25), env: { a: 0.05, h: 0.8, d: 0.6, r: 0.3 }, wet: 0.5 });
+}
+function ghastFireball(sr, r) {
+  const b = alloc(sr, 1.8);
+  burst(b, sr, r, { dur: 1.2, mode: 'lp', f: [2500, 180], q: 0.7, a: 0.03, d: 0.3, amp: 0.6 });
+  burst(b, sr, r, { dur: 1.2, mode: 'lp', f: 150, color: 'brown', a: 0.02, d: 0.4, amp: 0.8 });
+  burst(b, sr, r, { dur: 0.5, mode: 'bp', f: [400, 1600, 300], q: 1.2, env: bellCurve(0.5), amp: 0.2 });
+  crackles(b, sr, r, 12, 0.05, 0.75, [800, 4000], 0.5);
+  reverb(b, sr, { room: 0.8, wet: 0.3 });
+  return b;
+}
+function metalBreath(sr, r, dur, f0, f1) {
+  const b = alloc(sr, dur + 0.5);
+  burst(b, sr, r, { dur, mode: 'bp', f: [f0, f1], q: 0.9, env: { a: dur * 0.35, h: dur * 0.15, d: dur * 0.2, r: 0.1 }, amp: 0.4, am: { rate: 18, depth: 0.5 } });
+  comb(b, sr, 1 / rand(r, 170, 260), 0.82, 0.7);
+  grains(b, sr, r, { t0: dur * 0.2, dur: dur * 0.6, count: 25, f: [2500, 6000], q: [8, 15], len: [0.002, 0.005], amp: [0.1, 0.4] });
+  return b;
+}
+function blazeBreathe(sr, r) {
+  const b = metalBreath(sr, r, rand(r, 1.2, 1.6), rand(r, 700, 900), rand(r, 1200, 1600));
+  reverb(b, sr, { room: 0.6, wet: 0.2 });
+  return b;
+}
+function blazeHit(sr, r) {
+  const b = metalBreath(sr, r, 0.45, 1400, 900);
+  layer(b, sr, 0.25, (L) => { modes(L, sr, 0, randLog(r, 700, 1100), METAL_RATIOS, [0.25, 0.2, 0.15, 0.1, 0.08, 0.06], [1, 0.8, 0.6, 0.45, 0.3, 0.2], r, 0.02); burst(L, sr, r, { dur: 0.02, mode: 'hp', f: 2000, a: 0.0002, d: 0.003, amp: 1.5 }); });
+  return b;
+}
+function blazeDeath(sr, r) {
+  const b = metalBreath(sr, r, 1.8, 1500, 400);
+  const out = alloc(sr, 3); out.set(b.subarray(0, Math.min(b.length, out.length)));
+  layer(out, sr, 0.2, (L) => { for (let i = 0, n = randInt(r, 3, 5); i < n; i++) modes(L, sr, 0.1 + i * rand(r, 0.2, 0.35), randLog(r, 500, 900) * (1 - i * 0.1), METAL_RATIOS, [0.3, 0.22, 0.16, 0.12, 0.09, 0.07], [1, 0.8, 0.6, 0.45, 0.3, 0.2], r, 0.02); });
+  reverb(out, sr, { room: 0.75, wet: 0.3 });
+  return out;
+}
+function blazeShoot(sr, r) {
+  const b = alloc(sr, 0.7);
+  burst(b, sr, r, { dur: 0.5, mode: 'bp', f: [500, 2600, 700], q: 1, env: { a: 0.03, d: 0.12, r: 0.05 }, amp: 0.5 });
+  crackles(b, sr, r, 8, 0.02, 0.4, [800, 4000], 0.5);
+  thud(b, sr, r, 0, 200, 0.03, 0.3);
+  return b;
+}
+function cubeSquish(sr, r, size, magma = true) {
+  const dur = 0.25 + 0.25 * size;
+  const b = alloc(sr, dur + 0.15);
+  const f = 1300 * Math.pow(0.35, size);
+  squish(b, sr, r, 0, dur, f, 0.4);
+  thud(b, sr, r, 0, 350 - 200 * size, 0.02 + 0.03 * size, 0.3 + 0.3 * size);
+  burst(b, sr, r, { dur: 0.05, mode: 'bp', f: f * 1.5, q: 1, a: 0.0005, d: 0.008, amp: 0.25 });
+  if (magma) burst(b, sr, r, { dur, mode: 'hp', f: 3500, a: 0.01, d: dur * 0.3, amp: 0.04 });
+  return b;
+}
+function zpigGrunt(sr, r, v) {
+  const b = alloc(sr, 0.9);
+  const n = v % 2 === 0 ? 1 : 2;
+  let t = 0;
+  for (let g = 0; g < n; g++) {
+    const dur = rand(r, 0.25, 0.4), f = rand(r, 105, 140);
+    vocal(b, sr, r, 0.3, { t0: t, dur, f0: [f * 0.9, f * 1.12, f * 0.75], jitter: 0.07, creak: 0.6, breath: 0.35, trem: { rate: rand(r, 26, 34), depth: 0.5 }, formants: vowelPath([[0, 'o'], [0.4, 'uh'], [1, 'u']], 0.88), fg: [1, 0.75, 0.4], bw: [120, 150, 220], tilt: 1800, drive: 2.4, env: { a: 0.02, h: dur * 0.35, d: dur * 0.25, r: 0.05 } });
+    burst(b, sr, r, { t0: t, dur: dur * 0.6, mode: 'bp', f: 900, q: 1.2, env: { a: 0.01, d: 0.05 }, amp: 0.1 });
+    t += dur + rand(r, 0.05, 0.1);
+  }
+  return b;
+}
+function zpigHurt(sr, r) {
+  const dur = rand(r, 0.3, 0.4);
+  const b = alloc(sr, dur + 0.05);
+  vocal(b, sr, r, 0.3, { dur, f0: [220, 300, 180], jitter: 0.06, creak: 0.5, breath: 0.35, formants: vowelPath([[0, 'a'], [1, 'uh']], 0.95), fg: [1, 0.8, 0.45], tilt: 2500, drive: 2.5, env: { a: 0.01, h: dur * 0.3, d: dur * 0.25, r: 0.04 } });
+  return b;
+}
+function zpigDeath(sr, r) {
+  const b = alloc(sr, 1.3);
+  vocal(b, sr, r, 0.3, { dur: 1.2, f0: [200, 220, 120, 70], jitter: 0.07, creak: 0.65, breath: 0.35, trem: { rate: 12, depth: 0.4 }, formants: vowelPath([[0, 'a'], [0.5, 'o'], [1, 'u']], 0.92), tilt: 1800, drive: 2.2, env: { a: 0.02, h: 0.4, d: 0.3, r: 0.2 } });
+  return b;
+}
+function zpigAngry(sr, r) {
+  const dur = rand(r, 0.8, 1.0);
+  const b = alloc(sr, dur + 0.1);
+  burst(b, sr, r, { dur: 0.15, mode: 'bp', f: 1000, q: 1, a: 0.005, d: 0.04, amp: 0.3 });
+  vocal(b, sr, r, 0.32, { t0: 0.08, dur, f0: [120, 180, 150], jitter: 0.08, creak: 0.7, breath: 0.5, trem: { rate: 24, depth: 0.35 }, formants: vowelPath([[0, 'ae'], [0.5, 'a'], [1, 'uh']], 0.92), fg: [1, 0.85, 0.5], tilt: 2500, drive: 3, env: { a: 0.04, h: dur * 0.45, d: dur * 0.2, r: 0.08 } });
+  return b;
+}
+
+// ---- misc
+function enchantUse(sr, r) {
+  const b = alloc(sr, 2.8);
+  const pent = [0, 2, 4, 7, 9], base = randLog(r, 1000, 1300);
+  layer(b, sr, 0.25, (L) => {
+    const n = randInt(r, 14, 20);
+    for (let i = 0; i < n; i++) {
+      const semis = Math.min(26, pent[i % 5] + 12 * Math.floor(i / 5));
+      const t = 0.05 + (i / n) * 1.1 + rand(r, -0.03, 0.03);
+      bell(L, sr, Math.max(0, t), base * Math.pow(2, semis / 12) * rand(r, 0.998, 1.002), rand(r, 0.4, 1), rand(r, 0.3, 0.7), CRYSTAL.slice(0, 3));
+    }
+  });
+  grains(b, sr, r, { dur: 1.4, count: 40, f: [3000, 9000], q: [12, 25], len: [0.004, 0.012], amp: [0.05, 0.2] });
+  burst(b, sr, r, { dur: 1.4, mode: 'hp', f: [2000, 6000], env: bellCurve(1.4), amp: 0.05 });
+  reverb(b, sr, { room: 0.85, wet: 0.4, damp: 0.3 });
+  return b;
+}
+const ANVIL = [1, 1.47, 2.09, 2.56, 3.39, 4.2, 5.4];
+function anvilUse(sr, r) {
+  const b = alloc(sr, 1.5);
+  const f = rand(r, 850, 1050);
+  const strike = (t, a) => {
+    burst(b, sr, r, { t0: t, dur: 0.03, mode: 'hp', f: 2000, a: 0.0002, d: 0.004, amp: 0.5 * a });
+    modes(b, sr, t, f, ANVIL, [0.7, 0.5, 0.4, 0.3, 0.22, 0.16, 0.12], [1, 0.8, 0.7, 0.5, 0.4, 0.3, 0.2].map((x) => x * a * 0.3), r, 0.01);
+  };
+  strike(0, 1); strike(rand(r, 0.1, 0.14), 0.25);
+  return b;
+}
+function anvilBreak(sr, r) {
+  const b = alloc(sr, 1.6);
+  layer(b, sr, 0.3, (L) => modes(L, sr, 0, rand(r, 380, 460), ANVIL, [0.9, 0.7, 0.5, 0.4, 0.3, 0.22, 0.16], [1, 0.7, 0.8, 0.5, 0.4, 0.3, 0.2], r, 0.02));
+  burst(b, sr, r, { dur: 0.06, mode: 'hp', f: 1200, a: 0.0002, d: 0.01, amp: 0.6 });
+  thud(b, sr, r, 0, 220, 0.05, 0.5);
+  grains(b, sr, r, { dur: 0.6, count: 120, dist: 1.6, f: [500, 5000], q: [2, 8], len: [0.002, 0.01], amp: [0.2, 1], ampEnv: (u) => 1 - 0.7 * u });
+  layer(b, sr, 0.12, (L) => { for (let i = 0; i < 4; i++) modes(L, sr, rand(r, 0.08, 0.5), randLog(r, 1200, 2500), [1, 1.51, 2.24], [0.05, 0.035, 0.025], [1, 0.6, 0.4], r, 0.02); });
+  return b;
+}
+function fireChargeUse(sr, r) {
+  const b = alloc(sr, 0.9);
+  burst(b, sr, r, { dur: 0.7, mode: 'lp', f: [300, 1600, 500], q: 0.8, env: { a: 0.08, d: 0.18, r: 0.08 }, amp: 0.5 });
+  burst(b, sr, r, { dur: 0.6, mode: 'lp', f: 150, color: 'brown', env: { a: 0.05, d: 0.2, r: 0.05 }, amp: 0.8 });
+  crackles(b, sr, r, 8, 0.05, 0.5, [800, 4000], 0.5);
+  return b;
+}
+
 // ======================================================= REGISTRATION ====
 const BLOCK = [
   // group, dig, step, variants dig/step
@@ -1234,6 +1706,61 @@ def('mob.enderman.hit', 'hostile', 3, endermanHit, { vol: 0.7, low: true, pv: MO
 def('mob.enderman.death', 'hostile', 1, endermanDeath, { vol: 0.7, low: true, pv: 0.05 });
 def('mob.enderman.portal', 'hostile', 2, portal, { vol: 0.6, low: true, pv: 0.05 });
 
+// nether blocks
+const NETHER_BLOCKS = [
+  ['netherrack', netherrackBreak, netherrackStep], ['nether_bricks', netherBricksBreak, netherBricksStep],
+  ['soul_sand', soulSandBreak, soulSandStep], ['soul_soil', soulSoilBreak, soulSoilStep],
+  ['nylium', nyliumBreak, nyliumStep], ['stem', stemBreak, stemStep], ['wart_block', wartBlockBreak, wartBlockStep],
+  ['shroomlight', shroomlightBreak, shroomlightStep], ['fungus', fungusBreak, fungusStep], ['roots', rootsBreak, rootsStep],
+  ['basalt', basaltBreak, basaltStep], ['ancient_debris', ancientDebrisBreak, ancientDebrisStep],
+];
+for (const [g, dig, step] of NETHER_BLOCKS) {
+  def('dig.' + g, 'blocks', 4, (sr, r) => dig(sr, r), { vol: 0.8 });
+  def('step.' + g, 'blocks', 5, (sr, r) => step(sr, r), { vol: 0.3, pv: 0.04 });
+  alias('hit.' + g, 'step.' + g, { pitch: 0.5, vol: 0.32, pv: 0 });
+}
+def('dig.nether_wart', 'blocks', 4, netherWartBreak, { vol: 0.75 });
+alias('step.nether_wart', 'step.stem');
+alias('hit.nether_wart', 'step.stem', { pitch: 0.5, vol: 0.32, pv: 0 });
+
+// portal
+def('block.portal.ambient', 'blocks', 3, portalAmbient, { vol: 0.5, low: true, pv: 0.2, target: 0.18 });
+def('block.portal.trigger', 'blocks', 2, portalTrigger, { vol: 0.7, low: true, pv: 0.1, target: 0.2 });
+def('block.portal.travel', 'blocks', 2, portalTravel, { vol: 0.7, low: true, pv: 0.1, target: 0.22 });
+
+// nether ambience (loops: play(name, { loop: true }))
+def('ambient.nether.nether_wastes', 'ambient', 1, netherWastes, { vol: 0.6, low: true, loop: true, target: 0.15 });
+def('ambient.nether.crimson_forest', 'ambient', 1, crimsonForest, { vol: 0.6, low: true, loop: true, target: 0.15 });
+def('ambient.nether.warped_forest', 'ambient', 1, warpedForest, { vol: 0.6, low: true, loop: true, target: 0.15 });
+def('ambient.nether.soul_sand_valley', 'ambient', 1, soulSandValley, { vol: 0.6, low: true, loop: true, target: 0.15 });
+def('ambient.nether.basalt_deltas', 'ambient', 1, basaltDeltas, { vol: 0.6, low: true, loop: true, target: 0.15 });
+def('ambient.nether.additions', 'ambient', 8, netherAddition, { vol: 0.6, low: true, target: 0.18, pv: 0.1 });
+
+// nether mobs
+def('mob.ghast.moan', 'hostile', 4, ghastMoan, { vol: 0.8, low: true, pv: 0.1 });
+def('mob.ghast.scream', 'hostile', 3, ghastScream, { vol: 0.8, low: true, pv: 0.1 });
+def('mob.ghast.charge', 'hostile', 2, ghastCharge, { vol: 0.8, low: true, pv: 0.05 });
+def('mob.ghast.fireball', 'hostile', 2, ghastFireball, { vol: 0.8, low: true, pv: 0.1, target: 0.26 });
+def('mob.ghast.death', 'hostile', 1, ghastDeath, { vol: 0.8, low: true, pv: 0.05 });
+def('mob.blaze.breathe', 'hostile', 4, blazeBreathe, { vol: 0.6, low: true, pv: 0.1 });
+def('mob.blaze.hit', 'hostile', 3, blazeHit, { vol: 0.7, low: true, pv: 0.1 });
+def('mob.blaze.death', 'hostile', 1, blazeDeath, { vol: 0.7, low: true, pv: 0.05 });
+def('mob.blaze.shoot', 'hostile', 2, blazeShoot, { vol: 0.7, pv: 0.1 });
+def('mob.magmacube.jump', 'hostile', 4, (sr, r) => cubeSquish(sr, r, 0.5), { vol: 0.6, pv: 0.1 });
+def('mob.magmacube.big', 'hostile', 2, (sr, r) => cubeSquish(sr, r, 1), { vol: 0.7, pv: 0.08 });
+def('mob.magmacube.small', 'hostile', 3, (sr, r) => cubeSquish(sr, r, 0.1), { vol: 0.5, pv: 0.1 });
+def('mob.slime.attack', 'hostile', 2, (sr, r) => cubeSquish(sr, r, 0.35, false), { vol: 0.6, pv: 0.1 });
+def('mob.zombiepig.zpig', 'hostile', 4, zpigGrunt, { vol: 0.7, pv: 0.1 });
+def('mob.zombiepig.zpighurt', 'hostile', 2, zpigHurt, { vol: 0.7, pv: 0.1 });
+def('mob.zombiepig.zpigdeath', 'hostile', 1, zpigDeath, { vol: 0.7, pv: 0.05 });
+def('mob.zombiepig.zpigangry', 'hostile', 2, zpigAngry, { vol: 0.8, pv: 0.08 });
+
+// misc
+def('block.enchantment_table.use', 'blocks', 2, enchantUse, { vol: 0.6, low: true, pv: 0.1 });
+def('random.anvil_use', 'blocks', 2, anvilUse, { vol: 0.6, pv: 0.05 });
+def('random.anvil_break', 'blocks', 1, anvilBreak, { vol: 0.7, pv: 0.05 });
+def('item.firecharge.use', 'blocks', 2, fireChargeUse, { vol: 0.7, pv: 0.1 });
+
 // Modern (1.13+) resource-location style aliases, for callers that use those names.
 const MODERN = {
   'entity.item.pickup': 'random.pop', 'ui.button.click': 'random.click', 'entity.arrow.shoot': 'random.bow',
@@ -1252,5 +1779,13 @@ const MODERN = {
   'entity.player.attack.nodamage': 'player.attack.nodamage', 'entity.tnt.primed_fuse': 'entity.tnt.primed',
   'entity.creeper.primed': 'mob.creeper.primed', 'ambient.cave.mood': 'ambient.cave', 'weather.rain.above': 'weather.rain',
   'entity.lightning_bolt.thunder': 'ambient.weather.thunder',
+  'entity.ghast.ambient': 'mob.ghast.moan', 'entity.ghast.hurt': 'mob.ghast.scream', 'entity.ghast.warn': 'mob.ghast.charge',
+  'entity.ghast.shoot': 'mob.ghast.fireball', 'entity.ghast.death': 'mob.ghast.death', 'entity.blaze.ambient': 'mob.blaze.breathe',
+  'entity.blaze.hurt': 'mob.blaze.hit', 'entity.blaze.death': 'mob.blaze.death', 'entity.blaze.shoot': 'mob.blaze.shoot',
+  'entity.magma_cube.jump': 'mob.magmacube.jump', 'entity.magma_cube.squish': 'mob.magmacube.big',
+  'entity.magma_cube.squish_small': 'mob.magmacube.small', 'entity.slime.attack': 'mob.slime.attack',
+  'entity.zombified_piglin.ambient': 'mob.zombiepig.zpig', 'entity.zombified_piglin.hurt': 'mob.zombiepig.zpighurt',
+  'entity.zombified_piglin.death': 'mob.zombiepig.zpigdeath', 'entity.zombified_piglin.angry': 'mob.zombiepig.zpigangry',
+  'block.anvil.use': 'random.anvil_use', 'block.anvil.destroy': 'random.anvil_break',
 };
 for (const [n, t] of Object.entries(MODERN)) alias(n, t);

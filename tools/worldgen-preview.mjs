@@ -1,6 +1,9 @@
 // World generation preview: renders top-down maps, biome maps, cross-sections and an ore histogram.
 //
 //   node tools/worldgen-preview.mjs [seedA] [seedB] [chunks=32] [--center=origin|spawn] [--type=default] [--out=dir]
+//                                   [--dimension=overworld|nether] [--cut=64] [--vcut=84]
+// Nether: the top-down map is cut at y=--cut (first block at/below it), cross-sections cover y 0..127
+// (2x scale), the 3D view is cut at y=--vcut (default cut+20), and the large map marks fortresses in yellow.
 //
 // For each seed it generates a chunks x chunks area (plus a 1-chunk ring so every inner chunk can
 // receive features), applies all features through an in-memory getBlock/setBlock world, and writes:
@@ -27,6 +30,10 @@ const seeds = [Number(pos[0] ?? 3) | 0, Number(pos[1] ?? 42) | 0];
 const N = Number(pos[2] ?? 32);
 const CENTER = opt('center', 'origin');
 const TYPE = opt('type', 'default');
+const DIM = opt('dimension', 'overworld');
+const NETHER = DIM === 'nether';
+const CUT = Number(opt('cut', 64));
+const VCUT = Number(opt('vcut', CUT + 20)); // nether 3D view cut height
 const SCRATCH = '/tmp/claude-0/-home-user-claude-code/1054d6a7-65b9-540d-9b00-48ba961164e3/scratchpad';
 const OUT = opt('out', (fs.existsSync(SCRATCH) ? path.join(SCRATCH, 'wg') : path.join(os.tmpdir(), 'worldgen-preview')) + '/');
 fs.mkdirSync(OUT, { recursive: true });
@@ -49,6 +56,14 @@ const C = {
   grass: [80, 150, 50], fern: [70, 130, 50], dead_bush: [140, 100, 40], cactus: [80, 125, 40], sugar_cane: [140, 190, 100],
   pumpkin: [227, 140, 30], melon: [110, 150, 30], seagrass: [40, 110, 60], lily_pad: [30, 110, 40], sweet_berry_bush: [60, 90, 50],
   brown_mushroom: [150, 110, 80], red_mushroom: [200, 40, 40],
+  netherrack: [111, 54, 52], nether_bricks: [44, 21, 26], nether_brick_fence: [70, 30, 38], nether_brick_stairs: [60, 28, 34],
+  nether_brick_slab: [60, 28, 34], red_nether_bricks: [69, 7, 9], soul_sand: [81, 62, 50], soul_soil: [75, 57, 46],
+  nether_quartz_ore: [240, 235, 225], nether_gold_ore: [250, 200, 40], magma_block: [200, 90, 20], basalt: [80, 80, 86],
+  blackstone: [42, 36, 41], crimson_nylium: [146, 24, 24], warped_nylium: [43, 114, 101], crimson_stem: [110, 40, 60],
+  warped_stem: [58, 58, 77], nether_wart_block: [115, 3, 2], warped_wart_block: [22, 119, 121], shroomlight: [240, 146, 70],
+  crimson_fungus: [160, 40, 30], warped_fungus: [30, 160, 140], crimson_roots: [130, 20, 30], warped_roots: [20, 150, 130],
+  nether_wart: [170, 30, 30], glowstone: [255, 220, 120], fire: [255, 170, 30], soul_fire: [80, 220, 230], ancient_debris: [120, 80, 70],
+  crying_obsidian: [60, 10, 100],
 };
 const FLOWER = [230, 60, 160];
 const colorOf = new Array(BlockById.length);
@@ -65,6 +80,8 @@ const BIOME_COL = {
   windswept_hills: [96, 116, 96], meadow: [126, 204, 106], grove: [180, 210, 190], snowy_slopes: [200, 220, 240],
   jagged_peaks: [230, 230, 255], frozen_peaks: [170, 200, 255], stony_peaks: [140, 140, 140], badlands: [217, 69, 21],
   mushroom_fields: [255, 0, 255],
+  nether_wastes: [150, 50, 45], crimson_forest: [200, 20, 30], warped_forest: [30, 150, 130], soul_sand_valley: [110, 90, 70],
+  basalt_deltas: [90, 88, 96],
 };
 const hex = (v) => [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 const mul = (c, t) => [c[0] * t[0] / 255, c[1] * t[1] / 255, c[2] * t[2] / 255];
@@ -91,12 +108,13 @@ class World {
     if (!s) { if (!v) return; s = c.sections[si] = new Uint16Array(4096); }
     s[((y - MIN_Y) & 15) * 256 + (z & 15) * 16 + (x & 15)] = v;
   }
-  top(x, z) { // highest non-air y
+  top(x, z) { // highest non-air y (at or below this.cut when set)
     const c = this.get(x >> 4, z >> 4);
-    for (let si = c.sections.length - 1; si >= 0; si--) {
+    const cut = this.cut ?? MAX_Y - 1;
+    for (let si = (cut - MIN_Y) >> 4; si >= 0; si--) {
       const s = c.sections[si];
       if (!s) continue;
-      for (let ly = 15; ly >= 0; ly--) {
+      for (let ly = Math.min(15, cut - MIN_Y - si * 16); ly >= 0; ly--) {
         const v = s[ly * 256 + (z & 15) * 16 + (x & 15)];
         if (v) return MIN_Y + si * 16 + ly;
       }
@@ -106,7 +124,7 @@ class World {
 }
 
 function runSeed(seed) {
-  const gen = new WorldGenerator(seed, { type: TYPE });
+  const gen = new WorldGenerator(seed, { type: TYPE, dimension: DIM });
   const spawn = gen.getSpawnPoint();
   let ccx = CENTER === 'spawn' ? spawn.x >> 4 : 0, ccz = CENTER === 'spawn' ? spawn.z >> 4 : 0;
   const AT = opt('at', null);
@@ -142,6 +160,7 @@ function runSeed(seed) {
 
   const W = N * 16, X0 = cx0 * 16, Z0 = cz0 * 16;
   // ---------- top-down + biome maps ----------
+  if (NETHER) world.cut = CUT;
   const hm = new Int16Array(W * W);
   const topV = new Uint16Array(W * W);
   const waterDepth = new Int16Array(W * W);
@@ -182,6 +201,7 @@ function runSeed(seed) {
       else if (name === 'oak_leaves' || name === 'jungle_leaves' || name === 'acacia_leaves' || name === 'dark_oak_leaves') c = mul([150, 150, 150], hex(bdef.foliage));
       else if (name === 'birch_leaves') c = [110, 140, 80];
       else if (name === 'spruce_leaves') c = [55, 90, 60];
+      if (NETHER) shade *= Math.max(0.35, 1 - (CUT - h) / 60);
       if (v === WATER_ID) {
         const d = Math.min(1, waterDepth[i] / 24);
         const wc = hex(bdef.water);
@@ -201,6 +221,7 @@ function runSeed(seed) {
       if (px >= 0 && px < W && pz >= 0 && pz < W) { const i = (pz * W + px) * 4; top[i] = 255; top[i + 1] = 0; top[i + 2] = 0; bio[i] = 255; bio[i + 1] = 0; bio[i + 2] = 0; }
     }
   }
+  world.cut = undefined;
   writePNG(`${OUT}${seed}_top.png`, W, W, top);
   writePNG(`${OUT}${seed}_biomes.png`, W, W, bio);
   const tot = W * W;
@@ -211,28 +232,33 @@ function runSeed(seed) {
   // ---------- cross-sections ----------
   const H = MAX_Y - MIN_Y;
   const rows = [Math.floor(W * 0.5), Math.floor(W * 0.22), Math.floor(W * 0.78)];
+  const yTop = NETHER ? 127 : MAX_Y - 1, yBot = NETHER ? 0 : MIN_Y, SC = NETHER ? 2 : 1;
   rows.forEach((row, n) => {
-    const img = new Uint8ClampedArray(W * H * 4);
+    const HH = (yTop - yBot + 1) * SC, WW = W * SC;
+    const img = new Uint8ClampedArray(WW * HH * 4);
     const wz = Z0 + row;
     for (let x = 0; x < W; x++) {
       const wx = X0 + x;
-      let sky = true;
-      for (let y = MAX_Y - 1; y >= MIN_Y; y--) {
+      let sky = !NETHER;
+      for (let y = yTop; y >= yBot; y--) {
         const v = world.getBlock(wx, y, wz) & 0xfff;
         let c;
-        if (v === 0) c = sky ? [170, 205, 255] : [12, 10, 16];
+        if (v === 0) c = sky ? [170, 205, 255] : NETHER ? [34, 12, 12] : [12, 10, 16];
         else {
           c = colorOf[v];
           if (BlockById[v].opaque || v === WATER_ID || v === LAVA_ID) sky = false;
         }
-        const i = ((MAX_Y - 1 - y) * W + x) * 4;
-        img[i] = c[0]; img[i + 1] = c[1]; img[i + 2] = c[2]; img[i + 3] = 255;
+        for (let dy = 0; dy < SC; dy++) for (let dx = 0; dx < SC; dx++) {
+          const i = (((yTop - y) * SC + dy) * WW + x * SC + dx) * 4;
+          img[i] = c[0]; img[i + 1] = c[1]; img[i + 2] = c[2]; img[i + 3] = 255;
+        }
       }
     }
-    // y markers every 64 blocks (left edge) and sea level tick
-    for (let y = MIN_Y; y < MAX_Y; y += 64) for (let x = 0; x < 6; x++) { const i = ((MAX_Y - 1 - y) * W + x) * 4; img[i] = 255; img[i + 1] = 255; img[i + 2] = 0; }
-    for (let x = 0; x < 10; x++) { const i = ((MAX_Y - 1 - SEA_LEVEL) * W + x) * 4; img[i] = 0; img[i + 1] = 255; img[i + 2] = 255; }
-    writePNG(`${OUT}${seed}_xsec_${n}.png`, W, H, img);
+    // y markers every 64 (overworld) / 32 (nether) blocks on the left edge, sea level tick
+    const step = NETHER ? 32 : 64, sea = NETHER ? 31 : SEA_LEVEL;
+    for (let y = yBot; y <= yTop; y += step) for (let x = 0; x < 6 * SC; x++) { const i = ((yTop - y) * SC * WW + x) * 4; img[i] = 255; img[i + 1] = 255; img[i + 2] = 0; }
+    for (let x = 0; x < 10 * SC; x++) { const i = ((yTop - sea) * SC * WW + x) * 4; img[i] = 0; img[i + 1] = 255; img[i + 2] = 255; }
+    writePNG(`${OUT}${seed}_xsec_${n}.png`, WW, HH, img);
   });
 
   // ---------- sanity checks ----------
@@ -259,7 +285,7 @@ function runSeed(seed) {
     console.log(`checks: water-over-air ${waterOverAir}, water-beside-air (y<=63) ${waterBesideAir} (whole area); ` +
       `mean |dh| across chunk borders ${(seam / seamN).toFixed(2)} vs inside ${(inner / innerN).toFixed(2)}`);
     // (c) determinism: regenerate a few chunks in a different order with a fresh generator
-    const g2 = new WorldGenerator(seed, { type: TYPE });
+    const g2 = new WorldGenerator(seed, { type: TYPE, dimension: DIM });
     let diff = 0;
     for (const [dx, dz] of [[5, 7], [0, 0], [N - 1, 3], [2, N - 1]]) {
       const a = world.get(cx0 + dx, cz0 + dz), b = g2.generateColumn(cx0 + dx, cz0 + dz);
@@ -275,11 +301,11 @@ function runSeed(seed) {
   }
 
   // ---------- ore / cave histogram ----------
-  const ORES = ['coal', 'iron', 'copper', 'gold', 'redstone', 'lapis', 'diamond', 'emerald'];
+  const ORES = NETHER ? ['nether_quartz', 'nether_gold', 'ancient_debris'] : ['coal', 'iron', 'copper', 'gold', 'redstone', 'lapis', 'diamond', 'emerald'];
   const oreIdx = new Int8Array(BlockById.length).fill(-1);
   for (const b of BlockById) {
     const m = b.name.replace('deepslate_', '').replace('_ore', '');
-    if (b.name.endsWith('_ore')) oreIdx[b.id] = ORES.indexOf(m);
+    if (b.name.endsWith('_ore') || b.name === 'ancient_debris') oreIdx[b.id] = ORES.indexOf(m);
   }
   const BAND = 16, NB = H / BAND;
   const counts = ORES.map(() => new Float64Array(NB));
@@ -288,7 +314,10 @@ function runSeed(seed) {
   const OTHER = new Set(['granite', 'diorite', 'andesite', 'tuff', 'gravel', 'dirt', 'dripstone_block', 'moss_block', 'deepslate',
     'sugar_cane', 'cactus', 'lily_pad', 'pumpkin', 'melon', 'sweet_berry_bush', 'seagrass', 'dead_bush', 'grass', 'fern', 'snow',
     'ice', 'packed_ice', 'brown_mushroom', 'red_mushroom', 'spawner', 'chest', 'mossy_cobblestone', 'clay', 'podzol', 'coarse_dirt',
-    'calcite', 'terracotta', 'red_sand', 'snow_block', 'obsidian', 'dandelion', 'poppy', 'cornflower', 'blue_orchid', 'lily_of_the_valley']);
+    'calcite', 'terracotta', 'red_sand', 'snow_block', 'obsidian', 'dandelion', 'poppy', 'cornflower', 'blue_orchid', 'lily_of_the_valley',
+    'nether_bricks', 'nether_brick_fence', 'nether_brick_stairs', 'nether_wart', 'soul_sand', 'soul_soil', 'magma_block', 'basalt',
+    'blackstone', 'glowstone', 'shroomlight', 'crimson_stem', 'warped_stem', 'nether_wart_block', 'warped_wart_block', 'crimson_roots',
+    'warped_roots', 'crimson_fungus', 'warped_fungus', 'fire', 'soul_fire', 'lava', 'crimson_nylium', 'warped_nylium']);
   for (let cz = cz0; cz < cz0 + N; cz++) for (let cx = cx0; cx < cx0 + N; cx++) {
     const c = world.get(cx, cz);
     for (let col = 0; col < 256; col++) {
@@ -300,7 +329,7 @@ function runSeed(seed) {
         const nm = BlockById[v].name;
         if (OTHER.has(nm)) other[nm] = (other[nm] ?? 0) + 1;
       }
-      for (let y = MIN_Y; y <= topY; y++) {
+      for (let y = NETHER ? 0 : MIN_Y; y <= topY; y++) {
         const s = c.sections[(y - MIN_Y) >> 4];
         const v = s ? s[((y - MIN_Y) & 15) * 256 + col] & 0xfff : 0;
         const band = ((y - MIN_Y) / BAND) | 0;
@@ -317,24 +346,27 @@ function runSeed(seed) {
   }
   const chunks = N * N;
   console.log(`ore blocks per chunk by y band (${BAND} tall), plus air-below-surface % (caves), deep water, lava:`);
-  console.log('   y from  ' + ORES.map((o) => o.padStart(8)).join('') + '   cave%  water  lava');
+  const PW = NETHER ? 15 : 8;
+  console.log('   y from  ' + ORES.map((o) => o.padStart(PW)).join('') + (NETHER ? '    air%' : '   cave%  water  lava'));
   for (let b = NB - 1; b >= 0; b--) {
     const y = MIN_Y + b * BAND;
     const total = cave[b] + wat[b] + lav[b] + solid[b];
     if (total === 0) continue;
-    console.log(String(y).padStart(9) + '  ' + ORES.map((o, i) => (counts[i][b] / chunks).toFixed(2).padStart(8)).join('') +
-      '  ' + (cave[b] / total * 100).toFixed(1).padStart(6) + (wat[b] / chunks).toFixed(1).padStart(7) + (lav[b] / chunks).toFixed(1).padStart(6));
+    console.log(String(y).padStart(9) + '  ' + ORES.map((o, i) => (counts[i][b] / chunks).toFixed(2).padStart(PW)).join('') +
+      '  ' + (cave[b] / total * 100).toFixed(1).padStart(6) + (NETHER ? '' : (wat[b] / chunks).toFixed(1).padStart(7) + (lav[b] / chunks).toFixed(1).padStart(6)));
   }
-  console.log('   total  ' + ORES.map((o, i) => (counts[i].reduce((a, b) => a + b, 0) / chunks).toFixed(1).padStart(8)).join(''));
+  console.log('   total  ' + ORES.map((o, i) => (counts[i].reduce((a, b) => a + b, 0) / chunks).toFixed(1).padStart(PW)).join(''));
   console.log('other blocks per chunk: ' + Object.entries(other).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / chunks).toFixed(v / chunks < 10 ? 2 : 0)}`).join(', '));
 
   // ---------- oblique 3D view ----------
   {
     const VW = Math.min(256, W), x0 = X0 + (W - VW) / 2, z0 = Z0 + (W - VW) / 2;
-    const SX = Math.max(3, Math.floor(768 / VW)), TILT = 0.5, VS = 0.87, yRef = 300;
+    const SX = Math.max(3, Math.floor(768 / VW)), TILT = 0.5, VS = 0.87, yRef = NETHER ? VCUT + 4 : 300;
+    if (NETHER) world.cut = VCUT;
     const IW = VW * SX, IH = Math.ceil((VW * TILT + (yRef + 64) * VS) * SX) + 20;
     const img = new Uint8ClampedArray(IW * IH * 4);
-    for (let i = 0; i < IW * IH; i++) { img[i * 4] = 150; img[i * 4 + 1] = 190; img[i * 4 + 2] = 240; img[i * 4 + 3] = 255; }
+    const BG = NETHER ? [40, 14, 14] : [150, 190, 240];
+    for (let i = 0; i < IW * IH; i++) { img[i * 4] = BG[0]; img[i * 4 + 1] = BG[1]; img[i * 4 + 2] = BG[2]; img[i * 4 + 3] = 255; }
     const put = (px, py, c, f, hgt) => {
       for (let dy = 0; dy < hgt; dy++) for (let dx = 0; dx < SX; dx++) {
         const X = px + dx, Y = py + dy;
@@ -354,7 +386,7 @@ function runSeed(seed) {
         const ht = world.top(x, z);
         const bdef = BiomeById[c0.biomes[(z & 15) * 16 + (x & 15)]];
         const front = z === z0 + VW - 1;
-        const southTop = front ? 30 : solidTop(x, z + 1);
+        const southTop = front ? (NETHER ? 1 : 30) : solidTop(x, z + 1);
         for (let y = Math.max(MIN_Y, Math.min(ht - 2, southTop) - 1); y <= ht; y++) {
           const v = world.getBlock(x, y, z) & 0xfff;
           if (v === 0) continue;
@@ -376,6 +408,7 @@ function runSeed(seed) {
         }
       }
     }
+    world.cut = undefined;
     const top0 = Math.max(0, minPy - 20), bot = Math.min(IH, maxPy + 30);
     writePNG(`${OUT}${seed}_view.png`, IW, bot - top0, img.subarray(top0 * IW * 4, bot * IW * 4));
   }
@@ -396,6 +429,21 @@ function runSeed(seed) {
     const shade = Math.max(0.55, Math.min(1.4, 1 + (hl - bh[k]) * 0.05));
     const c = BIOME_COL[BiomeById[bb[k]].name] ?? [255, 0, 255];
     big[k * 4] = c[0] * shade; big[k * 4 + 1] = c[1] * shade; big[k * 4 + 2] = c[2] * shade; big[k * 4 + 3] = 255;
+  }
+  // fortress starts (nether)
+  if (NETHER && gen.fort) {
+    for (let rx = Math.floor(ox / 384) - 1; rx <= Math.floor((ox + L * S) / 384) + 1; rx++) {
+      for (let rz = Math.floor(oz / 384) - 1; rz <= Math.floor((oz + L * S) / 384) + 1; rz++) {
+        const L2 = gen.fort.layout(rx, rz);
+        if (!L2) continue;
+        for (const p of L2.pieces) {
+          for (let xx = p.x0; xx <= p.x1; xx += S) for (let zz = p.z0; zz <= p.z1; zz += S) {
+            const ii = Math.floor((xx - ox) / S), jj = Math.floor((zz - oz) / S);
+            if (ii >= 0 && ii < L && jj >= 0 && jj < L) { const k = (jj * L + ii) * 4; big[k] = 255; big[k + 1] = 230; big[k + 2] = 0; }
+          }
+        }
+      }
+    }
   }
   // outline of the detailed area
   for (let q = 0; q < (N * 16) / S; q++) {

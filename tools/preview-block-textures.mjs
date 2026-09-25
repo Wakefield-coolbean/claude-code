@@ -20,7 +20,10 @@ const ms = performance.now() - t0;
 
 // ---------- validation ----------
 const errors = [];
-const expectFrames = { water_still: 32, water_flow: 32, lava_still: 20, lava_flow: 16, fire_0: 16, fire_1: 16 };
+const expectFrames = {
+  water_still: 32, water_flow: 32, lava_still: 20, lava_flow: 16, fire_0: 16, fire_1: 16,
+  nether_portal: 32, soul_fire_0: 16, magma_block: 3,
+};
 for (const n of names) {
   const frames = tex.get(n);
   if (!frames) { errors.push(`missing: ${n}`); continue; }
@@ -38,7 +41,7 @@ const CUTOUT = [
   /_sapling$/, /^(dandelion|poppy|blue_orchid|allium|azure_bluet|red_tulip|orange_tulip|white_tulip|pink_tulip|oxeye_daisy|cornflower|lily_of_the_valley)$/,
   /_mushroom$/, /^(grass|fern|dead_bush|sugar_cane|seagrass|cobweb|torch|ladder|oak_door_top|oak_door_bottom|oak_trapdoor|glass|glass_pane_top|spawner|lily_pad)$/,
   /^sweet_berry_bush_stage/, /^wheat_stage/, /^carrots_stage/, /^potatoes_stage/, /^fire_/, /_leaves$/, /^destroy_stage_/,
-  /^grass_block_side_overlay$/,
+  /^grass_block_side_overlay$/, /^(crimson|warped)_(fungus|roots)$/, /^nether_wart_stage/, /^lantern$/, /^soul_fire_/,
 ];
 for (const n of names) {
   if (!CUTOUT.some((r) => r.test(n))) continue;
@@ -54,8 +57,23 @@ for (const n of GRAYSCALE) {
   }
 }
 // opaque solid textures (spot check)
-for (const n of ['stone', 'dirt', 'cobblestone', 'oak_planks', 'packed_ice', 'lava_still', 'lava_flow', 'deepslate']) {
+for (const n of ['stone', 'dirt', 'cobblestone', 'oak_planks', 'packed_ice', 'lava_still', 'lava_flow', 'deepslate', 'netherrack',
+  'crimson_nylium_side', 'warped_nylium_side', 'magma_block', 'soul_sand', 'crying_obsidian', 'enchanting_table_top', 'anvil', 'anvil_top']) {
   for (const f of tex.get(n)) for (let i = 3; i < f.length; i += 4) if (f[i] !== 255) { errors.push(`${n}: not opaque`); break; }
+}
+
+// nether portal: semi-transparent (alpha ~170-220)
+for (const f of tex.get('nether_portal') ?? []) {
+  for (let i = 3; i < f.length; i += 4) if (f[i] < 165 || f[i] > 225) { errors.push(`nether_portal: alpha ${f[i]} out of range`); break; }
+}
+// lantern: only the documented atlas regions may be opaque
+{
+  const regions = [[0, 2, 6, 7], [0, 9, 6, 6], [1, 0, 4, 2], [11, 1, 3, 4]];
+  const f = tex.get('lantern')[0];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const inside = regions.some(([rx, ry, rw, rh]) => x >= rx && y >= ry && x < rx + rw && y < ry + rh);
+    if (!inside && f[(y * 16 + x) * 4 + 3]) { errors.push(`lantern: opaque pixel outside atlas regions at ${x},${y}`); break; }
+  }
 }
 
 console.log(`generated ${tex.size} textures (${names.length} required by the registry) in ${ms.toFixed(1)} ms`);
@@ -117,11 +135,14 @@ const tiles = [
   tile3(T('stone_bricks')), tile3(T('oak_log')), tile3(T('spruce_planks')), tile3(T('birch_log')),
   tile3(T('snow')), tile3(T('grass_block_snow')), tile3(T('white_wool')), tile3(T('red_wool')),
   tile3(T('sandstone')), tile3(T('bedrock')),
+  tile3(T('netherrack')), tile3(T('nether_bricks')), tile3(T('crimson_nylium')), tile3(T('warped_nylium')),
+  tile3(T('soul_sand')), tile3(T('nether_portal')), tile3(T('basalt_side')), tile3(T('blackstone')),
+  tile3(T('crimson_planks')), tile3(T('warped_stem')), tile3(T('magma_block')), tile3(T('quartz_block_side')),
 ];
 save('tiling.png', contactSheet(tiles, { cols: 6, scale: 4, pad: 6 }));
 
 // 4. animation strips
-for (const n of ['water_still', 'water_flow', 'lava_still', 'lava_flow', 'fire_0', 'fire_1']) {
+for (const n of ['water_still', 'water_flow', 'lava_still', 'lava_flow', 'fire_0', 'fire_1', 'nether_portal', 'soul_fire_0', 'magma_block']) {
   const frames = tex.get(n).map((f) => img(tinted(f, TINT[n])));
   save(`anim_${n}.png`, contactSheet(frames, { cols: 16, scale: 5, pad: 2 }));
 }

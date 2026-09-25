@@ -129,6 +129,49 @@ export const MODELS = {
       leftLeg: part([-2, 30, 0], [box([-3, 0, -1], [2, 30, 2], [56, 0], { mirror: true })]),
     }),
   }),
+  zombified_piglin: () => {
+    const m = humanoid('zombified_piglin', { hat: false });
+    const head = m.root.children.head;
+    head.boxes = [box([-5, 24, -4], [10, 8, 8], [0, 0]), box([-2, 24, -5], [4, 4, 1], [31, 1])];
+    head.children = {
+      rightEar: part([4.5, 30, 0], [box([4.5, 25, -2], [1, 5, 4], [39, 6])]),
+      leftEar: part([-4.5, 30, 0], [box([-5.5, 25, -2], [1, 5, 4], [51, 6])]),
+    };
+    head.children.rightEar.rz = Math.PI / 6; head.children.leftEar.rz = -Math.PI / 6;
+    return m;
+  },
+  ghast: () => {
+    const tentacles = {};
+    for (let i = 0; i < 9; i++) {
+      const fx = ((i % 3) - (Math.floor(i / 3) % 2) * 0.5 + 0.25) / 2 * 2 - 1;
+      const fz = (Math.floor(i / 3) / 2 * 2 - 1);
+      const len = 7 + ((i * 7919 + 13) % 7);
+      tentacles['t' + i] = part([fx * 5, 0, fz * 5], [box([fx * 5 - 1, -len, fz * 5 - 1], [2, len, 2], [0, 32])]);
+    }
+    return { texture: 'ghast', texW: 64, texH: 64, root: part([0, 0, 0], [], { body: part([0, 0, 0], [box([-8, 0, -8], [16, 16, 16], [0, 0])]), ...tentacles }) };
+  },
+  blaze: () => {
+    const rods = {};
+    for (let i = 0; i < 12; i++) rods['r' + i] = part([0, 0, 0], [box([-1, -4, -1], [2, 8, 2], [0, 16])]);
+    return { texture: 'blaze', texW: 64, texH: 32, root: part([0, 0, 0], [], { head: part([0, 20, 0], [box([-4, 20, -4], [8, 8, 8], [0, 0])]), ...rods }) };
+  },
+  // Enchanting-table book, in unflipped block-entity space (spine along Y, closed pages extend +X).
+  enchanting_table_book: () => ({
+    texture: 'enchanting_table_book', texW: 64, texH: 32,
+    root: part([0, 0, 0], [], {
+      leftLid: part([0, 0, -1], [box([-6, -5, -1.005], [6, 10, 0.005], [0, 0])]),
+      rightLid: part([0, 0, 1], [box([0, -5, 1], [6, 10, 0.005], [16, 0])]),
+      seam: part([0, 0, 0], [box([-1, -5, 0], [2, 10, 0.005], [12, 0])]),
+      leftPages: part([0, 0, 0], [box([0, -4, -0.99], [5, 8, 1], [0, 10])]),
+      rightPages: part([0, 0, 0], [box([0, -4, -0.01], [5, 8, 1], [12, 10])]),
+      flip1: part([0, 0, 0], [box([0, -4, 0], [5, 8, 0.005], [24, 10])]),
+      flip2: part([0, 0, 0], [box([0, -4, 0], [5, 8, 0.005], [24, 10])]),
+    }),
+  }),
+  magma_cube: () => ({
+    texture: 'magma_cube', texW: 64, texH: 32,
+    root: part([0, 0, 0], [], { core: part([0, 0, 0], [box([-2, 2, -2], [4, 4, 4], [32, 0])]), body: part([0, 0, 0], [box([-4, 0, -4], [8, 8, 8], [0, 0])]) }),
+  }),
   armor1: (tex) => {
     const m = humanoid(tex, { texH: 32, hat: false, limbs64: false });
     // armor layer 1 is inflated by 1
@@ -204,6 +247,40 @@ export function animate(type, m, s) {
         c.rightArm.rx = f2 + f * 1.2 - f1 * 0.4; c.leftArm.rx = f2 + f * 1.2 - f1 * 0.4;
       }
       bobArms(c, s.ageInTicks);
+      break;
+    }
+    case 'zombified_piglin': {
+      animate('zombie', m, { ...s, zombieArms: s.aggressive });
+      if (!s.aggressive) { const c2 = m.root.children; c2.rightArm.rx = Math.cos(ls * 0.6662 + PI) * 2 * la * 0.5 * 0.5 - PI / 10; c2.leftArm.rx = Math.cos(ls * 0.6662) * la * 0.5; }
+      const ears = c.head.children;
+      if (ears.rightEar) { ears.rightEar.rz = PI / 6 + Math.sin(s.ageInTicks * 0.1) * 0.05 + la * 0.3; ears.leftEar.rz = -(PI / 6 + Math.sin(s.ageInTicks * 0.1) * 0.05 + la * 0.3); }
+      return;
+    }
+    case 'ghast': {
+      for (let i = 0; i < 9; i++) c['t' + i].rx = 0.2 * Math.sin(s.ageInTicks * 0.3 + i) + 0.4;
+      break;
+    }
+    case 'blaze': {
+      const a = s.ageInTicks;
+      let f = a * PI * -0.1;
+      for (let i = 0; i < 4; i++) { const r = c['r' + i]; r.pivot = [Math.cos(f) * 9, 24 - 2 + Math.cos((i * 2 + a) * 0.25) - 8, Math.sin(f) * 9]; f += PI / 2; }
+      f = PI / 4 + a * PI * 0.03;
+      for (let i = 4; i < 8; i++) { const r = c['r' + i]; r.pivot = [Math.cos(f) * 7, 24 - 2 - Math.cos((i * 2 + a) * 0.25) - 12, Math.sin(f) * 7]; f += PI / 2; }
+      f = 0.47123894 + a * PI * -0.05;
+      for (let i = 8; i < 12; i++) { const r = c['r' + i]; r.pivot = [Math.cos(f) * 5, 24 - 11 - Math.cos((i * 1.5 + a) * 0.5) - 6, Math.sin(f) * 5]; f += PI / 2; }
+      for (let i = 0; i < 12; i++) { const r = c['r' + i]; r.boxes[0].from = [r.pivot[0] - 1, r.pivot[1] - 4, r.pivot[2] - 1]; }
+      break;
+    }
+    case 'magma_cube': break;
+    case 'enchanting_table_book': {
+      // s.ageInTicks = time, s.flip1/flip2 = page flips, s.open = 0..1 (vanilla BookModel.setupAnim)
+      const f = (Math.sin(s.ageInTicks * 0.02) * 0.1 + 1.25) * s.open;
+      c.leftLid.ry = PI + f; c.rightLid.ry = -f;
+      c.seam.ry = PI / 2;
+      c.leftPages.ry = f; c.rightPages.ry = -f;
+      c.flip1.ry = f - f * 2 * s.flip1; c.flip2.ry = f - f * 2 * s.flip2;
+      const sx = Math.sin(f);
+      for (const k of ['leftPages', 'rightPages', 'flip1', 'flip2']) { c[k].pivot = [sx, 0, 0]; c[k].boxes[0].from[0] = sx; }
       break;
     }
     case 'creeper': case 'pig': case 'cow': case 'sheep': case 'sheep_fur': {

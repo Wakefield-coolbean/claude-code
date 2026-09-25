@@ -112,7 +112,7 @@ export class EntityManager {
   }
 
   // ---------- spawning ----------
-  countHostile() { let n = 0; for (const e of this.list) if (e.hostile && !e.removed) n++; return n; }
+  countHostile() { let n = 0; for (const e of this.list) if ((e.hostile || e.nether) && !e.removed) n++; return n; }
   countPassive() { let n = 0; for (const e of this.list) if (e.isLiving && !e.hostile && !e.isPlayer && !e.removed) n++; return n; }
 
   naturalSpawn() {
@@ -122,10 +122,59 @@ export class EntityManager {
       for (const e of this.list) if (e.hostile) e.remove();
     } else if (this.countHostile() < 40) {
       // several attempts per call
-      for (let attempt = 0; attempt < 3; attempt++) this.trySpawnHostile(p);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (w.dimension === 'nether') this.trySpawnNether(p); else this.trySpawnHostile(p);
+      }
     }
     // rare passive respawn in grassy chunks
-    if (Math.random() < 0.004 && this.countPassive() < 12) this.trySpawnPassiveNear(p);
+    if (w.dimension === 'overworld' && Math.random() < 0.004 && this.countPassive() < 12) this.trySpawnPassiveNear(p);
+  }
+
+  // Nether spawn tables per biome (weight, type, [min, max] group)
+  static NETHER_SPAWNS = {
+    nether_wastes: [[50, 'ghast', 4, 4], [100, 'zombified_piglin', 4, 4], [2, 'magma_cube', 4, 4], [1, 'enderman', 4, 4]],
+    crimson_forest: [[1, 'zombified_piglin', 2, 4]],
+    warped_forest: [[1, 'enderman', 4, 4]],
+    soul_sand_valley: [[20, 'skeleton', 5, 5], [50, 'ghast', 4, 4], [1, 'enderman', 4, 4]],
+    basalt_deltas: [[40, 'ghast', 1, 1], [100, 'magma_cube', 2, 5]],
+  };
+
+  trySpawnNether(p) {
+    const w = this.world;
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 24 + Math.random() * 72;
+    const x = Math.floor(p.x + Math.cos(ang) * dist), z = Math.floor(p.z + Math.sin(ang) * dist);
+    if (!w.isLoaded(x, z)) return;
+    let fy = 1 + Math.floor(Math.random() * 126);
+    while (fy > 1 && !BlockById[w.getBlock(x, fy - 1, z) & ID_MASK].solid) fy--;
+    if (fy <= 1 || fy >= 127) return;
+    if (Math.hypot(x + 0.5 - p.x, fy - p.y, z + 0.5 - p.z) < 24) return;
+    const biome = BiomeById[w.getBiome(x, z)];
+    const table = EntityManager.NETHER_SPAWNS[biome?.name] ?? EntityManager.NETHER_SPAWNS.nether_wastes;
+    let r = Math.random() * table.reduce((a, e) => a + e[0], 0), pick = table[0];
+    for (const e of table) { if (r < e[0]) { pick = e; break; } r -= e[0]; }
+    const [, type, gmin, gmax] = pick;
+    const below = w.getBlock(x, fy - 1, z) & ID_MASK;
+    if (below === B.bedrock || below === B.nether_portal) return;
+    // per-type spawn rules
+    if (type === 'ghast' && Math.random() >= 1 / 20) return;
+    if (type === 'zombified_piglin' && below === B.nether_wart_block) return;
+    if (type === 'skeleton' || type === 'enderman') {
+      const raw = w.getBlockLight(x, fy, z);
+      if (raw > Math.floor(Math.random() * 8)) return;
+    }
+    const h = type === 'ghast' ? 4 : type === 'enderman' ? 3 : 2;
+    const n = gmin + Math.floor(Math.random() * (gmax - gmin + 1));
+    let spawned = 0;
+    for (let i = 0; i < n && spawned < (type === 'ghast' ? 1 : 4); i++) {
+      const sx = x + (i === 0 ? 0 : Math.floor(Math.random() * 7) - 3), sz = z + (i === 0 ? 0 : Math.floor(Math.random() * 7) - 3);
+      let sy = fy;
+      if (i > 0) { while (sy > 1 && !BlockById[w.getBlock(sx, sy - 1, sz) & ID_MASK].solid) sy--; }
+      if (!this.validSpawn(sx, sy, sz, h)) continue;
+      if (type === 'ghast' && !this.validSpawnWide(sx, sy, sz)) continue;
+      const m = this.game.spawnMob(type, sx + 0.5, sy, sz + 0.5);
+      if (m) spawned++;
+    }
   }
 
   trySpawnHostile(p) {
@@ -220,7 +269,7 @@ export class EntityManager {
     const p = this.game.player;
     if (!p) return;
     for (const e of this.list) {
-      if (!e.hostile || e.persistent || e.removed) continue;
+      if (!(e.hostile || e.nether) || e.persistent || e.removed) continue;
       const d = e.distanceTo(p);
       if (d > 128) e.remove();
       else if (d > 32 && Math.random() < 1 / 800) e.remove();
@@ -235,7 +284,8 @@ export class EntityManager {
       if ((Math.floor(e.x) >> 4) !== c.cx || (Math.floor(e.z) >> 4) !== c.cz) continue;
       if (e.hostile && !e.persistent) continue;
       if (e.type === 'thrown') continue;
-      out.push(e.serialize());
+      const d = e.serialize();
+      if (d) out.push(d);
     }
     return out;
   }

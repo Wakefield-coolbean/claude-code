@@ -84,3 +84,37 @@ for (const b of [STONE, GRANITE, DIORITE, ANDESITE, DEEPSLATE, TUFF, CALCITE, DI
 
 // Solid (collidable) lookup by id; mirrors the registry.
 export const SOLID = IS_SOLID;
+
+// ---- Nether ----
+export const NETHERRACK = id('netherrack');
+export const NETHER_BRICKS = id('nether_bricks', 'netherrack');
+export const NETHER_BRICK_FENCE = id('nether_brick_fence', 'nether_bricks');
+export const NETHER_BRICK_STAIRS = id('nether_brick_stairs', 'nether_bricks');
+export const NETHER_BRICK_SLAB = id('nether_brick_slab', 'nether_bricks');
+export const RED_NETHER_BRICKS = id('red_nether_bricks', 'nether_bricks');
+export const SOUL_SAND = id('soul_sand', 'netherrack');
+export const SOUL_SOIL = id('soul_soil', 'soul_sand');
+export const NETHER_QUARTZ_ORE = id('nether_quartz_ore', 'netherrack');
+export const NETHER_GOLD_ORE = id('nether_gold_ore', 'netherrack');
+export const MAGMA_BLOCK = id('magma_block', 'netherrack');
+export const BASALT = id('basalt', 'netherrack');
+export const BLACKSTONE = id('blackstone', 'basalt');
+export const CRIMSON_NYLIUM = id('crimson_nylium', 'netherrack');
+export const WARPED_NYLIUM = id('warped_nylium', 'netherrack');
+export const CRIMSON_STEM = id('crimson_stem', 'netherrack');
+export const WARPED_STEM = id('warped_stem', 'netherrack');
+export const NETHER_WART_BLOCK = id('nether_wart_block', 'netherrack');
+export const WARPED_WART_BLOCK = id('warped_wart_block', 'nether_wart_block');
+export const SHROOMLIGHT = id('shroomlight', 'glowstone');
+export const CRIMSON_FUNGUS = id('crimson_fungus', 'air');
+export const WARPED_FUNGUS = id('warped_fungus', 'air');
+export const CRIMSON_ROOTS = id('crimson_roots', 'air');
+export const WARPED_ROOTS = id('warped_roots', 'air');
+export const NETHER_WART = id('nether_wart', 'air');
+export const CRYING_OBSIDIAN = id('crying_obsidian', 'obsidian');
+export const ANCIENT_DEBRIS = id('ancient_debris', 'netherrack');
+export const GLOWSTONE = id('glowstone', 'netherrack');
+export const FIRE = id('fire', 'air');
+export const SOUL_FIRE = id('soul_fire', 'fire');
+export const NETHER_WART_MATURE = packBlock(NETHER_WART, 3);
+export const BASALT_Y = BASALT; // axis meta 0 = y

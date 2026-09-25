@@ -55,4 +55,11 @@ reg('dripstone_caves', { temperature: 0.8, downfall: 0.4 });
 reg('lush_caves', { temperature: 0.5, downfall: 0.5 });
 reg('badlands', { temperature: 2.0, downfall: 0.0, grass: 0x90814d, foliage: 0x9e814d, sky: 0x6eb1ff });
 
+// Nether biomes (no sky: `sky` is unused, `fog` is the dimension fog colour)
+reg('nether_wastes', { temperature: 2.0, downfall: 0, fog: 0x330808, nether: true, grass: 0xbfb755, foliage: 0xaea42a });
+reg('crimson_forest', { temperature: 2.0, downfall: 0, fog: 0x330303, nether: true, grass: 0xbfb755, foliage: 0xaea42a });
+reg('warped_forest', { temperature: 2.0, downfall: 0, fog: 0x1a051a, nether: true, grass: 0xbfb755, foliage: 0xaea42a });
+reg('soul_sand_valley', { temperature: 2.0, downfall: 0, fog: 0x1b4745, nether: true, grass: 0xbfb755, foliage: 0xaea42a });
+reg('basalt_deltas', { temperature: 2.0, downfall: 0, fog: 0x685f70, nether: true, grass: 0xbfb755, foliage: 0xaea42a });
+
 export const BIOME_COUNT = BiomeById.length;

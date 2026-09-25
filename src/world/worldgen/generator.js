@@ -1,4 +1,5 @@
 // BlockCraft world generator (Minecraft Java 1.18 "Caves & Cliffs" style).
+// `new WorldGenerator(seed, { dimension: 'nether' })` returns a NetherGenerator (nether.js) instead.
 //
 // Pipeline per chunk column (all deterministic from seed + chunk coords):
 //   1. 2D multi-noise climate per column (+ a 7x7 ring of 4-block "corners") -> height, 3D amplitude, biome
@@ -17,6 +18,7 @@ import { placeFeature as placeFeatureImpl } from './features.js';
 import { BINFO, pickTree } from './biomeinfo.js';
 import { Fractal, Rng, hash32, hashf } from './noise.js';
 import * as I from './ids.js';
+import { NetherGenerator } from './nether.js';
 
 const WH = MAX_Y - MIN_Y;         // 384
 const NY = WH / 8 + 1;            // 49 corner rows (8-block cells)
@@ -28,6 +30,9 @@ const { AIR, WATER, STONE, DEEPSLATE, BEDROCK } = I;
 
 export class WorldGenerator {
   constructor(seed, options = {}) {
+    // Other dimensions share the same interface; the constructor hands back their generator.
+    if (options.dimension === 'nether') return new NetherGenerator(seed, options);
+    this.dimension = 'overworld';
     this.seed = seed | 0;
     this.type = options.type ?? 'default';
     this.flat = this.type === 'flat';
@@ -90,6 +95,9 @@ export class WorldGenerator {
     if (this.flat) return -61;
     return this.climate.sample(Math.floor(x), Math.floor(z), this.sample).H;
   }
+
+  // Structures only exist in the Nether for now.
+  findNearestFortress() { return null; }
 
   placeFeature(access, feature) {
     if (this.flat) return false;

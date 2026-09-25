@@ -207,7 +207,7 @@ export class Gui {
     if (!stack || stack.empty) return;
     const icon = this.icons?.get(stack.id);
     if (icon) this.ctx.drawImage(icon, 0, 0, icon.width, icon.height, x, y, 16, 16);
-    if (stack.tag?.enchantments?.length || stack.item?.glint) this.glint(x, y, icon);
+    if (stack.tag?.enchantments?.length || stack.tag?.stored?.length || stack.item?.glint) this.glint(x, y, icon);
     const it = stack.item;
     if (bar && it?.durability && stack.damage > 0) {
       const f = 1 - stack.damage / it.durability;
@@ -273,6 +273,7 @@ export class Gui {
     const color = { common: '#ffffff', uncommon: '#ffff55', rare: '#55ffff', epic: '#ff55ff' }[rarity];
     lines.push({ text: stack.tag?.name ?? it.display, color });
     for (const e of stack.tag?.enchantments ?? []) lines.push({ text: `${enchantName(e.id)} ${roman(e.lvl)}`, color: e.id === 'binding_curse' || e.id === 'vanishing_curse' ? '#ff5555' : '#aaaaaa' });
+    for (const e of stack.tag?.stored ?? []) lines.push({ text: `${enchantName(e.id)} ${roman(e.lvl)}`, color: '#aaaaaa' });
     if (it.damage !== undefined && it.attackSpeed !== undefined) {
       lines.push({ text: '', color: '#aaaaaa' });
       lines.push({ text: 'When in Main Hand:', color: '#aaaaaa' });

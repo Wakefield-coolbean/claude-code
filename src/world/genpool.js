@@ -28,7 +28,7 @@ export class GeneratorPool {
           w.busy = 0;
           w.onmessage = (e) => this.onMessage(w, e.data);
           w.onerror = (e) => { console.warn('worker error, falling back to main thread', e.message); this.disableWorkers(); };
-          w.postMessage({ type: 'init', seed, options: { type: options.type } });
+          w.postMessage({ type: 'init', seed, options: { type: options.type, dimension: options.dimension } });
           this.workers.push(w);
         }
       } catch (e) {

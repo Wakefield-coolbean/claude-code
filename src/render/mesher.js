@@ -111,11 +111,11 @@ export class Mesher {
             const li = py << 8 | pz << 4 | px;
             v = sec[li];
             const la = chunk.light[si];
-            l = la ? la[li] : 0xf0;
+            l = la ? la[li] : chunk.fullLight;
           } else {
             const c = nbs[cdz * 3 + cdx];
             if (wy < MIN_Y) { v = B.bedrock; l = 0; }
-            else if (!c) { v = 0; l = 0xf0; }
+            else if (!c) { v = 0; l = chunk.fullLight; }
             else {
               v = c.getLocal(px & 15, wy, pz & 15);
               l = c.getLightLocal(px & 15, wy, pz & 15);

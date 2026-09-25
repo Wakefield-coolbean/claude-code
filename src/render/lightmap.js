@@ -14,13 +14,15 @@ export class Lightmap {
     this.flickerTarget = 0;
   }
 
-  static brightness(level) {
+  // DimensionType.ambientLight lifts the floor (0.1 in the Nether)
+  static brightness(level, ambient = 0) {
     const f = level / 15;
-    return f / (4 - 3 * f);
+    const g = f / (4 - 3 * f);
+    return g + (1 - g) * ambient;
   }
 
   // skyBrightness: 0.2..1 (Minecraft getSkyDarken result), gamma 0..1, nightVision 0..1
-  update({ skyBrightness, gamma = 0.5, nightVision = 0, lightningFlash = false, underwaterBoost = 0 }) {
+  update({ skyBrightness, gamma = 0.5, nightVision = 0, lightningFlash = false, underwaterBoost = 0, ambient = 0, constantAmbient = false }) {
     // torch flicker (random walk like vanilla)
     this.flickerTarget += (Math.random() - Math.random()) * Math.random() * Math.random() * 0.1;
     this.flickerTarget *= 0.9;
@@ -35,14 +37,15 @@ export class Lightmap {
     const d = this.data;
     for (let sky = 0; sky < 16; sky++) {
       for (let blk = 0; blk < 16; blk++) {
-        const skyB = Lightmap.brightness(sky) * skyFactor;
-        const blockB = Lightmap.brightness(blk) * blockFlicker;
+        const skyB = Lightmap.brightness(sky, ambient) * skyFactor;
+        const blockB = Lightmap.brightness(blk, ambient) * blockFlicker;
         const g = blockB * ((blockB * 0.6 + 0.4) * 0.6 + 0.4);
         const b = blockB * (blockB * blockB * 0.6 + 0.4);
         let r = blockB + skyTint[0] * skyB;
         let gg = g + skyTint[1] * skyB;
         let bb = b + skyTint[2] * skyB;
         r = r + (0.75 - r) * 0.04; gg = gg + (0.75 - gg) * 0.04; bb = bb + (0.75 - bb) * 0.04;
+        if (constantAmbient) { r += (0.99 - r) * 0.25; gg += (1.12 - gg) * 0.25; bb += (1 - bb) * 0.25; r = clamp01(r); gg = clamp01(gg); bb = clamp01(bb); }
         if (underwaterBoost > 0) {
           const m = Math.max(r, gg, bb);
           if (m < 1) { const k = 1 / m; r += (r * k - r) * underwaterBoost * 0.3; gg += (gg * k - gg) * underwaterBoost * 0.3; bb += (bb * k - bb) * underwaterBoost * 0.3; }

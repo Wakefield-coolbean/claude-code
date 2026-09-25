@@ -65,10 +65,11 @@ export class World {
   }
 
   getLight(x, y, z) {
-    if (y >= MAX_Y) return 0xf0;
+    const full = this.hasSky === false ? 0 : 0xf0;
+    if (y >= MAX_Y) return full;
     if (y < MIN_Y) return 0;
     const c = this.getChunk(x >> 4, z >> 4);
-    if (c === undefined || c.state < CS_LIT) return 0xf0;
+    if (c === undefined || c.state < CS_LIT) return full;
     return c.getLightLocal(x & 15, y, z & 15);
   }
   getSkyLight(x, y, z) { return this.getLight(x, y, z) >> 4; }
@@ -322,6 +323,7 @@ export class World {
           if (this.chunks.has(key)) continue;
           if (this.pendingLoads >= maxInFlight) break outer;
           const c = new Chunk(cx, cz);
+          if (this.hasSky === false) c.fullLight = 0;
           this.chunks.set(key, c);
           this.requestChunk(c);
           if (++requested > 8) break outer;

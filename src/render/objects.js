@@ -75,7 +75,7 @@ class Pose {
 }
 
 export class ObjectRenderer {
-  constructor(renderer, { itemTextures, entityTextures, particleTextures }) {
+  constructor(renderer, { itemTextures, entityTextures, particleTextures, weatherTextures }) {
     this.r = renderer;
     const gl = this.gl = renderer.gl;
     this.prog = new Program(gl, VS, FS, 'objects');
@@ -93,6 +93,8 @@ export class ObjectRenderer {
     this.items = this.makeArray(itemTextures, 16, 16);
     this.entities = this.makeArray(entityTextures, 64, 64);
     this.particles = this.makeArray(particleTextures, 32, 32);
+    this.weather = weatherTextures ? this.makeArray(weatherTextures, 64, 256, true) : null;
+    this.weatherBatch = new Batch();
     this.blockBatch = new Batch(); this.itemBatch = new Batch(); this.entityBatch = new Batch(); this.particleBatch = new Batch();
     this.models = new Map();
     this.spriteMeshes = new Map();
@@ -102,7 +104,7 @@ export class ObjectRenderer {
   }
 
   // Build a TEXTURE_2D_ARRAY from a Map name -> {w,h,data} or Uint8ClampedArray(16x16). Each image padded to (W,H).
-  makeArray(map, W, H) {
+  makeArray(map, W, H, repeat = false) {
     const gl = this.gl;
     const names = [...map.keys()];
     const layers = new Map();
@@ -121,8 +123,8 @@ export class ObjectRenderer {
     gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, W, H, Math.max(1, names.length), 0, gl.RGBA, gl.UNSIGNED_BYTE, all);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_S, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_WRAP_T, repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE);
     return { tex, layers, W, H };
   }
 
@@ -287,6 +289,7 @@ export class ObjectRenderer {
     const white = opts.white ?? 0;
     // creeper swelling
     let sx = 1, sy = 1;
+    if (opts.stretch) { sx = opts.stretch[0]; sy = opts.stretch[1]; }
     if (type === 'creeper' && e.swelling) {
       let f = e.swelling(t);
       const f1 = 1 + Math.sin(f * 100) * f * 0.01;
@@ -358,6 +361,26 @@ export class ObjectRenderer {
           this.emitModel('creeper', 'creeper', e, t, world, camPos, light, { white });
           break;
         }
+        case 'zombified_piglin':
+          this.emitModel('zombified_piglin', 'zombified_piglin', e, t, world, camPos, light);
+          if (e.equipment?.mainhand) this.drawHeldByMob(e, t, camPos, light);
+          break;
+        case 'ghast':
+          this.emitModel('ghast', e.shooting ? 'ghast_shooting' : 'ghast', e, t, world, camPos, light, { scale: 4.5, modelKey: 'ghast', animKey: 'ghast' });
+          break;
+        case 'blaze':
+          this.emitModel('blaze', 'blaze', e, t, world, camPos, [light[0], 1]);
+          break;
+        case 'magma_cube': {
+          const size = e.cubeSize ?? 1;
+          const sq = ((e.oSquish ?? 0) + ((e.squish ?? 0) - (e.oSquish ?? 0)) * t) / (size * 0.5 + 1);
+          const k = 1 / (sq + 1);
+          this.emitModel('magma_cube', 'magma_cube', e, t, world, camPos, [light[0], 1], { scale: size, stretch: [k, 1 / k] });
+          break;
+        }
+        case 'fireball': case 'small_fireball':
+          this.drawSprite(e, t, camPos, [light[0], 1], ctx, 'fire_charge', e.type === 'fireball' ? 1.5 : 0.375);
+          break;
         default:
           if (MODELS[e.type]) {
             this.emitModel(e.type, e.type, e, t, world, camPos, light);
@@ -367,7 +390,8 @@ export class ObjectRenderer {
       }
       if (e.fireTicks > 0 && e.isLiving) this.drawFireOverlay(e, t, camPos);
     }
-    // block entities: chest lids etc. are part of the block mesh; nothing extra
+    // block entities: chest lids etc. are part of the block mesh; enchanting books float above tables
+    this.drawEnchantBooks(ctx);
     this.flush(ctx, 0.1);
   }
 
@@ -503,6 +527,61 @@ export class ObjectRenderer {
     this.emitItem(this.itemBatch, Items.arrow.id, pose, light);
   }
 
+  // camera-facing item sprite (fireballs); size in blocks
+  drawSprite(e, t, camPos, light, ctx, itemName, size) {
+    const pos = e.lerpPos(t);
+    const pose = this.pose;
+    pose.m = mat4.identity(mat4.create());
+    pose.t(pos[0] - camPos[0], pos[1] - camPos[1] + e.height / 2, pos[2] - camPos[2]);
+    pose.ry(ctx.cam.yaw * 180 / Math.PI); pose.rx(ctx.cam.pitch * 180 / Math.PI);
+    pose.s(size);
+    pose.t(0, -0.5, 0);
+    const it = Items[itemName];
+    if (it) this.emitItem(this.itemBatch, it.id, pose, light, { flat: true });
+  }
+
+  // floating books above enchanting tables (EnchantTableRenderer)
+  drawEnchantBooks(ctx) {
+    const game = this.game, tables = game.enchTables;
+    if (!tables || tables.size === 0) return;
+    const t = ctx.opts.partial, camPos = ctx.camPos;
+    const m = this.model('enchanting_table_book');
+    const entry = this.entities.layers.get('enchanting_table_book');
+    if (!entry) return;
+    for (const b of tables.values()) {
+      if (!b.anim) continue;
+      const dx = b.x + 0.5 - camPos[0], dy = b.y + 0.75 - camPos[1], dz = b.z + 0.5 - camPos[2];
+      if (dx * dx + dy * dy + dz * dz > 64 * 64) continue;
+      const a = b.anim;
+      const time = a.time + t;
+      let rot = a.rot - a.oRot;
+      while (rot >= Math.PI) rot -= Math.PI * 2;
+      while (rot < -Math.PI) rot += Math.PI * 2;
+      rot = a.oRot + rot * t;
+      const flip = a.oFlip + (a.flip - a.oFlip) * t;
+      const frac = (x) => x - Math.floor(x);
+      const f1 = Math.max(0, Math.min(1, frac(flip + 0.25) * 1.6 - 0.3));
+      const f2 = Math.max(0, Math.min(1, frac(flip + 0.75) * 1.6 - 0.3));
+      const open = a.oOpen + (a.open - a.oOpen) * t;
+      animate('enchanting_table_book', m, { ageInTicks: time, flip1: f1, flip2: f2, open });
+      const pose = this.pose;
+      pose.m = mat4.identity(mat4.create());
+      pose.t(dx, dy + 0.1 + Math.sin(time * 0.1) * 0.01, dz);
+      pose.ry(-rot * 180 / Math.PI);
+      pose.rz(80);
+      pose.s(1 / 16);
+      const l = this.lightAt(game.world, b.x + 0.5, b.y + 1, b.z + 0.5);
+      const batch = this.entityBatch;
+      const texScaleU = m.texW / 64, texScaleV = m.texH / 64;
+      buildModel(m, (x, y, z, u, v, nx, ny, nz) => {
+        const p = pose.apply(x, y, z);
+        const n = pose.applyN(nx, ny, nz);
+        const sh = entityShade(n[0], n[1], n[2]);
+        batch.push(p[0], p[1], p[2], u * texScaleU, v * texScaleV, entry.layer, sh, sh, sh, 1, l[0], l[1], 0, 0);
+      });
+    }
+  }
+
   drawThrown(e, t, camPos, light, ctx) {
     const pos = e.lerpPos(t);
     const pose = this.pose;
@@ -595,6 +674,66 @@ export class ObjectRenderer {
     game.fx.render(this, ctx);
     // xp orbs & sprite particles use alpha blending
     this.flush(ctx, 0.01, true);
+    this.renderWeather(ctx);
+  }
+
+  // Vanilla LevelRenderer.renderSnowAndRain: textured vertical quads in columns around the camera
+  renderWeather(ctx) {
+    const w = ctx.world;
+    if (!this.weather || w.rain <= 0.001) return;
+    const gl = this.gl, cp = ctx.camPos, t = ctx.opts.partial;
+    const ticks = w.time + t;
+    const R = this.game.settings.graphics === 'fancy' ? 10 : 5;
+    const bx = Math.floor(cp[0]), by = Math.floor(cp[1]), bz = Math.floor(cp[2]);
+    const batch = this.weatherBatch;
+    batch.reset();
+    const rainLayer = this.weather.layers.get('rain')?.layer ?? 0, snowLayer = this.weather.layers.get('snow')?.layer ?? 0;
+    for (let z = bz - R; z <= bz + R; z++) for (let x = bx - R; x <= bx + R; x++) {
+      const dxc = x + 0.5 - cp[0], dzc = z + 0.5 - cp[2];
+      const d2 = dxc * dxc + dzc * dzc;
+      if (d2 > R * R) continue;
+      const biome = w.getBiomeDef(x, z);
+      if (biome.downfall <= 0) continue; // deserts, savannas, badlands
+      const h = w.getHeight(x, z) + 1;
+      const y0 = Math.max(by - R, h), y1 = Math.max(by + R, h);
+      if (y0 >= y1) continue;
+      const snowy = biome.snowy && !(biome.temperature >= 0.15);
+      const len = Math.sqrt(d2) || 1;
+      // quad perpendicular to the view direction of this column
+      const ox = -dzc / len * 0.5, oz = dxc / len * 0.5;
+      const seed = (x * x * 3121 + x * 45238971 + z * z * 418711 + z * 13761) & 31;
+      let v0, u0 = 0;
+      if (snowy) {
+        v0 = -((ticks & 511) + t) / 512;
+        u0 = Math.sin(ticks * 0.01 + seed) * 0.05 + (seed / 32) * 0.3;
+      } else v0 = -(((ticks + seed) % 32) / 32) * (3 + (seed % 7) / 7);
+      const alpha = ((1 - d2 / (R * R)) * 0.5 + 0.5) * w.rain;
+      const l = w.getLight(x, Math.max(h, by), z);
+      const sky = (l >> 4) / 15, blk = (l & 15) / 15;
+      const X = x + 0.5 - cp[0], Z = z + 0.5 - cp[2];
+      const Y0 = y0 - cp[1], Y1 = y1 - cp[1];
+      const pts = [[X - ox, Y1, Z - oz, u0, y1 * 0.25 + v0], [X - ox, Y0, Z - oz, u0, y0 * 0.25 + v0], [X + ox, Y0, Z + oz, u0 + 1, y0 * 0.25 + v0], [X + ox, Y1, Z + oz, u0 + 1, y1 * 0.25 + v0]];
+      for (const k of [0, 1, 2, 0, 2, 3]) {
+        const q = pts[k];
+        batch.push(q[0], q[1], q[2], q[3], q[4], snowy ? snowLayer : rainLayer, 1, 1, 1, alpha, sky, blk, 0, 0);
+      }
+    }
+    if (!batch.n) return;
+    const p = this.prog.use();
+    gl.uniformMatrix4fv(p.u.u_viewProj, false, ctx.viewProj);
+    gl.uniform3fv(p.u.u_fogColor, ctx.env.fogColor);
+    gl.uniform2f(p.u.u_fog, ctx.env.fogStart, ctx.env.fogEnd);
+    gl.uniform1f(p.u.u_alphaCut, 0.01);
+    gl.uniform1f(p.u.u_fullbright, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ctx.lightmap.tex); gl.uniform1i(p.u.u_lightmap, 1);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.weather.tex); gl.uniform1i(p.u.u_tex, 0);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, batch.data.subarray(0, batch.n * FLOATS), gl.STREAM_DRAW);
+    gl.drawArrays(gl.TRIANGLES, 0, batch.n);
+    gl.bindVertexArray(null);
+    gl.depthMask(true); gl.disable(gl.BLEND);
   }
 
   // ---------- first person hand ----------

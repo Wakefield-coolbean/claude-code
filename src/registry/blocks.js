@@ -313,6 +313,60 @@ reg('seagrass', { render: 'cross', layer: 'cutout', solid: false, hardness: 0, s
 reg('lily_pad', { render: 'model', shape: 'lily_pad', layer: 'cutout', solid: true, hardness: 0, sound: 'grass', tint: 'lily', support: 'water' });
 reg('sweet_berry_bush', { render: 'cross', layer: 'cutout', solid: false, hardness: 0, sound: 'grass', support: 'soil', randomTick: true, item: false, drops: (ctx) => (ctx.meta >= 2 ? [{ item: 'sweet_berries', count: ctx.meta >= 3 ? 2 + Math.floor(ctx.rand() * 2) : 1 + Math.floor(ctx.rand() * 2) }] : [{ item: 'sweet_berries', count: 1 }]), tex: 'sweet_berry_bush_stage3', berry: true });
 
+reg('enchanting_table', {
+  render: 'model', shape: 'enchanting_table', tex: { top: 'enchanting_table_top', side: 'enchanting_table_side', bottom: 'enchanting_table_bottom' },
+  ...stoneLike(5), light: 7, interact: 'enchanting_table', resistance: 1200,
+});
+reg('anvil', {
+  render: 'model', shape: 'anvil', tex: { top: 'anvil_top', side: 'anvil', bottom: 'anvil' }, ...stoneLike(5), sound: 'metal',
+  orient: 'facing', interact: 'anvil', gravity: true, resistance: 1200, particle: 'anvil',
+});
+reg('lantern', { render: 'model', shape: 'lantern', layer: 'cutout', tex: 'lantern', ...stoneLike(3.5, { needsTool: false }), sound: 'metal', light: 15, orient: 'lantern', support: 'lantern', particle: 'lantern' });
+for (const w of ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak']) {
+  reg(`stripped_${w}_log`, { tex: { side: `stripped_${w}_log`, top: `stripped_${w}_log_top` }, hardness: 2, tool: 'axe', sound: 'wood', orient: 'axis', flammable: true, fuel: 300 });
+}
+
+// ---------- the Nether ----------
+reg('netherrack', stoneLike(0.4, { sound: 'netherrack', flammable: false, infiniburn: true }));
+reg('nether_bricks', stoneLike(2, { sound: 'nether_bricks' }));
+reg('nether_brick_fence', { render: 'model', shape: 'fence', tex: 'nether_bricks', ...stoneLike(2, { sound: 'nether_bricks' }) });
+reg('nether_brick_stairs', { render: 'model', shape: 'stairs', tex: 'nether_bricks', ...stoneLike(2, { sound: 'nether_bricks' }), orient: 'stairs' });
+reg('nether_brick_slab', { render: 'model', shape: 'slab', tex: 'nether_bricks', ...stoneLike(2, { sound: 'nether_bricks' }), orient: 'slab' });
+reg('red_nether_bricks', stoneLike(2, { sound: 'nether_bricks' }));
+reg('soul_sand', { render: 'model', shape: 'soul_sand', hardness: 0.5, tool: 'shovel', sound: 'soul_sand', speedFactor: 0.4, opaque: true });
+reg('soul_soil', { hardness: 0.5, tool: 'shovel', sound: 'soul_soil' });
+reg('nether_quartz_ore', stoneLike(3, { tex: 'nether_quartz_ore', drops: oreDrop('quartz'), xp: [2, 5], sound: 'netherrack' }));
+reg('nether_gold_ore', stoneLike(3, { drops: oreDrop('gold_nugget', 2, 6), xp: [0, 1], sound: 'netherrack' }));
+reg('magma_block', stoneLike(0.5, { light: 3, hotFloor: true, sound: 'netherrack' }));
+reg('basalt', stoneLike(1.25, { tex: { side: 'basalt_side', top: 'basalt_top' }, orient: 'axis', sound: 'basalt' }));
+reg('blackstone', stoneLike(1.5, { tex: { side: 'blackstone', top: 'blackstone_top' } }));
+reg('crimson_nylium', stoneLike(0.4, { tex: { top: 'crimson_nylium', side: 'crimson_nylium_side', bottom: 'netherrack' }, drops: 'netherrack', sound: 'nylium', particle: 'netherrack' }));
+reg('warped_nylium', stoneLike(0.4, { tex: { top: 'warped_nylium', side: 'warped_nylium_side', bottom: 'netherrack' }, drops: 'netherrack', sound: 'nylium', particle: 'netherrack' }));
+reg('crimson_stem', { tex: { side: 'crimson_stem', top: 'crimson_stem_top' }, hardness: 2, tool: 'axe', sound: 'stem', orient: 'axis' });
+reg('warped_stem', { tex: { side: 'warped_stem', top: 'warped_stem_top' }, hardness: 2, tool: 'axe', sound: 'stem', orient: 'axis' });
+reg('crimson_planks', { hardness: 2, tool: 'axe', sound: 'wood' });
+reg('warped_planks', { hardness: 2, tool: 'axe', sound: 'wood' });
+reg('nether_wart_block', { hardness: 1, tool: 'hoe', sound: 'wart_block' });
+reg('warped_wart_block', { hardness: 1, tool: 'hoe', sound: 'wart_block' });
+reg('shroomlight', { hardness: 1, tool: 'hoe', sound: 'shroomlight', light: 15 });
+reg('crimson_fungus', plant({ support: 'nylium', sound: 'fungus' }));
+reg('warped_fungus', plant({ support: 'nylium', sound: 'fungus' }));
+reg('crimson_roots', plant({ support: 'nylium', replaceable: true, sound: 'roots' }));
+reg('warped_roots', plant({ support: 'nylium', replaceable: true, sound: 'roots' }));
+reg('nether_wart', {
+  render: 'model', shape: 'crop', layer: 'cutout', solid: false, opaque: false, hardness: 0, sound: 'nether_wart', item: false,
+  support: 'soul_sand', randomTick: true, crop: { stages: 4, texStages: [0, 1, 1, 2], tex: 'nether_wart_stage', seed: 'nether_wart' }, tex: 'nether_wart_stage2',
+  drops: (ctx) => [{ item: 'nether_wart', count: ctx.meta >= 3 ? 2 + Math.floor(ctx.rand() * 3) : 1 }], netherWart: true,
+});
+reg('nether_portal', {
+  render: 'model', shape: 'portal', layer: 'translucent', tex: 'nether_portal', solid: false, opaque: false, hardness: -1, light: 11,
+  item: false, drops: null, sound: 'glass', portal: true,
+});
+reg('crying_obsidian', stoneLike(50, { tier: 3, light: 10, resistance: 1200 }));
+reg('ancient_debris', stoneLike(30, { tier: 3, tex: { side: 'ancient_debris_side', top: 'ancient_debris_top' }, resistance: 1200, sound: 'ancient_debris' }));
+reg('quartz_block', stoneLike(0.8, { tex: { side: 'quartz_block_side', top: 'quartz_block_top' } }));
+reg('soul_fire', { render: 'cross', layer: 'cutout', solid: false, hardness: 0, light: 10, item: false, drops: null, replaceable: true, tex: 'soul_fire_0', sound: 'none', soulFire: true });
+
 // ---------- derived data ----------
 export const BLOCK_COUNT = BlockById.length;
 
@@ -359,7 +413,7 @@ export function collectBlockTextureNames() {
     'oak_door_top', 'oak_door_bottom', 'bed_head_top', 'bed_foot_top', 'bed_head_side', 'bed_foot_side',
     'bed_head_end', 'bed_foot_end', 'smooth_stone_slab_side', 'oak_trapdoor', 'fire_0', 'fire_1',
     'sweet_berry_bush_stage0', 'sweet_berry_bush_stage1', 'sweet_berry_bush_stage2', 'sweet_berry_bush_stage3',
-    'deepslate_top', 'chest_front', 'glass_pane_top',
+    'deepslate_top', 'chest_front', 'glass_pane_top', 'nether_wart_stage0', 'nether_wart_stage1', 'nether_wart_stage2', 'soul_fire_0',
   ];
   for (let i = 0; i < 8; i++) extra.push(`wheat_stage${i}`);
   for (let i = 0; i < 4; i++) { extra.push(`carrots_stage${i}`); extra.push(`potatoes_stage${i}`); }

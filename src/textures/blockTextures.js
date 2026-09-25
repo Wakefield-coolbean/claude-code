@@ -329,8 +329,9 @@ def('deepslate', ({ rand }) => {
   }
   return c;
 });
-def('deepslate_top', ({ rand }) => {
-  // irregular concentric swirl (the cut face of layered rock), tileable via torus distance
+// irregular concentric swirl (the cut face of layered rock), tileable via torus distance
+function swirlTop(rand, P) {
+  // P: 6 shades dark -> light
   const c = canvas();
   const warp = fbm(rand, [[2, 2, 0.6], [4, 4, 0.4]]);
   const fine = vnoise(rand, 16);
@@ -340,14 +341,15 @@ def('deepslate_top', ({ rand }) => {
   };
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     const r = ringOf(x, y), b = Math.floor(r), fr = r - b;
-    let col = fr < 0.4 ? DS[4] : fr < 0.75 ? DS[3] : DS[2];
-    if (Math.floor(ringOf(x + 1, y)) > b || Math.floor(ringOf(x, y + 1)) > b) col = DS[0];
-    else if (Math.floor(ringOf(x - 1, y)) < b && Math.floor(ringOf(x, y - 1)) < b) col = DS[5];
-    if (fine(x, y) > 0.94) col = DS[5]; else if (fine(x, y) < 0.05) col = DS[1];
+    let col = fr < 0.4 ? P[4] : fr < 0.75 ? P[3] : P[2];
+    if (Math.floor(ringOf(x + 1, y)) > b || Math.floor(ringOf(x, y + 1)) > b) col = P[0];
+    else if (Math.floor(ringOf(x - 1, y)) < b && Math.floor(ringOf(x, y - 1)) < b) col = P[5];
+    if (fine(x, y) > 0.94) col = P[5]; else if (fine(x, y) < 0.05) col = P[1];
     c.set(x, y, col);
   }
   return c;
-});
+}
+def('deepslate_top', ({ rand }) => swirlTop(rand, DS));
 def('cobbled_deepslate', ({ rand }) => cobbleTex(rand, {
   n: 12, minD: 3.6, gap: 1.05, stones: [0x3a3a40, 0x46464c, 0x505057, 0x5a5a62, 0x66666e, 0x75757d],
   mortar: [0x1f1f23, 0x2a2a2f], bevel: 0.3,
@@ -863,36 +865,42 @@ function planksTex(rand, P) {
 }
 const WOOD = {
   oak: {
+    stripped: [0x8f6f3f, 0x9f7e4a, 0xae8c55, 0xb8975e, 0xc2a168, 0xcdac74],
     planks: [0x6e5530, 0x866a3f, 0x957748, 0xa2834f, 0xb08f59, 0xbc9a62],
     bark: [0x3b2e1c, 0x4c3c25, 0x5f4b2e, 0x6d5635, 0x7b6340, 0x8c7249],
     ring: [0x8b6c40, 0x9d7d4c, 0xae8c57, 0xbd9c63],
     sapling: { leaves: [0x245e14, 0x33801e, 0x459f2a, 0x62bd3c], trunk: [0x7a5c33, 0x5a4424], shape: 'round' },
   },
   spruce: {
+    stripped: [0x5a4024, 0x664a2b, 0x735432, 0x7e5e39, 0x886741, 0x93714a],
     planks: [0x3f2b16, 0x5a3f22, 0x644727, 0x6f502c, 0x7b5a33, 0x85633a],
     bark: [0x1f1409, 0x2a1b0c, 0x352412, 0x3f2c17, 0x4b361d, 0x5a4226],
     ring: [0x5a3f22, 0x6a4c2a, 0x775733, 0x86643b],
     sapling: { leaves: [0x1b3a1d, 0x28542a, 0x386c38, 0x4c8548], trunk: [0x4d3620, 0x352412], shape: 'cone' },
   },
   birch: {
+    stripped: [0xa99665, 0xb6a371, 0xc2af7c, 0xccb986, 0xd5c390, 0xdecd9b],
     planks: [0x8f7d51, 0xae9c66, 0xbba970, 0xc5b47b, 0xd0c086, 0xd9cb92],
     bark: [0x2e2a27, 0x9e9e98, 0xc2c2bb, 0xd6d6d0, 0xe4e4df, 0xf0f0ec],
     ring: [0xae9c66, 0xc1ae78, 0xcfbe86, 0xdccd95],
     sapling: { leaves: [0x3f6a1f, 0x5a8a2c, 0x76a83a, 0x98c455], trunk: [0xdadad4, 0x4a4643], shape: 'round' },
   },
   jungle: {
+    stripped: [0x86633a, 0x967043, 0xa57d4c, 0xb08855, 0xbb925e, 0xc59d68],
     planks: [0x6b4530, 0x8a5d40, 0x956647, 0xa0714e, 0xac7c57, 0xb6865f],
     bark: [0x2d2409, 0x3d320f, 0x4c3f15, 0x58491a, 0x665520, 0x756429],
     ring: [0x8d6038, 0x9e6f43, 0xaf7e4e, 0xbd8c58],
     sapling: { leaves: [0x1c5a12, 0x2a7a1a, 0x3a9a26, 0x57b83a], trunk: [0x6a5620, 0x4c3f15], shape: 'jungle' },
   },
   acacia: {
+    stripped: [0x8b4327, 0x9b4c2d, 0xaa5634, 0xb65f3b, 0xc26944, 0xcc744e],
     planks: [0x72381b, 0x93492a, 0xa0512e, 0xab5a33, 0xb86339, 0xc26c3f],
     bark: [0x3a3631, 0x4a4540, 0x57524b, 0x645e56, 0x716a61, 0x807970],
     ring: [0x974a26, 0xa8552e, 0xb76037, 0xc46c40],
     sapling: { leaves: [0x4a6614, 0x61821c, 0x7a9d26, 0x98b83a], trunk: [0x6e675d, 0x4a4540], shape: 'flat' },
   },
   dark_oak: {
+    stripped: [0x3e2d1a, 0x4a3620, 0x563f26, 0x61482c, 0x6b5033, 0x76593a],
     planks: [0x28190a, 0x39240f, 0x3f2913, 0x472f17, 0x52371c, 0x5b3f21],
     bark: [0x1a1209, 0x251a0e, 0x2f2213, 0x3a2a18, 0x44321d, 0x503b23],
     ring: [0x3f2a15, 0x4b331b, 0x573c20, 0x634527],
@@ -2134,7 +2142,8 @@ const LAVA_PAL = palette([0x9c2c06, 0xbd400b, 0xd2560f, 0xe26d15, 0xed8a1f, 0xf5
 def('lava_still', ({ rand }) => liquidFrames(rand, { frames: 20, pal: LAVA_PAL, warpAmp: 2.0, turb: 0.3, kxr: [-2, 2], kyr: [-2, 2] }));
 def('lava_flow', ({ rand }) => liquidFrames(rand, { frames: 16, pal: LAVA_PAL, flow: 1, kyr: [1, 2], warpAmp: 1.8, turb: 0.3 }));
 
-function fireFrames(rand) {
+const FIRE_COLS = [0xfff8d0, 0xffe45a, 0xffbf2a, 0xfb961f, 0xea6e1a, 0xcc4a18];
+function fireFrames(rand, cols = FIRE_COLS) {
   const F = 16;
   const rise = [];
   while (rise.length < 7) {
@@ -2156,7 +2165,7 @@ function fireFrames(rand) {
       const edge = Math.abs(x - 7.5) / 7.5;
       const I = 1.48 - h * 1.42 + T * 0.4 + S * 0.36 - edge * edge * 0.22;
       if (I < 0.34) continue;
-      const col = I > 1.4 ? 0xfff8d0 : I > 1.18 ? 0xffe45a : I > 0.95 ? 0xffbf2a : I > 0.72 ? 0xfb961f : I > 0.5 ? 0xea6e1a : 0xcc4a18;
+      const col = I > 1.4 ? cols[0] : I > 1.18 ? cols[1] : I > 0.95 ? cols[2] : I > 0.72 ? cols[3] : I > 0.5 ? cols[4] : cols[5];
       c.set(x, y, col);
     }
     out.push(c);
@@ -2165,6 +2174,453 @@ function fireFrames(rand) {
 }
 def('fire_0', ({ rand }) => fireFrames(rand));
 def('fire_1', ({ rand }) => fireFrames(rand));
+
+// ---- stripped logs ----
+function strippedSide(rand, P) {
+  const c = noiseTex(rand, [[16, 2, 0.4], [16, 8, 0.2], [16, 16, 0.4]], P.slice(1), [10, 24, 34, 22, 10]);
+  for (let k = 0; k < 5; k++) {
+    const x = ri(rand, N), y = ri(rand, N), len = 2 + ri(rand, 4);
+    for (let i = 0; i < len; i++) setW(c, x, y + i, P[0]);
+  }
+  return c;
+}
+for (const [w, W] of Object.entries(WOOD)) {
+  def(`stripped_${w}_log`, ({ rand }) => strippedSide(rand, W.stripped));
+  def(`stripped_${w}_log_top`, ({ rand, get }) => {
+    const rim = get(`stripped_${w}_log`)[0].clone().map((x, y, p) => shade(p, 0.84));
+    return logTopTex(rand, rim, W.ring);
+  });
+}
+
+// ===========================================================================
+// NETHER
+// ===========================================================================
+const NRACK = [0x481515, 0x571c1c, 0x652424, 0x712d2d, 0x7d3737, 0x8f4747];
+def('netherrack', ({ rand }) => {
+  const c = noiseTex(rand, [[4, 4, 0.25], [8, 8, 0.3], [16, 16, 0.45]], NRACK, [8, 18, 28, 24, 15, 7]);
+  for (let k = 0; k < 9; k++) {
+    const x = ri(rand, N), y = ri(rand, N);
+    setW(c, x, y, 0x381010); if (rand() < 0.6) setW(c, x + 1, y, 0x461313);
+    setW(c, x, y - 1, 0x9c5454);
+  }
+  return c;
+});
+function smallBricks(rand, { face, top, left, low, mortar }) {
+  const c = canvas();
+  const nz = equalize(field(fbm(rand, FINE)));
+  const pal = palette(face, [30, 45, 25]);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const course = y >> 2, yy = y & 3;
+    const bx = wrap(x - (course % 2 ? 4 : 0));
+    if (yy === 3 || bx === 7 || bx === 15) { c.set(x, y, mortar); continue; }
+    let col = pal(nz[y * N + x]);
+    if (yy === 0) col = top;
+    else if (bx === 0 || bx === 8) col = left;
+    if (yy === 2 && (bx === 6 || bx === 14 || rand() < 0.35)) col = low;
+    c.set(x, y, col);
+  }
+  return c;
+}
+def('nether_bricks', ({ rand }) => smallBricks(rand, { face: [0x2d1317, 0x35171c, 0x3d1b21], top: 0x52282f, left: 0x482329, low: 0x250f13, mortar: 0x140709 }));
+def('red_nether_bricks', ({ rand }) => smallBricks(rand, { face: [0x4b0709, 0x590a0d, 0x660d10], top: 0x7c171b, left: 0x701317, low: 0x3c0507, mortar: 0x240203 }));
+
+const SOUL_SAND = [0x3b2a20, 0x46332a, 0x513d31, 0x5c473a, 0x685244, 0x7a6352];
+const SOUL_FACE = ['kk.kk', 'kk.kk', '.....', '.kkk.', '.k.k.', '.kkk.'];
+def('soul_sand', ({ rand }) => {
+  const c = noiseTex(rand, [[4, 4, 0.3], [8, 8, 0.3], [16, 16, 0.4]], SOUL_SAND.slice(1), [12, 30, 30, 18, 10]);
+  // faint screaming faces pressed into the sand
+  for (const [fx, fy] of [[1 + ri(rand, 3), 1 + ri(rand, 2)], [9 + ri(rand, 2), 8 + ri(rand, 2)]]) {
+    for (let y = -1; y <= 6; y++) for (let x = -1; x <= 5; x++) c.set(fx + x, fy + y, mix(c.get(fx + x, fy + y), SOUL_SAND[2], 0.35));
+    SOUL_FACE.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === 'k') {
+      c.set(fx + x, fy + y, SOUL_SAND[0]);
+      const below = SOUL_FACE[y + 1];
+      if (!below || below === '.....') c.set(fx + x, fy + y + 1, SOUL_SAND[4]);
+    } });
+  }
+  return c;
+});
+def('soul_soil', ({ rand }) => {
+  const c = noiseTex(rand, [[4, 4, 0.25], [8, 8, 0.3], [16, 16, 0.45]], [0x2f231a, 0x3a2b20, 0x453327, 0x4f3c2e, 0x5a4535, 0x69523f], [8, 18, 28, 24, 15, 7]);
+  for (let k = 0; k < 7; k++) { const x = ri(rand, N), y = ri(rand, N); setW(c, x, y, 0x7a624e); setW(c, x + 1, y + 1, 0x2a1f17); }
+  return c;
+});
+def('nether_quartz_ore', ({ rand, get }) => oreTex(get('netherrack')[0], rand, {
+  cols: [0xffffff, 0xeae5dc, 0xcfc7b9, 0x9f9383], count: 7, shapes: [1, 3, 5, 7, 9, 2], shadow: 0.66,
+}));
+def('nether_gold_ore', ({ rand, get }) => {
+  const c = oreTex(get('netherrack')[0], rand, { cols: [0xfff6a8, 0xfcdb4b, 0xe8a824, 0x9e6a0e], count: 6, shapes: [1, 7, 9], shadow: 0.66 });
+  for (let k = 0; k < 7; k++) {
+    const x = 1 + ri(rand, 14), y = 1 + ri(rand, 14);
+    const p = c.get(x, y);
+    if (p[0] > 200 && p[1] > 150) continue;
+    c.set(x, y, 0xf4c63a); c.set(x + 1, y + 1, shade(c.get(x + 1, y + 1), 0.7));
+  }
+  return c;
+});
+def('magma_block', ({ rand }) => {
+  const pts = scatter(rand, 9, 4.2);
+  for (const p of pts) p.w = 0.85 + rand() * 0.3;
+  const v = voronoi(pts);
+  const nz = vnoise(rand, 8);
+  const f = equalize(field(fbm(rand, FINE)));
+  const cell = palette([0x3a1206, 0x4a1a09, 0x5a220d, 0x6a2b12], [20, 35, 30, 15]);
+  const frames = [];
+  for (let t = 0; t < 3; t++) {
+    const c = canvas();
+    for (let k = 0; k < 256; k++) {
+      const x = k & 15, y = k >> 4;
+      const g = v.d2[k] - v.d1[k];
+      const pulse = Math.sin(TAU * (t / 3 + nz(x, y) * 1.5));
+      if (g < 0.75) c.set(x, y, pulse > 0.35 ? 0xffc451 : pulse > -0.45 ? 0xff9b2c : 0xef741c);
+      else if (g < 1.35) c.set(x, y, pulse > 0 ? 0xcf4d16 : 0xae3a0e);
+      else c.set(x, y, cell(f[k]));
+    }
+    frames.push(c);
+  }
+  return frames;
+});
+
+const BASALT = [0x2e2e32, 0x3a3a3f, 0x46464b, 0x525257, 0x5e5e63, 0x6d6d72];
+def('basalt_side', ({ rand }) => {
+  const c = noiseTex(rand, [[16, 2, 0.45], [16, 4, 0.2], [16, 16, 0.35]], BASALT, [8, 18, 28, 24, 15, 7]);
+  for (let k = 0; k < 6; k++) {
+    const x = ri(rand, N), y = ri(rand, N), len = 4 + ri(rand, 7);
+    for (let i = 0; i < len; i++) { setW(c, x, y + i, BASALT[0]); if (rand() < 0.7) setW(c, x + 1, y + i, BASALT[5]); }
+  }
+  return c;
+});
+def('basalt_top', ({ rand }) => {
+  const c = canvas();
+  const wob = vnoise(rand, 4), nz = vnoise(rand, 16);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const dx = x - 7.5, dy = y - 7.5;
+    const d = Math.max(Math.abs(dx), Math.abs(dy)) * 0.75 + Math.hypot(dx, dy) * 0.25 + (wob(x, y) - 0.5) * 1.2;
+    const r = d / 2.4, fr = r - Math.floor(r);
+    let i = fr < 0.25 ? 1 : fr < 0.6 ? 3 : 4;
+    if (nz(x, y) > 0.85) i = Math.min(5, i + 1); else if (nz(x, y) < 0.12) i = Math.max(0, i - 1);
+    if (x === 0 || y === 0) i = 5; else if (x === 15 || y === 15) i = 0;
+    c.set(x, y, BASALT[i]);
+  }
+  return c;
+});
+const BLACKSTONE = [0x17121a, 0x1f1921, 0x272029, 0x2f2731, 0x39303b, 0x483e4b];
+def('blackstone', ({ rand }) => {
+  const c = noiseTex(rand, [[2, 2, 0.25], [4, 4, 0.3], [8, 8, 0.2], [16, 16, 0.25]], BLACKSTONE, [8, 18, 28, 24, 15, 7]);
+  for (let k = 0; k < 8; k++) { const x = ri(rand, N), y = ri(rand, N); setW(c, x, y, 0x574b5a); setW(c, x + 1, y, BLACKSTONE[4]); }
+  return c;
+});
+def('blackstone_top', ({ rand }) => swirlTop(rand, BLACKSTONE));
+
+// ---- nylium, stems, planks, wart blocks ----
+const CRIMSON_NY = [0x560a0a, 0x6d0e0e, 0x821414, 0x971b1b, 0xad2727, 0xc93e39];
+const WARPED_NY = [0x0b4543, 0x105955, 0x156f69, 0x1b847b, 0x25998c, 0x3db7a4];
+function nyliumTop(rand, P) {
+  const c = noiseTex(rand, [[4, 4, 0.2], [8, 8, 0.3], [16, 16, 0.5]], P, [8, 16, 26, 26, 16, 8]);
+  for (let k = 0; k < 10; k++) { const x = ri(rand, N), y = ri(rand, N); setW(c, x, y, lighten(P[5], 0.25)); setW(c, x + 1, y + 1, P[0]); }
+  return c;
+}
+function nyliumSide(rand, get, top) {
+  const c = get('netherrack')[0].clone();
+  const t = get(top)[0];
+  const d = fringeDepths(rand, 4, [0.45, 0.14, 0]);
+  for (let x = 0; x < N; x++) {
+    for (let y = 0; y < d[x]; y++) c.set(x, y, t.get(x, y));
+    c.set(x, d[x] - 1, shade(t.get(x, d[x] - 1), 0.8));
+    c.set(x, d[x], shade(c.get(x, d[x]), 0.8));
+  }
+  return c;
+}
+def('crimson_nylium', ({ rand }) => nyliumTop(rand, CRIMSON_NY));
+def('warped_nylium', ({ rand }) => nyliumTop(rand, WARPED_NY));
+def('crimson_nylium_side', ({ rand, get }) => nyliumSide(rand, get, 'crimson_nylium'));
+def('warped_nylium_side', ({ rand, get }) => nyliumSide(rand, get, 'warped_nylium'));
+
+const STEMS = {
+  crimson: {
+    bark: [0x2f0b16, 0x40101f, 0x4f1528, 0x5c1b30, 0x6b2239, 0x7d2b44], veins: [0xb8323e, 0xe0555a],
+    ring: [0x5a1d33, 0x742a44, 0x843350, 0x943e5d],
+    planks: [0x3c1a29, 0x5a2840, 0x662e49, 0x703451, 0x7c3b5a, 0x874263],
+    wart: [0x520404, 0x680707, 0x7c0b0b, 0x901212, 0xa81d1d, 0xc23434],
+  },
+  warped: {
+    bark: [0x161f24, 0x1e2a30, 0x26353a, 0x2e4045, 0x374c50, 0x42595c], veins: [0x17a595, 0x4ad8c2],
+    ring: [0x185650, 0x206d66, 0x29827a, 0x33958b],
+    planks: [0x123b39, 0x1d5652, 0x22625d, 0x287068, 0x2e7d74, 0x358a80],
+    wart: [0x074040, 0x0b5555, 0x116a6a, 0x167e7e, 0x1f9594, 0x35b3ad],
+  },
+};
+for (const [k, S] of Object.entries(STEMS)) {
+  def(`${k}_stem`, ({ rand }) => {
+    const c = barkTex(rand, S.bark, 4);
+    for (let i = 0; i < 7; i++) {
+      const x = ri(rand, N), y = ri(rand, N), len = 3 + ri(rand, 5);
+      for (let j = 0; j < len; j++) setW(c, x, y + j, j === 0 || j === len - 1 ? S.veins[0] : S.veins[j % 3 === 1 ? 1 : 0]);
+    }
+    return c;
+  });
+  def(`${k}_stem_top`, ({ rand, get }) => logTopTex(rand, get(`${k}_stem`)[0], S.ring));
+  def(`${k}_planks`, ({ rand }) => planksTex(rand, S.planks));
+}
+function wartBlock(rand, P) {
+  const c = noiseTex(rand, [[4, 4, 0.3], [8, 8, 0.3], [16, 16, 0.4]], P.slice(0, 5), [10, 22, 32, 24, 12]);
+  for (let k = 0; k < 14; k++) {
+    const x = ri(rand, N), y = ri(rand, N);
+    setW(c, x, y, P[5]); setW(c, x + 1, y, P[4]); setW(c, x, y + 1, P[3]); setW(c, x + 1, y + 1, P[1]);
+  }
+  return c;
+}
+def('nether_wart_block', ({ rand }) => wartBlock(rand, STEMS.crimson.wart));
+def('warped_wart_block', ({ rand }) => wartBlock(rand, STEMS.warped.wart));
+def('shroomlight', ({ rand }) => {
+  const pts = scatter(rand, 12, 3.4);
+  for (const p of pts) p.w = 0.8 + rand() * 0.4;
+  const v = voronoi(pts);
+  const pal = palette([0xa8401a, 0xc9581e, 0xe57a28, 0xf3993b, 0xfbb957, 0xffd683, 0xffedb8], [10, 14, 20, 22, 18, 11, 5]);
+  const nz = vnoise(rand, 16);
+  const c = canvas();
+  for (let k = 0; k < 256; k++) {
+    const edge = clamp01((v.d2[k] - v.d1[k]) / 2.6);
+    c.set(k & 15, k >> 4, pal(clamp01(edge * 0.9 + (nz(k & 15, k >> 4) - 0.5) * 0.3)));
+  }
+  return c;
+});
+
+// ---- nether plants ----
+function fungus(cap, dots, stem) {
+  return () => sprite([
+    '................',
+    '................',
+    '................',
+    '......rrrr......',
+    '....rrRRyRrr....',
+    '...rRyRRRRyRr...',
+    '...rRRRRyRRRr...',
+    '..rrRyRRRRRyrr..',
+    '..d.ddrsSrdd.d..',
+    '..d....sS....d..',
+    '.......sS.......',
+    '.......sS.......',
+    '......ssS.......',
+    '.......sS.......',
+    '......ssSS......',
+    '.......sS.......',
+  ], { r: cap[0], R: cap[1], d: cap[2], y: dots, s: stem[0], S: stem[1] });
+}
+def('crimson_fungus', fungus([0x8f1414, 0xc92b24, 0x640c10], 0xf2a33a, [0xd8b28f, 0xa8805f]));
+def('warped_fungus', fungus([0x0f6b64, 0x1ca596, 0x0a4a46], 0xf28c28, [0xe7a870, 0xb57a45]));
+function rootsTex(rand, P) {
+  const c = canvas();
+  const blades = [];
+  for (let x = 1; x < 15; x++) {
+    if (rand() < 0.3) continue;
+    const center = 1 - Math.abs(x - 7.5) / 8;
+    blades.push({ x, h: 4 + ri(rand, 5) + Math.round(center * 5), curl: rand() < 0.5 ? -1 : 1 });
+  }
+  blades.sort((a, b) => b.h - a.h);
+  for (const b of blades) {
+    for (let k = 0; k < b.h; k++) {
+      const y = 15 - k;
+      const x = b.x + (k >= b.h - 2 ? b.curl : 0) + (k === b.h - 1 ? b.curl : 0);
+      c.set(x, y, P[Math.min(3, Math.floor((k / b.h) * 4))]);
+    }
+  }
+  return c;
+}
+def('crimson_roots', ({ rand }) => rootsTex(rand, [0x5e0c10, 0x861818, 0xae2626, 0xd4453c]));
+def('warped_roots', ({ rand }) => rootsTex(rand, [0x0b4e4a, 0x137068, 0x1c978a, 0x39c4b0]));
+function netherWart(rand, stage) {
+  const c = canvas();
+  const W = [0x5c0909, 0x8a1414, 0xb42424, 0xde4a4a];
+  const warts = [
+    [[3, 13, 1], [7, 14, 1], [11, 13, 1]],
+    [[2, 9, 2], [7, 7, 2], [11, 10, 2], [9, 13, 1], [4, 13, 1]],
+    [[1, 4, 2], [6, 1, 3], [11, 4, 2], [8, 8, 2], [3, 9, 2], [12, 10, 2], [6, 12, 1]],
+  ][stage];
+  // stalks with small nodules
+  for (const [x, y, s] of warts) {
+    const sx = x + (s > 1 ? 1 : 0);
+    for (let yy = y + s + 1; yy < N; yy++) {
+      const xx = sx + ((yy >> 2) & 1);
+      c.set(xx, yy, W[yy & 1 ? 0 : 1]);
+      if (yy % 3 === 0 && rand() < 0.6) c.set(xx + (rand() < 0.5 ? -1 : 1), yy, W[1]);
+    }
+  }
+  // bulbous lumpy warts
+  for (const [x, y, s] of warts) {
+    const n = s + 1;
+    for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) {
+      if (n > 2 && (dx === 0 || dx === n - 1) && (dy === 0 || dy === n - 1)) continue;
+      let i = 2;
+      if (dx + dy === 0 || (n > 2 && dx + dy === 1)) i = 3;
+      else if (dx === n - 1 || dy === n - 1) i = dx + dy >= 2 * n - 3 ? 0 : 1;
+      c.set(x + dx, y + dy, W[i]);
+    }
+    if (n > 2) for (let k = 0; k < 2; k++) {
+      const [bx, by] = pick(rand, [[-1, 1], [n, 1], [1, -1], [n - 1, n - 2], [-1, n - 2]]);
+      c.set(x + bx, y + by, W[by < 1 ? 3 : 1]);
+    }
+  }
+  return c;
+}
+for (let st = 0; st < 3; st++) def(`nether_wart_stage${st}`, ({ rand }) => netherWart(rand, st));
+
+// ---- portal, crying obsidian, debris, quartz ----
+const PORTAL_PAL = palette([
+  [58, 10, 140, 215], [78, 16, 184, 200], [100, 28, 218, 188], [128, 48, 238, 180],
+  [160, 84, 250, 182], [198, 138, 255, 196], [232, 198, 255, 212],
+], [8, 16, 22, 22, 16, 10, 6]);
+def('nether_portal', ({ rand }) => {
+  // spinning vortices on a torus; the falloff reaches zero before the wrap seam, so it tiles
+  const F = 32;
+  const vort = scatter(rand, 4, 6).map((p, i) => ({ ...p, spin: i % 2 ? 1 : -1, arms: 2 + (i % 2), ph: rand() * TAU }));
+  const bg = mkWaves(rand, 4, { kx: [-2, 2], ky: [-2, 2], kt: [1, -1] });
+  const frames = [];
+  for (let t = 0; t < F; t++) {
+    const tt = t / F;
+    const f = equalize(field((x, y) => {
+      let v = 0, wsum = 0.15;
+      for (const o of vort) {
+        const dx = tdx(x + 0.5, o.x), dy = tdx(y + 0.5, o.y);
+        const r = Math.hypot(dx, dy);
+        const w = Math.max(0, 1 - r / 7.5) ** 2;
+        if (!w) continue;
+        v += w * Math.sin(o.arms * Math.atan2(dy, dx) + o.spin * (r * 1.1 - TAU * tt * 2) + o.ph);
+        wsum += w;
+      }
+      return v / wsum * 0.8 + waves(bg, x, y, tt) * 0.35;
+    }));
+    frames.push(paint(canvas(), f, PORTAL_PAL));
+  }
+  return frames;
+});
+def('crying_obsidian', ({ rand, get }) => {
+  const c = get('obsidian')[0].clone();
+  const T = [0x4a129a, 0x7424d8, 0xa04cff, 0xd29aff];
+  const spots = scatter(rand, 6, 4.5);
+  for (const p of spots) {
+    const x = Math.floor(p.x), y = Math.floor(p.y), len = 2 + ri(rand, 4);
+    c.set(x - 1, y, T[1]); c.set(x, y, T[2]); c.set(x + 1, y, T[1]);
+    for (let i = 1; i <= len; i++) setW(c, x, y + i, i === len ? T[3] : T[i === 1 ? 2 : 1]);
+    setW(c, x + 1, y + 1, T[0]);
+  }
+  return c;
+});
+const DEBRIS = [0x2e1e19, 0x3d2822, 0x4d342b, 0x5d4035, 0x6e4e42, 0x876659];
+def('ancient_debris_side', ({ rand }) => {
+  const c = canvas();
+  const wob = vnoise(rand, 4), nz = vnoise(rand, 16);
+  const ph = rand() * TAU;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const v = (x + 2.2 * Math.sin(TAU * y / N + ph) + (wob(x, y) - 0.5) * 3) * 5 / N;
+    const fr = v - Math.floor(v);
+    let i = fr < 0.18 ? 0 : fr < 0.4 ? 2 : fr < 0.8 ? 3 : 4;
+    if (nz(x, y) > 0.86) i = 5; else if (nz(x, y) < 0.1) i = 1;
+    c.set(x, y, DEBRIS[i]);
+  }
+  return c;
+});
+def('ancient_debris_top', ({ rand }) => {
+  const c = canvas();
+  const nz = vnoise(rand, 16);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const dx = x - 7.5, dy = y - 7.5;
+    const s = Math.hypot(dx, dy) / 2.3 + Math.atan2(dy, dx) / TAU;
+    const fr = s - Math.floor(s);
+    let i = fr < 0.25 ? 0 : fr < 0.5 ? 2 : fr < 0.85 ? 3 : 4;
+    if (nz(x, y) > 0.88) i = 5;
+    if (x === 0 || y === 0 || x === 15 || y === 15) i = 1;
+    c.set(x, y, DEBRIS[i]);
+  }
+  return c;
+});
+const QUARTZ = [0xd6cfc4, 0xe0dacf, 0xe8e3db, 0xefebe4, 0xf7f4ef];
+def('quartz_block_side', ({ rand }) => noiseTex(rand, [[4, 4, 0.3], [16, 16, 0.7]], QUARTZ.slice(1, 4), [22, 50, 28]));
+def('quartz_block_top', ({ rand }) => {
+  const c = noiseTex(rand, [[4, 4, 0.3], [16, 16, 0.7]], QUARTZ.slice(1, 4), [22, 50, 28]);
+  bevel(c, QUARTZ[4], QUARTZ[0]);
+  for (let i = 2; i < 14; i++) { c.set(i, 2, QUARTZ[0]); c.set(2, i, QUARTZ[0]); c.set(i, 13, QUARTZ[4]); c.set(13, i, QUARTZ[4]); }
+  return c;
+});
+
+// ===========================================================================
+// ENCHANTING TABLE, ANVIL, LANTERN
+// ===========================================================================
+const CLOTH = [0x560b0b, 0x741313, 0x8c1b1b, 0xa12424, 0xb63434];
+const clothTex = (rand) => noiseTex(rand, [[8, 8, 0.3], [16, 16, 0.7]], CLOTH.slice(1, 5), [15, 38, 32, 15]);
+def('enchanting_table_top', ({ rand }) => {
+  const c = clothTex(rand);
+  for (let i = 0; i < N; i++) {
+    c.set(i, 0, 0x120b0b); c.set(0, i, 0x120b0b); c.set(i, 15, 0x120b0b); c.set(15, i, 0x120b0b);
+    if (i > 0 && i < 15) { c.set(i, 1, CLOTH[0]); c.set(1, i, CLOTH[0]); c.set(i, 14, CLOTH[0]); c.set(14, i, CLOTH[0]); }
+  }
+  for (const [x, y] of [[1, 1], [12, 1], [1, 12], [12, 12]]) {
+    c.pattern(x, y, ['.c.', 'cCc', '.c.'], { c: 0x2fb8c4, C: 0xb8fff6 });
+  }
+  return c;
+});
+def('enchanting_table_side', ({ rand, get }) => {
+  // visible part is rows 4-15: cloth hem on top, obsidian below
+  const c = get('obsidian')[0].clone();
+  const cl = clothTex(rand);
+  for (let x = 0; x < N; x++) {
+    for (let y = 0; y < 6; y++) c.set(x, y, cl.get(x, y));
+    c.set(x, 4, x % 4 === 1 ? CLOTH[4] : CLOTH[3]);
+    c.set(x, 5, x % 4 === 3 ? CLOTH[0] : CLOTH[1]);
+    c.set(x, 6, 0x0e0909);
+  }
+  for (const x of [1, 14]) { c.set(x, 5, 0x2fb8c4); c.set(x, 4, 0xb8fff6); }
+  return c;
+});
+def('enchanting_table_bottom', ({ get }) => get('obsidian')[0].clone());
+
+const IRON_DARK = [0x2c2c2c, 0x363636, 0x3f3f3f, 0x474747, 0x505050, 0x5c5c5c];
+def('anvil', ({ rand }) => {
+  const c = noiseTex(rand, [[4, 4, 0.25], [8, 8, 0.3], [16, 16, 0.45]], IRON_DARK.slice(1), [12, 26, 32, 20, 10]);
+  for (let k = 0; k < 9; k++) {
+    const x = ri(rand, N), y = ri(rand, N), len = 2 + ri(rand, 3);
+    for (let i = 0; i < len; i++) setW(c, x + i, y, IRON_DARK[5]);
+    setW(c, x + len, y + 1, IRON_DARK[0]);
+  }
+  for (let k = 0; k < 6; k++) setW(c, ri(rand, N), ri(rand, N), IRON_DARK[0]);
+  return c;
+});
+def('anvil_top', ({ rand, get }) => {
+  const c = get('anvil')[0].clone();
+  const pol = noiseTex(rand, FINE, [0x5a5a5a, 0x636363, 0x6b6b6b, 0x757575], [15, 35, 35, 15]);
+  for (let y = 0; y < N; y++) {
+    for (let x = 4; x < 12; x++) c.set(x, y, pol.get(x, y));
+    c.set(3, y, 0x333333); c.set(12, y, 0x2a2a2a);
+  }
+  for (let k = 0; k < 5; k++) {
+    const x = 4 + ri(rand, 6), y = ri(rand, N);
+    c.set(x, y, 0x878787); c.set(x + 1, y, 0x7e7e7e);
+  }
+  return c;
+});
+def('lantern', () => {
+  const c = canvas();
+  const I = [0x1c2024, 0x2a3036, 0x394148, 0x4c565f];
+  // body side 6x7 at (0,2): iron frame around glowing glass
+  for (let y = 2; y <= 8; y++) for (let x = 0; x <= 5; x++) {
+    if (y === 2) c.set(x, y, I[3]);
+    else if (y === 8) c.set(x, y, I[0]);
+    else if (x === 0) c.set(x, y, I[2]);
+    else if (x === 5) c.set(x, y, I[1]);
+  }
+  c.pattern(1, 3, ['oyyo', 'yYYy', 'YWWY', 'yYYy', 'oyyo'], { o: 0xdf8e2a, y: 0xffc24a, Y: 0xffdc7a, W: 0xfff6c8 });
+  // body top/bottom 6x6 at (0,9)
+  for (let y = 9; y <= 14; y++) for (let x = 0; x <= 5; x++) {
+    const edge = x === 0 || x === 5 || y === 9 || y === 14;
+    const center = x >= 2 && x <= 3 && y >= 11 && y <= 12;
+    c.set(x, y, edge ? (x === 0 || y === 9 ? I[2] : I[0]) : center ? I[3] : I[1]);
+  }
+  // cap sides 4x2 at (1,0)
+  for (let x = 1; x <= 4; x++) { c.set(x, 0, I[3]); c.set(x, 1, I[1]); }
+  // handle / chain loop 3x4 at (11,1)
+  c.pattern(11, 1, ['.a.', 'a.b', 'a.b', '.b.'], { a: I[3], b: I[1] });
+  return c;
+});
+def('soul_fire_0', ({ rand }) => fireFrames(rand, [0xe8ffff, 0xa6f4ff, 0x5ee2f2, 0x2fbcd8, 0x1e8fb5, 0x176b8c]));
 
 // ===========================================================================
 // BLOCK BREAKING OVERLAYS

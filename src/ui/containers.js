@@ -840,3 +840,267 @@ export class CreativeScreen extends ContainerScreen {
     this.game.setScreen(null);
   }
 }
+
+// ---------- enchanting table ----------
+import { tableCosts, selectEnchantments, enchantability, enchantName, roman, anvilResult, repairMaterial } from '../game/enchanting.js';
+import * as FONT_MODULE from '../textures/font.js';
+import { TAGS } from '../registry/recipes.js';
+
+class SmallInv extends Inventory {}
+
+export class EnchantmentMenu extends Menu {
+  constructor(game, pos) {
+    super(game);
+    this.pos = pos;
+    this.inv = new SmallInv(2);
+    this.slots.push(new Slot(this.inv, 0, 15, 47, { max: 1 }));
+    this.slots.push(new Slot(this.inv, 1, 35, 47, { filter: (s) => s.item?.name === 'lapis_lazuli', icon: 'empty_slot_lapis_lazuli' }));
+    this.addPlayerSlots(8, 84);
+    this.costs = [0, 0, 0];
+    this.clues = [null, null, null];
+    this.shelves = this.countShelves();
+  }
+  countShelves() {
+    const w = this.game.world, [x, y, z] = this.pos;
+    let n = 0;
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      if ((dx || dz) && w.getBlock(x + dx, y, z + dz) === 0 && w.getBlock(x + dx, y + 1, z + dz) === 0) {
+        for (const dy of [0, 1]) {
+          if (w.getBlockDef(x + dx * 2, y + dy, z + dz * 2).name === 'bookshelf') n++;
+          if (dx && dz) {
+            if (w.getBlockDef(x + dx * 2, y + dy, z + dz).name === 'bookshelf') n++;
+            if (w.getBlockDef(x + dx, y + dy, z + dz * 2).name === 'bookshelf') n++;
+          }
+        }
+      }
+    }
+    return n;
+  }
+  slotChanged() {
+    const s = this.inv.get(0);
+    const p = this.player;
+    if (!s || s.tag?.enchantments?.length || enchantability(s.item) <= 0) { this.costs = [0, 0, 0]; this.clues = [null, null, null]; return; }
+    this.costs = tableCosts(p.enchantSeed, this.shelves, s.item);
+    this.clues = this.costs.map((c, i) => {
+      if (!c) return null;
+      const list = selectEnchantments(p.enchantSeed + i, s.item, c);
+      return list.length ? list[Math.floor(((p.enchantSeed >>> 3) + i) % list.length)] : null;
+    });
+  }
+  canEnchant(i) {
+    const p = this.player, c = this.costs[i];
+    const lapis = this.inv.get(1)?.count ?? 0;
+    if (!c || !this.inv.get(0)) return false;
+    if (p.creative) return true;
+    return p.xpLevel >= c && lapis >= i + 1;
+  }
+  enchant(i) {
+    if (!this.canEnchant(i)) return false;
+    const p = this.player;
+    const s = this.inv.get(0);
+    const list = selectEnchantments(p.enchantSeed + i, s.item, this.costs[i]);
+    if (!list.length) return false;
+    let out = s.copy(1);
+    if (s.item.name === 'book') { out = ItemStack.of('enchanted_book'); out.tag = { stored: list }; }
+    else { out.tag = out.tag ?? {}; out.tag.enchantments = list; }
+    this.inv.set(0, out);
+    if (!p.creative) {
+      p.giveLevels(-(i + 1));
+      const l = this.inv.get(1); l.count -= i + 1; if (l.count <= 0) this.inv.set(1, null);
+    }
+    p.enchantSeed = (Math.random() * 2 ** 31) | 0;
+    this.game.stats.enchanted = (this.game.stats.enchanted ?? 0) + 1;
+    this.game.sound.play('block.enchantment_table.use', { x: this.pos[0] + 0.5, y: this.pos[1] + 0.5, z: this.pos[2] + 0.5, pitch: Math.random() * 0.1 + 0.9 });
+    this.slotChanged();
+    return true;
+  }
+  quickMove(i) {
+    const sl = this.slots[i];
+    const s = sl.stack;
+    if (!s) return;
+    if (i >= this.playerStart) {
+      const c = s.copy();
+      if (s.item.name === 'lapis_lazuli') this.moveItemStackTo(c, 1, 2);
+      else if (!this.inv.get(0)) { this.inv.set(0, c.copy(1)); c.count--; }
+      sl.stack = c.count > 0 ? c : null;
+      this.slotChanged();
+      return;
+    }
+    super.quickMove(i);
+    this.slotChanged();
+  }
+  removed() {
+    super.removed();
+    for (let k = 0; k < 2; k++) { const s = this.inv.get(k); if (s) { if (this.player.inventory.add(s) > 0) this.game.dropFromPlayer(s); this.inv.set(k, null); } }
+  }
+}
+
+function sgaWord(seed, len) {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  let out = '', x = seed >>> 0;
+  for (let i = 0; i < len; i++) { x = (x * 1103515245 + 12345) >>> 0; out += letters[(x >>> 16) % 26]; if (i > 1 && ((x >>> 8) & 7) === 0 && i < len - 2) out += ' '; }
+  return out;
+}
+
+export class EnchantmentScreen extends ContainerScreen {
+  constructor(game, pos) { super(game, new EnchantmentMenu(game, pos), 'Enchant'); this.bookFlip = 0; }
+  renderExtra(gui, mx, my) {
+    const L = this.left, T = this.top, menu = this.menu, p = this.game.player;
+    gui.sprite('enchanting_book_background', L + 7, T + 17);
+    // spinning pages: simple animated book glyph
+    const t = performance.now() / 400;
+    gui.fill(L + 20, T + 25, 12, 16, '#5b3b1d'); gui.fill(L + 33, T + 25, 12, 16, '#5b3b1d');
+    gui.fill(L + 21, T + 26, 11, 14, '#e8e0c8'); gui.fill(L + 33, T + 26, 11, 14, '#e8e0c8');
+    const flip = Math.abs(Math.sin(t)) * 10;
+    gui.fill(L + 33 - flip, T + 26, 1 + flip * 0.2, 14, '#fffaf0');
+    for (let i = 0; i < 3; i++) {
+      const bx = L + 60, by = T + 14 + 19 * i;
+      const cost = menu.costs[i];
+      const can = menu.canEnchant(i);
+      const hover = mx >= bx && mx < bx + 108 && my >= by && my < by + 19;
+      if (!cost) { gui.sprite('enchanting_button_disabled', bx, by); continue; }
+      gui.sprite(!can ? 'enchanting_button_disabled' : hover ? 'enchanting_button_highlighted' : 'enchanting_button', bx, by);
+      gui.sprite(`enchanting_level_${i + 1}${can ? '' : '_disabled'}`, bx + 1, by + 1);
+      // galactic runes
+      const word = sgaWord(p.enchantSeed + i * 7919, 10);
+      this.drawRunes(gui, word, bx + 20, by + 2, can ? (hover ? '#ffff80' : '#685e4a') : '#342f25', 86);
+      const cs = String(cost);
+      gui.text(cs, bx + 106 - gui.textWidth(cs), by + 10, can ? '#80ff20' : '#407f10', true);
+      if (hover) {
+        const clue = menu.clues[i];
+        const lines = [];
+        if (clue) lines.push({ text: `${enchantName(clue.id)} ${roman(clue.lvl)} . . . ?`, color: '#ffffff' });
+        if (!p.creative) {
+          lines.push({ text: '' });
+          if (p.xpLevel < cost) lines.push({ text: `Level Requirement: ${cost}`, color: '#ff5555' });
+          else {
+            lines.push({ text: `${i + 1} Lapis Lazuli`, color: (menu.inv.get(1)?.count ?? 0) >= i + 1 ? '#aaaaaa' : '#ff5555' });
+            lines.push({ text: `${i + 1} Enchantment Level${i ? 's' : ''}`, color: '#aaaaaa' });
+          }
+        }
+        this.pendingTooltip = { lines, mx, my };
+      }
+    }
+  }
+  drawRunes(gui, word, x, y, color, maxW) {
+    let cx = x;
+    const c = gui.ctx;
+    c.fillStyle = color;
+    for (const ch of word) {
+      const g = FONT_MODULE.SGA_GLYPHS?.[ch] ?? FONT_MODULE.FONT.glyphs[ch];
+      if (!g) { cx += 3; continue; }
+      if (cx + g.width > x + maxW) break;
+      g.rows.forEach((row, yy) => { for (let xx = 0; xx < g.width; xx++) if (row[xx] === '#') c.fillRect(cx + xx, y + yy, 1, 1); });
+      cx += g.width + 1;
+      if (cx > x + maxW / 2 && y < 10000) { /* keep single line */ }
+    }
+  }
+  render(gui, mx, my) {
+    this.pendingTooltip = null;
+    super.render(gui, mx, my);
+    if (this.pendingTooltip && !this.menu.carried) gui.tooltip(this.pendingTooltip.lines, this.pendingTooltip.mx, this.pendingTooltip.my);
+  }
+  mouseDown(mx, my, b, shift) {
+    for (let i = 0; i < 3; i++) {
+      const bx = this.left + 60, by = this.top + 14 + 19 * i;
+      if (b === 0 && mx >= bx && mx < bx + 108 && my >= by && my < by + 19) { this.menu.enchant(i); return true; }
+    }
+    return super.mouseDown(mx, my, b, shift);
+  }
+}
+
+// ---------- anvil ----------
+export class AnvilMenu extends Menu {
+  constructor(game, pos) {
+    super(game);
+    this.pos = pos;
+    this.inv = new SmallInv(3);
+    this.name = null;
+    this.slots.push(new Slot(this.inv, 0, 27, 47));
+    this.slots.push(new Slot(this.inv, 1, 76, 47));
+    this.slots.push(new Slot(this.inv, 2, 134, 47, { output: true, onTake: () => this.onTake() }));
+    this.addPlayerSlots(8, 84);
+    this.cost = 0;
+  }
+  isMaterial(stack, it) {
+    const m = repairMaterial(it);
+    if (!m) return false;
+    if (m.startsWith('#')) return TAGS[m.slice(1)].includes(stack.item.name);
+    return stack.item.name === m;
+  }
+  slotChanged(i) {
+    if (i === 2) return;
+    const left = this.inv.get(0), right = this.inv.get(1);
+    const r = left ? anvilResult(left, right, this.name, (s, it) => this.isMaterial(s, it)) : null;
+    this.info = r;
+    this.cost = r ? r.cost : 0;
+    const can = r && !r.tooExpensive && (this.player.creative || this.player.xpLevel >= r.cost);
+    this.inv.slots[2] = can ? r.result : null;
+  }
+  onTake() {
+    const r = this.info;
+    if (!r) return;
+    const p = this.player;
+    if (!p.creative) p.giveLevels(-r.cost);
+    this.inv.set(0, null);
+    const right = this.inv.get(1);
+    if (right) {
+      if (r.materialUsed) { right.count -= r.materialUsed; if (right.count <= 0) this.inv.set(1, null); }
+      else this.inv.set(1, null);
+    }
+    this.game.sound.play('random.anvil_use', { x: this.pos[0] + 0.5, y: this.pos[1] + 0.5, z: this.pos[2] + 0.5, pitch: Math.random() * 0.1 + 0.9 });
+    this.name = null;
+    this.info = null;
+    this.inv.slots[2] = null;
+  }
+  removed() {
+    super.removed();
+    for (let k = 0; k < 2; k++) { const s = this.inv.get(k); if (s) { if (this.player.inventory.add(s) > 0) this.game.dropFromPlayer(s); this.inv.set(k, null); } }
+  }
+}
+
+export class AnvilScreen extends ContainerScreen {
+  constructor(game, pos) { super(game, new AnvilMenu(game, pos), 'Repair & Name'); }
+  build(w, h) {
+    super.build(w, h);
+    this.nameField = this.add(new TextField(this.left + 62, this.top + 24, 103, 12, '', { maxLength: 50, onChange: (v) => { this.menu.name = v; this.menu.slotChanged(0); } }));
+  }
+  renderBg(gui) {
+    super.renderBg(gui);
+    gui.sprite('anvil_arrow', this.left + 99, this.top + 45);
+    const r = this.menu.info;
+    if (this.menu.inv.get(0) && !this.menu.inv.get(2) && (this.menu.inv.get(1) || r)) gui.sprite('anvil_error', this.left + 99, this.top + 45);
+  }
+  renderLabels(gui) {
+    gui.text('Repair & Name', this.left + 60, this.top + 6, '#404040', false);
+    gui.text('Inventory', this.left + 8, this.top + 73, '#404040', false);
+    const r = this.menu.info;
+    if (r && r.cost > 0) {
+      const p = this.game.player;
+      const tooExp = r.tooExpensive && !p.creative;
+      const txt = tooExp ? 'Too Expensive!' : `Enchantment Cost: ${r.cost}`;
+      const ok = !tooExp && (p.creative || p.xpLevel >= r.cost);
+      const x = this.left + 168 - gui.textWidth(txt) - 2;
+      gui.fill(x - 2, this.top + 67, gui.textWidth(txt) + 4, 12, 'rgba(79,79,79,1)');
+      gui.text(txt, x, this.top + 69, ok ? '#80ff20' : '#ff6060', true);
+    }
+  }
+  render(gui, mx, my) {
+    super.render(gui, mx, my);
+    const left = this.menu.inv.get(0);
+    if (left && !this.nameField.focused && this.nameField.value === '') { this.nameField.value = left.tag?.name ?? left.item.display; this.nameField.cursor = this.nameField.value.length; }
+    if (!left && this.nameField.value) this.nameField.value = '';
+    this.nameField.render(gui, mx, my);
+  }
+  mouseDown(mx, my, b, shift) {
+    if (this.nameField.mouseDown(mx, my, b)) return true;
+    return super.mouseDown(mx, my, b, shift);
+  }
+  keyDown(e) {
+    if (this.nameField.focused) {
+      if (e.code === 'Escape') { this.onClose(); return true; }
+      if (this.nameField.keyDown(e)) return true;
+    }
+    return super.keyDown(e);
+  }
+}

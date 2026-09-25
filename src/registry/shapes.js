@@ -183,6 +183,21 @@ export function getRenderBoxes(def, meta, nb) {
     }
     case 'lily_pad': return [{ f: [0, 0.25, 0, 16, 0.25, 16], faces: 0b001100, tint: true }];
     case 'crop': return [];
+    case 'enchanting_table': return [{ f: [0, 0, 0, 16, 12, 16] }];
+    case 'soul_sand': return [{ f: [0, 0, 0, 16, 16, 16] }];
+    case 'anvil': return anvilBoxes(meta & 3).map((f) => ({ f }));
+    case 'lantern': {
+      const hanging = (meta & 1) !== 0;
+      const y0 = hanging ? 1 : 0;
+      const side = [0, 2, 6, 9], topUV = [0, 9, 6, 15], cap = [1, 0, 5, 2], handle = [11, 1, 14, 5];
+      const tex = def.faces[0];
+      return [
+        { f: [5, y0, 5, 11, y0 + 7, 11], tex, uv: { 0: side, 1: side, 4: side, 5: side, 2: topUV, 3: topUV } },
+        { f: [6, y0 + 7, 6, 10, y0 + 9, 10], tex, uv: { 0: cap, 1: cap, 4: cap, 5: cap, 2: topUV, 3: topUV } },
+        { f: [6.5, y0 + 9, 8, 9.5, y0 + (hanging ? 15 : 11), 8], tex, uv: { 4: handle, 5: handle }, faces: 0b110000, noCull: true },
+      ];
+    }
+    case 'portal': return (meta & 1) === 0 ? [{ f: [0, 0, 6, 16, 16, 10], faces: 0b110000 }] : [{ f: [6, 0, 0, 10, 16, 16], faces: 0b000011 }];
     default: return [{ f: [0, 0, 0, 16, 16, 16] }];
   }
 }
@@ -217,14 +232,26 @@ export function getCollisionBoxes(def, meta, nb) {
     case 'ladder': return [boxPx(ladderBox(meta, 3))];
     case 'bed': return [boxPx([0, 0, 0, 16, 9, 16])];
     case 'lily_pad': return [boxPx([1, 0, 1, 15, 1.5, 15])];
-    case 'torch': case 'crop': return [];
+    case 'torch': case 'crop': case 'portal': return [];
+    case 'enchanting_table': return [boxPx([0, 0, 0, 16, 12, 16])];
+    case 'soul_sand': return [boxPx([0, 0, 0, 16, 14, 16])];
+    case 'anvil': return anvilBoxes(meta & 3).map(boxPx);
+    case 'lantern': { const y0 = (meta & 1) ? 1 : 0; return [boxPx([5, y0, 5, 11, y0 + 9, 11])]; }
     default: return [FULL];
   }
 }
 
+// vanilla anvil model (facing north = long axis along X)
+function anvilBoxes(facing) {
+  const alongX = facing === 0 || facing === 1;
+  const b = [[2, 0, 2, 14, 4, 14], [4, 4, 3, 12, 5, 13], [6, 5, 4, 10, 10, 12], [3, 10, 0, 13, 16, 16]];
+  // boxes above are for the long axis along Z; rotate for X
+  return b.map((f) => (alongX ? [f[2], f[1], f[0], f[5], f[4], f[3]] : f));
+}
+
 // Selection (outline / ray-hit) boxes in block units.
 export function getSelectionBoxes(def, meta, nb) {
-  if (def.render === 'air' || def.liquid) return [];
+  if (def.render === 'air' || def.liquid || def.portal) return [];
   if (def.render === 'cube') return [FULL];
   if (def.render === 'cross') {
     if (def.flower) return [boxPx([5, 0, 5, 11, 10, 11])];

@@ -8,6 +8,9 @@
 //   sound.play('random.pop', { x, y, z, pitch: 1.5 });
 //   sound.playBlock('break', 'stone', x, y, z);
 //   sound.startMusic('game'); sound.update(dt, { underground });    // every frame
+//   const rain = sound.play('weather.rain', { loop: true });        // loops: weather.rain, ambient.nether.*
+//   rain.setVolume(exposure); rain.stop();
+//   sound.update(dt, { dimension: 'nether' }); sound.startMusic('nether');
 import { getSoundDef, listSounds, synthesize, CATEGORIES } from './sfx.js';
 import { composePiece, MusicPlayer, PIANO_RATE, MUSIC_WET, pianoSamples, renderReverbIR, provideReverbIR, hasReverbIR, getReverbIR } from './music.js';
 
@@ -34,10 +37,25 @@ export const BLOCK_SOUND_GROUPS = {
   glass: G('dig.glass', 'step.stone', 'hit.stone', 'dig.stone'),
   ladder: G('dig.wood', 'step.ladder', 'hit.ladder'),
   crop: G('dig.crop', 'step.grass', 'hit.grass'),
+  netherrack: G('dig.netherrack', 'step.netherrack', 'hit.netherrack'),
+  nether_bricks: G('dig.nether_bricks', 'step.nether_bricks', 'hit.nether_bricks'),
+  soul_sand: G('dig.soul_sand', 'step.soul_sand', 'hit.soul_sand'),
+  soul_soil: G('dig.soul_soil', 'step.soul_soil', 'hit.soul_soil'),
+  nylium: G('dig.nylium', 'step.nylium', 'hit.nylium'),
+  stem: G('dig.stem', 'step.stem', 'hit.stem'),
+  wart_block: G('dig.wart_block', 'step.wart_block', 'hit.wart_block'),
+  shroomlight: G('dig.shroomlight', 'step.shroomlight', 'hit.shroomlight'),
+  fungus: G('dig.fungus', 'step.fungus', 'hit.fungus'),
+  roots: G('dig.roots', 'step.roots', 'hit.roots'),
+  nether_wart: G('dig.nether_wart', 'step.nether_wart', 'hit.nether_wart'),
+  basalt: G('dig.basalt', 'step.basalt', 'hit.basalt'),
+  ancient_debris: G('dig.ancient_debris', 'step.ancient_debris', 'hit.ancient_debris'),
 };
+export const MUSIC_KINDS = ['game', 'menu', 'nether'];
 
+const OVERWORLD_GROUPS = ['stone', 'wood', 'gravel', 'grass', 'sand', 'wool', 'snow', 'metal', 'deepslate', 'glass', 'ladder', 'crop'];
 const PREWARM = [
-  ...Object.keys(BLOCK_SOUND_GROUPS).flatMap((g) => [BLOCK_SOUND_GROUPS[g].step, BLOCK_SOUND_GROUPS[g].dig]),
+  ...OVERWORLD_GROUPS.flatMap((g) => [BLOCK_SOUND_GROUPS[g].step, BLOCK_SOUND_GROUPS[g].dig]),
   'random.pop', 'random.click', 'random.orb', 'damage.hit', 'random.eat', 'player.attack.weak', 'player.attack.strong',
 ];
 
@@ -154,6 +172,7 @@ export class SoundManager {
     this._music = { want: null, kind: null, state: 'off', player: null, nextAt: 0, fading: [], next: null, opts: null };
     this._mood = 0;
     this._moodPeriod = 60 + Math.random() * 80;
+    this._netherTimer = 4 + Math.random() * 8;
     this._prewarmed = false;
   }
 
@@ -253,7 +272,10 @@ export class SoundManager {
         const buf = toBuffer(this.ctx, res.data, res.rate);
         this._buffers.set(key, buf);
         const t = this.ctx.currentTime;
-        for (const q of queued) if (!q.handle.cancelled && t - q.t < QUEUE_MAX_AGE) this._start(buf, q.def, q.opts, q.handle);
+        for (const q of queued) {
+          if (q.handle.cancelled) continue;
+          if (q.opts.loop || t - q.t < QUEUE_MAX_AGE) this._start(buf, q.def, q.opts, q.handle);
+        }
       },
     }, urgent);
   }
@@ -331,7 +353,12 @@ export class SoundManager {
       const base = def.alias || name;
       const variant = this._pickVariant(base, def.variants);
       const buf = this._buffers.get(base + '#' + variant);
-      const handle = { cancelled: false, voice: null, stop() { this.cancelled = true; if (this.voice) this.voice.kill(0.02); } };
+      const handle = {
+        cancelled: false, voice: null, volume: Math.max(0, opts.volume ?? 1),
+        stop() { this.cancelled = true; if (this.voice) this.voice.kill(0.02); },
+        // change loudness while playing (0..1, same meaning as play()'s volume; smoothed)
+        setVolume(v) { this.volume = Math.max(0, Number(v) || 0); if (this.voice) this.voice.setVolume(this.volume); },
+      };
       if (buf) { this._start(buf, def, opts, handle); return handle; }
       if (this._isOutOfRange(opts)) return null;
       const key = base + '#' + variant;
@@ -358,18 +385,25 @@ export class SoundManager {
     const ctx = this.ctx, t = ctx.currentTime;
     if (this._isOutOfRange(opts)) return;
     const vol = Math.max(0, opts.volume ?? 1);
+    const hv = handle ? handle.volume : vol;
     let rate = (opts.pitch ?? 1) * (def.pitch || 1);
     if (def.pitchVar) rate *= 1 + (Math.random() * 2 - 1) * def.pitchVar;
-    // voice limit: steal the oldest
+    // voice limit: steal the oldest one-shot (looping beds are only stolen as a last resort)
     this._voices = this._voices.filter((v) => !v.done);
-    while (this._voices.length >= MAX_VOICES) this._voices.shift().kill(0.015);
+    while (this._voices.length >= MAX_VOICES) {
+      let k = this._voices.findIndex((v) => !v.loop);
+      if (k < 0) k = 0;
+      this._voices.splice(k, 1)[0].kill(0.015);
+    }
+    const looping = !!(opts.loop && def.loop);
 
     const src = ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = clamp(rate, 0.1, 4);
-    if (opts.loop && def.loop) src.loop = true;
+    if (looping) src.loop = true;
     const g = ctx.createGain();
-    g.gain.value = Math.min(1, vol) * def.vol * (opts.gain ?? 1);
+    const baseGain = def.vol * (opts.gain ?? 1);
+    g.gain.value = Math.min(1, hv) * baseGain;
     src.connect(g);
     let tail = g, panner = null;
     if (opts.x !== undefined && opts.y !== undefined && opts.z !== undefined) {
@@ -385,7 +419,11 @@ export class SoundManager {
     }
     tail.connect(this._bus[def.cat] || this._bus.master);
     const voice = {
-      src, g, panner, done: false,
+      src, g, panner, done: false, loop: looping,
+      setVolume(v) {
+        if (this.done) return;
+        try { g.gain.setTargetAtTime(Math.min(1, v) * baseGain, ctx.currentTime, 0.05); } catch (_) { /* ignore */ }
+      },
       kill(fade) {
         if (this.done) return;
         this.done = true;
@@ -421,7 +459,7 @@ export class SoundManager {
   // ---------------------------------------------------------------- music ----
   // opts.delay (s) overrides the initial wait (handy for testing).
   startMusic(kind = 'game', opts = {}) {
-    if (kind !== 'menu') kind = 'game';
+    if (!MUSIC_KINDS.includes(kind)) kind = 'game';
     this._music.want = kind;
     this._music.opts = opts;
     if (this.ready) this._beginMusic(kind, opts);
@@ -444,7 +482,7 @@ export class SoundManager {
     M.kind = kind;
     M.state = 'waiting';
     const t = this.ctx.currentTime;
-    const delay = opts.delay ?? (kind === 'menu' ? (hadPlayer ? 2.2 : 1.0) : 20 + Math.random() * 40);
+    const delay = opts.delay ?? (kind === 'menu' ? (hadPlayer ? 2.2 : 1.0) : kind === 'nether' ? 10 + Math.random() * 20 : 20 + Math.random() * 40);
     M.nextAt = t + delay;
     M.next = null;
   }
@@ -501,7 +539,7 @@ export class SoundManager {
         M.player.dispose();
         M.player = null;
         M.state = 'waiting';
-        M.nextAt = t + (M.kind === 'menu' ? 4 + Math.random() * 8 : 180 + Math.random() * 300);
+        M.nextAt = t + (M.kind === 'menu' ? 4 + Math.random() * 8 : M.kind === 'nether' ? 120 + Math.random() * 180 : 180 + Math.random() * 300);
       }
     }
   }
@@ -526,8 +564,23 @@ export class SoundManager {
     }
   }
 
+  // context.dimension: 'overworld' (default) | 'nether' | 'end'. Cave mood only runs in the
+  // overworld; in the nether, ambient.nether.additions one-shots play every ~6-20 s
+  // (disable with context.netherAdditions === false). Biome loops are played by the caller.
   _updateAmbience(dt, c) {
-    if (c && c.underground) {
+    const dim = (c && c.dimension) || 'overworld';
+    if (dim === 'nether') {
+      this._mood = 0;
+      if (c.netherAdditions === false) return;
+      this._netherTimer -= Math.min(dt, 0.25);
+      if (this._netherTimer <= 0) {
+        this._netherTimer = 6 + Math.random() * 14;
+        const L = this._listener, a = Math.random() * Math.PI * 2, d = 4 + Math.random() * 8;
+        this.play('ambient.nether.additions', { x: L.x + Math.cos(a) * d, y: L.y + (Math.random() * 6 - 3), z: L.z + Math.sin(a) * d, volume: 0.7, pitch: 0.8 + Math.random() * 0.4 });
+      }
+      return;
+    }
+    if (dim === 'overworld' && c && c.underground) {
       this._mood += Math.min(dt, 0.25) / this._moodPeriod;
       if (this._mood >= 1) {
         this._mood = 0;

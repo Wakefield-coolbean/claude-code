@@ -17,6 +17,8 @@
   button:hover { background: var(--btn-hi); }
   button.alias { opacity: .75; font-style: italic; }
   button.primary { background: #3d5a2c; }
+  button.loop { font-weight: 700; }
+  button.on { background: #6a4a1f; }
   label { color: var(--dim); display: inline-flex; gap: 6px; align-items: center; }
   input[type=range] { width: 110px; }
   #status { color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -38,6 +40,7 @@
       <button data-music="menu">Menu music</button>
       <button data-music="game">Game music (starts now)</button>
       <button data-music="game-wait">Game music (normal 20–60 s wait)</button>
+      <button data-music="nether">Nether music (starts now)</button>
       <button data-music="stop">Stop music (2 s fade)</button>
       <span id="music"></span>
     </div>
@@ -51,6 +54,8 @@
       <label>angle <input id="ang" type="range" min="-180" max="180" step="5" value="90"><span id="angv">90°</span></label>
       <label>distance <input id="dist" type="range" min="0" max="24" step="0.5" value="4"><span id="distv">4</span></label>
       <label><input id="under" type="checkbox"> underground (cave ambience ~every 45–145 s)</label>
+      <label>dimension <select id="dim"><option>overworld</option><option>nether</option><option>end</option></select></label>
+      <span style="color:var(--dim)">looping sounds (bold) toggle on/off; the volume slider drives their handle.setVolume()</span>
     </div>
   </section>
   <section>
@@ -88,10 +93,14 @@ const opts = () => {
   return o;
 };
 for (const id of ['vol', 'pitch', 'ang', 'dist']) {
-  $(id).oninput = () => { $(id + 'v').textContent = id === 'ang' ? $(id).value + '°' : (+$(id).value).toFixed(id === 'dist' ? 1 : 2); };
+  $(id).oninput = () => {
+    $(id + 'v').textContent = id === 'ang' ? $(id).value + '°' : (+$(id).value).toFixed(id === 'dist' ? 1 : 2);
+    if (id === 'vol') for (const h of loops.values()) h.setVolume(+$('vol').value);
+  };
 }
 
 // sound buttons, grouped by prefix
+const loops = new Map(); // name -> handle
 const groups = new Map();
 for (const s of listSounds()) {
   const parts = s.name.split('.');
@@ -108,7 +117,15 @@ for (const [g, list] of groups) {
     b.textContent = s.name + (s.variants > 1 ? ` (${s.variants})` : '');
     b.title = `${s.cat}${s.alias ? ' — alias of ' + s.alias : ''}`;
     if (s.alias) b.classList.add('alias');
-    b.onclick = () => { unlock(); sound.play(s.name, opts()); };
+    if (s.loop) {
+      b.classList.add('loop');
+      b.onclick = () => {
+        unlock();
+        const h = loops.get(s.name);
+        if (h) { h.stop(); loops.delete(s.name); b.classList.remove('on'); }
+        else { const nh = sound.play(s.name, { ...opts(), loop: true }); if (nh) { loops.set(s.name, nh); b.classList.add('on'); } }
+      };
+    } else b.onclick = () => { unlock(); sound.play(s.name, opts()); };
     sec.appendChild(b);
   }
   host.appendChild(sec);
@@ -149,6 +166,7 @@ document.querySelectorAll('[data-music]').forEach((b) => {
     if (m === 'stop') sound.stopMusic();
     else if (m === 'menu') sound.startMusic('menu');
     else if (m === 'game') { sound.stopMusic(); sound.startMusic('game', { delay: 0.5 }); }
+    else if (m === 'nether') { sound.stopMusic(); sound.startMusic('nether', { delay: 0.5 }); }
     else { sound.stopMusic(); sound.startMusic('game'); }
   };
 });
@@ -159,7 +177,7 @@ function frame(t) {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   if (!nocontrols) {
     sound.setListener(0, 0, 0, 0, 0);
-    sound.update(dt, { underground: $('under').checked, time: 6000 });
+    sound.update(dt, { underground: $('under').checked, time: 6000, dimension: $('dim').value });
     if (sound.ctx) {
       $('status').textContent = `${sound.ctx.state} · ${sound.ctx.sampleRate} Hz · voices ${sound.activeVoices} · buffers ${sound._buffers.size} · worker ${sound._backend.worker ? 'yes' : 'no'}`;
       const m = sound.musicState;

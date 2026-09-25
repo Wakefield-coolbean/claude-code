@@ -34,7 +34,7 @@ export function fractalSd(octaves, persistence = 0.5) {
 }
 
 // Fractal noise normalised to N(0,1) (raw) or ~uniform [-1,1] (uni)
-class NNoise {
+export class NNoise {
   constructor(seed, octaves, freq, persistence = 0.5) {
     this.f = new Fractal(seed, octaves, freq, { persistence });
     this.k = 1 / fractalSd(octaves, persistence);

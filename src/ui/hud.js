@@ -49,6 +49,7 @@ export class Hud {
     const settings = g.settings;
     if (g.hideGui) return;
     this.renderVignette(gui, p);
+    if (p.portalTime > 0) this.renderPortalOverlay(gui, p);
     if (p.fireTicks > 0 && !p.creative && !p.spectator && !g.thirdPerson) this.renderFireOverlay(gui);
     if (g.sleepFade > 0) gui.fill(0, 0, w, h, `rgba(0,0,0,${Math.min(1, g.sleepFade / 100) * 0.9})`);
     if (!p.spectator) {
@@ -99,6 +100,19 @@ export class Hud {
     g.addColorStop(1, `rgba(0,0,0,${dark})`);
     c.fillStyle = g;
     c.fillRect(0, 0, w, h);
+  }
+
+  renderPortalOverlay(gui, p) {
+    let f = Math.min(1, p.portalTime / 80);
+    if (f < 1) f = f * f * f * 0.8 + 0.2;
+    const img = this.game.icons.portalFrame(Math.floor(performance.now() / 50));
+    const c = gui.ctx;
+    c.save();
+    c.globalAlpha = f;
+    c.imageSmoothingEnabled = false;
+    if (img) c.drawImage(img, 0, 0, gui.width, gui.height);
+    else { c.fillStyle = 'rgba(120,40,200,0.6)'; c.fillRect(0, 0, gui.width, gui.height); }
+    c.restore();
   }
 
   renderFireOverlay(gui) {

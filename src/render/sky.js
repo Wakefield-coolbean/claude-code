@@ -229,7 +229,7 @@ export class SkyRenderer {
     gl.bindVertexArray(this.fsVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    if (env.underwater || env.inLava) { gl.bindVertexArray(null); return; }
+    if (env.underwater || env.inLava || env.noSky) { gl.bindVertexArray(null); return; }
     // celestial bodies: rotate with the celestial angle around the Z axis (sun rises in the east)
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);

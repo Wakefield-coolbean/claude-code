@@ -157,6 +157,18 @@ reg('map', { stack: 64, tex: 'map' });
 reg('ender_eye');
 reg('totem_of_undying', { stack: 1, rarity: 'uncommon' });
 
+reg('enchanted_book', { stack: 1, glint: true, rarity: 'uncommon' });
+
+reg('quartz', { display: 'Nether Quartz' });
+reg('nether_wart', { places: 'nether_wart' });
+reg('blaze_rod', { fuel: 2400 });
+reg('blaze_powder');
+reg('ghast_tear');
+reg('magma_cream');
+reg('netherite_scrap');
+reg('nether_brick');
+reg('fire_charge', { use: 'ignite_charge' });
+
 export const ITEM_COUNT = nextId;
 
 export function getItem(idOrName) {

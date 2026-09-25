@@ -7,7 +7,7 @@ import { wrapAngle } from '../util/math.js';
 export const DamageTypes = {
   generic: { armor: true }, player: { armor: true, melee: true }, mob: { armor: true, melee: true },
   arrow: { armor: true, projectile: true }, fall: { armor: false }, lava: { armor: true, fire: true },
-  fire: { armor: false, fire: true }, in_fire: { armor: true, fire: true }, drown: { armor: false }, starve: { armor: false },
+  fire: { armor: false, fire: true }, in_fire: { armor: true, fire: true }, hot_floor: { armor: false, fire: true }, drown: { armor: false }, starve: { armor: false },
   void: { armor: false, bypassInvul: true }, cactus: { armor: true }, explosion: { armor: true, explosion: true },
   magic: { armor: false }, wither: { armor: false }, suffocate: { armor: false }, kill: { armor: false, bypassInvul: true },
   thorns: { armor: true }, lightning: { armor: true, fire: true }, sweet_berry: { armor: true }, freeze: { armor: false },
@@ -306,8 +306,20 @@ export class LivingEntity extends Entity {
         }
   }
 
+  // magma blocks burn anything standing on them that isn't sneaking or fire-immune
+  checkHotFloor() {
+    if (!this.onGround || this.sneaking || this.dead || this.isInvulnerableTo({ type: 'fire' })) return;
+    const v = this.world.getBlock(Math.floor(this.x), Math.floor(this.y - 0.2), Math.floor(this.z));
+    if (BlockById[v & ID_MASK].hotFloor && !this.hasEffect('fire_resistance')) {
+      const boots = this.equipment?.feet;
+      if (boots?.enchantLevel?.('frost_walker') > 0) return;
+      this.hurt({ type: 'hot_floor' }, 1);
+    }
+  }
+
   aiStep() {
     if (this.noJumpDelay > 0) this.noJumpDelay--;
+    this.checkHotFloor();
     // tiny velocities snap to zero
     if (Math.abs(this.vx) < 0.003) this.vx = 0;
     if (Math.abs(this.vy) < 0.003) this.vy = 0;
@@ -373,6 +385,16 @@ export class LivingEntity extends Entity {
     return !!def.climbable;
   }
 
+  // soul sand etc: block at the feet, else the block just below (Entity.getBlockSpeedFactor)
+  blockSpeedFactor() {
+    if (this.flying) return 1;
+    const w = this.world, x = Math.floor(this.x), z = Math.floor(this.z);
+    const at = BlockById[w.getBlock(x, Math.floor(this.y), z) & ID_MASK];
+    if (at.liquid) return 1;
+    if (at.speedFactor) return at.speedFactor;
+    return BlockById[w.getBlock(x, Math.floor(this.y - 0.5000001), z) & ID_MASK].speedFactor ?? 1;
+  }
+
   blockFriction() {
     const v = this.world.getBlock(Math.floor(this.x), Math.floor(this.y - 0.5000001), Math.floor(this.z));
     const def = BlockById[v & ID_MASK];
@@ -414,6 +436,8 @@ export class LivingEntity extends Entity {
         if (this.vy < 0 && this.sneaking && this.isPlayer) this.vy = 0;
       }
       this.move(this.vx, this.vy, this.vz);
+      const sf = this.blockSpeedFactor();
+      if (sf !== 1) { this.vx *= sf; this.vz *= sf; }
       if ((this.horizontalCollision || this.jumping) && climbing) this.vy = 0.2;
       let vy = this.vy;
       const lev = this.effectAmp('levitation');

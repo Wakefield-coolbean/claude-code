@@ -6,6 +6,7 @@ import { getCollisionBoxes } from '../registry/shapes.js';
 import { raycastBlocks, rayBox, FACE_OFFSETS } from './raycast.js';
 import { ItemStack, OFFHAND, ARMOR_SLOT_INDEX } from './inventory.js';
 import { SB_ALL } from '../world/world.js';
+import { tryLightPortal } from './portal.js';
 
 const idOf = (v) => v & ID_MASK;
 
@@ -362,17 +363,28 @@ export class Interaction {
       p.swing();
       return 'consume';
     }
-    if (it.use === 'ignite') {
+    if (it.use === 'ignite' || it.use === 'ignite_charge') {
+      const charge = it.use === 'ignite_charge';
       if (def.id === B.tnt) {
         w.setBlock(hit.x, hit.y, hit.z, 0);
         this.game.primeTnt(hit.x, hit.y, hit.z, p);
       } else {
         const [ox, oy, oz] = FACE_OFFSETS[hit.face];
         const tx = hit.x + ox, ty = hit.y + oy, tz = hit.z + oz;
-        if (w.getBlock(tx, ty, tz) === 0) { w.setBlock(tx, ty, tz, packBlock(B.fire, 0)); w.scheduleTick(tx, ty, tz, 30); }
+        if (w.getBlock(tx, ty, tz) === 0) {
+          const portal = tryLightPortal(w, tx, ty, tz);
+          if (portal) this.game.registerPortalNear(w.dimension, portal.x0, portal.y0, portal.z0);
+          else {
+            const under = w.getBlock(tx, ty - 1, tz) & ID_MASK;
+            const soul = under === B.soul_sand || under === B.soul_soil;
+            w.setBlock(tx, ty, tz, packBlock(soul ? B.soul_fire : B.fire, 0));
+            if (!soul) w.scheduleTick(tx, ty, tz, 30);
+          }
+        } else return 'pass';
       }
-      this.game.sound.play('fire.ignite', { x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5, pitch: 0.8 + Math.random() * 0.4 });
-      this.damageHeld(hand, 1);
+      if (charge) this.game.sound.play('item.firecharge.use', { x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5, pitch: (Math.random() - Math.random()) * 0.2 + 1 });
+      else this.game.sound.play('fire.ignite', { x: hit.x + 0.5, y: hit.y + 0.5, z: hit.z + 0.5, pitch: 0.8 + Math.random() * 0.4 });
+      if (charge) { if (!p.creative) this.consumeOne(hand); } else this.damageHeld(hand, 1);
       p.swing();
       return 'consume';
     }
@@ -492,6 +504,14 @@ export class Interaction {
         break;
       }
       case 'trapdoor': meta = this.facingFromLook() | ((face === 2 || (face !== 3 && fracY > 0.5)) ? 8 : 0); break;
+      case 'lantern': {
+        // hang from the ceiling when clicking a block's underside; otherwise stand, falling back to the other mode
+        const logic = this.game.blockLogic;
+        const first = face === 2 ? 2 : 0;
+        meta = first;
+        if (logic && !logic.canSurvive(x, y, z, packBlock(def.id, first), def) && logic.canSurvive(x, y, z, packBlock(def.id, first ^ 2), def)) meta = first ^ 2;
+        break;
+      }
       default: break;
     }
     const value = packBlock(def.id, meta);
@@ -582,6 +602,14 @@ export class Interaction {
       if (!BlockById[idOf(tv)].replaceable) { const o = FACE_OFFSETS[hit.face]; x += o[0]; y += o[1]; z += o[2]; }
       const cur = BlockById[idOf(w.getBlock(x, y, z))];
       if (!cur.replaceable && !cur.liquid) return false;
+      if (it.fills === 'water' && w.ultrawarm) {
+        // water evaporates in the Nether
+        this.game.sound.play('block.fire.extinguish', { x: x + 0.5, y: y + 0.5, z: z + 0.5, volume: 0.5, pitch: 2.6 + (Math.random() - Math.random()) * 0.8 });
+        for (let i = 0; i < 8; i++) this.game.fx.smokeAt(x + Math.random(), y + Math.random(), z + Math.random(), true);
+        if (!p.creative) this.replaceHeld(hand, ItemStack.of('bucket'));
+        p.swing();
+        return true;
+      }
       if (cur.render === 'cross' || cur.name === 'snow') this.game.dropBlockItems(x, y, z, w.getBlock(x, y, z), null);
       w.setBlock(x, y, z, packBlock(it.fills === 'water' ? B.water : B.lava, 0));
       this.game.sound.play('item.bucket.empty', { x: x + 0.5, y: y + 0.5, z: z + 0.5 });

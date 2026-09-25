@@ -87,8 +87,9 @@ export class LightEngine {
     const inc = this.inc;
 
     // vertical sky pass
+    const skyTop = this.world.hasSky === false ? 0 : 15;
     for (let lz = 0; lz < 16; lz++) for (let lx = 0; lx < 16; lx++) {
-      let level = 15;
+      let level = skyTop;
       let h = MIN_Y - 1;
       for (let y = topY; y >= MIN_Y; y--) {
         const f = LIGHT_FILTER[c.getLocal(lx, y, lz) & ID_MASK];
@@ -272,7 +273,7 @@ export class LightEngine {
     else if (fNew === 0 && y === c.heightmap[hIdx]) this.updateHeight(c, lx, lz);
 
     // make sure a light section exists here (placing torch in an empty high section)
-    for (const sky of [true, false]) {
+    for (const sky of this.world.hasSky === false ? [false] : [true, false]) {
       const cur = this.getLevel(c, x, y, z, sky);
       const emit = sky ? 0 : LIGHT_EMIT[newId];
       // remove old light at this cell

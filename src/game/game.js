@@ -15,7 +15,7 @@ import { IconCache } from '../render/icons.js';
 import { Gui, imageToCanvas } from '../ui/gui.js';
 import { Hud } from '../ui/hud.js';
 import { TitleScreen, PauseScreen, DeathScreen, LoadingScreen, ChatScreen, SleepScreen } from '../ui/screens.js';
-import { InventoryScreen, CreativeScreen, CraftingScreen, FurnaceScreen, ChestScreen, fuelOf } from '../ui/containers.js';
+import { InventoryScreen, CreativeScreen, CraftingScreen, FurnaceScreen, ChestScreen, EnchantmentScreen, AnvilScreen, fuelOf } from '../ui/containers.js';
 import { Input } from '../input/input.js';
 import { Player } from '../entity/player.js';
 import { EntityManager } from '../entity/manager.js';
@@ -25,6 +25,8 @@ import { ItemStack, Inventory } from './inventory.js';
 import { Interaction } from './interaction.js';
 import { BlockLogic } from './blocklogic.js';
 import { Commands } from './commands.js';
+import { findNearbyPortal, createPortal } from './portal.js';
+import '../entity/nethermobs.js';
 import { stringSeed, hash4 } from '../util/rng.js';
 import { clamp, mat4 } from '../util/math.js';
 import { generateBlockTextures } from '../textures/blockTextures.js';
@@ -94,7 +96,8 @@ export class Game {
     progress('Starting renderer', 0.6);
     await nextFrame();
     this.renderer = new Renderer(this.canvas, (gl) => new BlockTextureArray(gl, blockTex), envTex);
-    this.objects = new ObjectRenderer(this.renderer, { itemTextures: itemTex, entityTextures: entityTex, particleTextures: particleTex });
+    const weatherTex = new Map([['rain', envTex.get('rain')], ['snow', envTex.get('snow')]].filter(([, v]) => v));
+    this.objects = new ObjectRenderer(this.renderer, { itemTextures: itemTex, entityTextures: entityTex, particleTextures: particleTex, weatherTextures: weatherTex });
     this.objects.game = this;
     this.renderer.extraRenderers.push(this.objects);
     this.fx = new Effects(this);
@@ -200,52 +203,105 @@ export class Game {
   startWorld(meta, isNew) {
     this.stopPanorama();
     this.worldMeta = meta;
-    const gen = new GeneratorPool(meta.seed, { type: meta.type });
-    this.genPool = gen;
-    const world = new World({ seed: meta.seed, name: meta.name, type: meta.type, generator: gen, storage: this.storage, id: meta.id });
+    meta.portals = meta.portals ?? { overworld: [], nether: [] };
+    this.stats = meta.stats ?? {};
+    this.hud = new Hud(this);
+    this.interaction = new Interaction(this);
+    this.thirdPerson = 0;
+    const player = new Player(null);
+    this.player = player;
+    const restore = !!meta.player && !isNew;
+    if (restore) player.deserialize(meta.player);
+    else { player.setGamemode(meta.gamemode ?? 'survival'); player.yaw = Math.PI; }
+    this.worldTime = { time: meta.time ?? 0, dayTime: meta.dayTime ?? 1000, raining: !!meta.raining, thundering: !!meta.thundering, weatherTimer: meta.weatherTimer };
+    const dim = restore ? meta.dimension ?? 'overworld' : 'overworld';
+    this.sound.stopMusic();
+    this.enterDimension(dim, restore ? { kind: 'restore' } : { kind: 'spawn' }, isNew ? 'Generating world' : 'Loading world');
+  }
+
+  // Create the World object for a dimension of the current save.
+  makeDimensionWorld(dim) {
+    const meta = this.worldMeta;
+    const gen = new GeneratorPool(meta.seed, { type: meta.type, dimension: dim });
+    const id = dim === 'overworld' ? meta.id : `${meta.id}:${dim}`;
+    const world = new World({ seed: meta.seed, name: meta.name, type: meta.type, generator: gen, storage: this.storage, id });
+    world.dimension = dim;
+    world.ultrawarm = dim === 'nether';
+    world.hasSky = dim === 'overworld';
     world.game = this;
     world.behavior = this.blockLogic;
     world.difficulty = meta.hardcore ? 3 : meta.difficulty ?? 2;
     if (meta.gamerules) Object.assign(world.gamerules, meta.gamerules);
-    world.time = meta.time ?? 0;
-    world.dayTime = meta.dayTime ?? 1000;
-    world.raining = !!meta.raining; world.thundering = !!meta.thundering;
-    if (meta.weatherTimer) world.weatherTimer = meta.weatherTimer;
-    world.rain = world.raining ? 1 : 0; world.thunder = world.thundering ? 1 : 0;
+    const wt = this.worldTime;
+    world.time = wt.time; world.dayTime = wt.dayTime;
+    if (dim === 'overworld') {
+      world.raining = wt.raining; world.thundering = wt.thundering;
+      if (wt.weatherTimer) world.weatherTimer = wt.weatherTimer;
+      world.rain = world.raining ? 1 : 0; world.thunder = world.thundering ? 1 : 0;
+    } else { world.gamerules = { ...world.gamerules, doWeatherCycle: false }; }
     world.entityHooks = {
       onChunkLit: (c) => { this.entities.onChunkLit(c); this.scanSpawners(c); },
       onChunkLoaded: (c, data) => this.entities.loadChunkEntities(data.entities),
       collectChunkEntities: (c) => this.entities.collectChunkEntities(c),
-      onChunkUnload: (c) => { this.entities.onChunkUnload(c); for (const k of this.spawners.keys()) { const [x, , z] = k.split(',').map(Number); if ((x >> 4) === c.cx && (z >> 4) === c.cz) this.spawners.delete(k); } },
+      onChunkUnload: (c) => {
+        this.entities.onChunkUnload(c);
+        for (const map of [this.spawners, this.enchTables]) for (const k of map.keys()) { const [x, , z] = k.split(',').map(Number); if ((x >> 4) === c.cx && (z >> 4) === c.cz) map.delete(k); }
+      },
     };
     world.onChunkUnload = (c) => this.renderer.freeChunk(c);
+    if (meta.spawn && dim === 'overworld') world.spawn = meta.spawn;
+    return world;
+  }
+
+  // Leave the current dimension (saving it) and load another one. arrival: { kind: 'spawn'|'restore'|'portal'|'respawn', x, y, z }
+  async enterDimension(dim, arrival, text = 'Loading terrain') {
+    if (this.world) {
+      this.inGame = false;
+      const old = this.world;
+      this.worldTime = { time: old.time, dayTime: old.dayTime, raining: old.dimension === 'overworld' ? old.raining : this.worldTime.raining, thundering: old.dimension === 'overworld' ? old.thundering : this.worldTime.thundering, weatherTimer: old.weatherTimer };
+      if (this.rainSound) { this.rainSound.stop?.(); this.rainSound = null; }
+      this.stopAmbientLoop();
+      this.world = null;
+      await this.unloadWorld(old);
+    }
+    const world = this.makeDimensionWorld(dim);
     this.world = world;
+    this.genPool = world.generator;
+    this.dimension = dim;
     this.entities = new EntityManager(this);
     this.fx = new Effects(this);
-    const player = new Player(world);
-    this.player = player;
-    this.stats = meta.stats ?? {};
-    if (meta.spawn) world.spawn = meta.spawn;
-    else {
-      const sp = gen.getSpawnPoint();
-      world.spawn = { x: sp.x, y: sp.y, z: sp.z };
-      meta.spawn = world.spawn;
+    this.spawners = new Map();
+    this.enchTables = new Map();
+    const p = this.player;
+    p.world = world;
+    if (arrival.kind === 'spawn' || arrival.kind === 'respawn') {
+      if (!this.worldMeta.spawn) {
+        const sp = this.genPool.getSpawnPoint();
+        this.worldMeta.spawn = { x: sp.x, y: sp.y, z: sp.z };
+      }
+      world.spawn = this.worldMeta.spawn;
+      const pos = arrival.pos ?? { x: world.spawn.x + 0.5, y: world.spawn.y, z: world.spawn.z + 0.5 };
+      p.setPos(pos.x, pos.y, pos.z);
+    } else if (arrival.kind === 'portal') {
+      p.setPos(arrival.x + 0.5, arrival.y, arrival.z + 0.5);
     }
-    if (meta.player && !isNew) {
-      player.deserialize(meta.player);
-    } else {
-      player.setPos(world.spawn.x + 0.5, world.spawn.y, world.spawn.z + 0.5);
-      player.setGamemode(meta.gamemode ?? 'survival');
-      player.yaw = Math.PI; // face south like vanilla spawn
-    }
-    this.entities.add(player);
-    this.hud = new Hud(this);
-    this.interaction = new Interaction(this);
-    this.thirdPerson = 0;
+    p.vx = p.vy = p.vz = 0;
+    this.entities.add(p);
     this.inGame = false;
-    this.loading = { screen: new LoadingScreen(this, isNew ? 'Generating world' : 'Loading world'), started: performance.now() };
+    this.loading = { screen: new LoadingScreen(this, text), started: performance.now(), arrival };
     this.setScreen(this.loading.screen);
-    this.sound.stopMusic();
+  }
+
+  async unloadWorld(w) {
+    try {
+      await this.storage.saveWorldMeta(this.collectMeta(w));
+      for (const c of [...w.chunks.values()]) {
+        if ((c.modified || this.entities.collectChunkEntities(c).length) && c.state >= 2) await this.storage.saveChunk(w.id, c, this.entities.collectChunkEntities(c));
+        this.renderer.freeChunk(c);
+      }
+    } catch (e) { console.warn('saving dimension failed', e); }
+    w.generator.destroy();
+    w.chunks.clear();
   }
 
   // called every frame while the loading screen is up
@@ -270,30 +326,102 @@ export class Game {
 
   finishLoading() {
     const p = this.player, w = this.world;
-    // make sure the player isn't stuck inside terrain at spawn
-    if (!this.worldMeta.player) {
+    const arrival = this.loading.arrival ?? { kind: 'spawn' };
+    if (arrival.kind === 'portal') this.placeAtPortal(arrival);
+    else if (arrival.kind === 'respawn' && arrival.checkBed) { const pos = this.findRespawnPos(); p.setPos(pos.x, pos.y, pos.z); }
+    else if (arrival.kind !== 'restore') {
+      // make sure the player isn't stuck inside terrain at spawn
       let y = Math.floor(p.y);
       const x = Math.floor(p.x), z = Math.floor(p.z);
       for (let i = 0; i < 64 && (BlockById[w.getBlockId(x, y, z)].solid || BlockById[w.getBlockId(x, y + 1, z)].solid); i++) y++;
       p.setPos(p.x, y, p.z);
     }
+    const first = !this.inGameOnce;
+    this.inGameOnce = true;
     this.loading = null;
     this.inGame = true;
     this.setScreen(null);
-    this.hud.addChat(this.worldMeta.hardcore ? '§cHardcore mode: you only get one life!' : '');
-    this.hud.chat = this.hud.chat.filter((m) => m.text);
-    this.sound.startMusic('game');
+    if (first && this.worldMeta.hardcore) this.hud.addChat('§cHardcore mode: you only get one life!');
+    this.sound.startMusic(w.dimension === 'nether' ? 'nether' : 'game');
     this.saveGame();
   }
 
-  collectMeta() {
-    const m = this.worldMeta, w = this.world;
+  // ---------- nether portals ----------
+  checkPortal() {
+    const p = this.player, w = this.world;
+    const b = p.aabb();
+    let inPortal = false;
+    for (let x = Math.floor(b[0]); x <= Math.floor(b[3]) && !inPortal; x++)
+      for (let y = Math.floor(b[1]); y <= Math.floor(b[4]) && !inPortal; y++)
+        for (let z = Math.floor(b[2]); z <= Math.floor(b[5]) && !inPortal; z++)
+          if (w.getBlockId(x, y, z) === B.nether_portal) inPortal = true;
+    p.inPortal = inPortal;
+    if (inPortal && !p.dead) {
+      if (p.portalCooldown > 0) { p.portalCooldown = 10; return; }
+      if (p.portalTime === 0) this.sound.play('block.portal.trigger', { volume: 0.25, pitch: Math.random() * 0.4 + 0.8 });
+      p.portalTime++;
+      const wait = p.creative || p.spectator ? 1 : 80;
+      if (p.portalTime >= wait) {
+        p.portalTime = 0;
+        p.portalCooldown = 10;
+        this.travelThroughPortal();
+      }
+    } else {
+      if (p.portalCooldown > 0) p.portalCooldown--;
+      p.portalTime = Math.max(0, p.portalTime - 4);
+    }
+  }
+
+  travelThroughPortal() {
+    const p = this.player, from = this.world.dimension;
+    const to = from === 'nether' ? 'overworld' : 'nether';
+    const scale = to === 'nether' ? 1 / 8 : 8;
+    const tx = Math.floor(p.x * scale), tz = Math.floor(p.z * scale);
+    const ty = to === 'nether' ? Math.max(32, Math.min(120, Math.floor(p.y))) : Math.floor(p.y);
+    this.registerPortalNear(from, Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
+    // prefer a known portal close to the target
+    const list = this.worldMeta.portals[to] ?? [];
+    const radius = to === 'nether' ? 16 : 128;
+    let known = null, bd = Infinity;
+    for (const q of list) {
+      if (Math.abs(q.x - tx) > radius || Math.abs(q.z - tz) > radius) continue;
+      const d = (q.x - tx) ** 2 + (q.z - tz) ** 2;
+      if (d < bd) { bd = d; known = q; }
+    }
+    const arrival = known ? { kind: 'portal', x: known.x, y: known.y, z: known.z, known: true } : { kind: 'portal', x: tx, y: ty, z: tz, known: false };
+    this.enterDimension(to, arrival, to === 'nether' ? 'Entering the Nether' : 'Leaving the Nether');
+  }
+
+  registerPortalNear(dim, x, y, z) {
+    const list = this.worldMeta.portals[dim] = this.worldMeta.portals[dim] ?? [];
+    if (list.some((q) => Math.abs(q.x - x) < 4 && Math.abs(q.y - y) < 4 && Math.abs(q.z - z) < 4)) return;
+    list.push({ x, y, z });
+  }
+
+  placeAtPortal(arrival) {
+    const w = this.world, p = this.player;
+    const yMin = w.dimension === 'nether' ? 1 : MIN_Y + 1, yMax = w.dimension === 'nether' ? 122 : 300;
+    let portal = findNearbyPortal(w, arrival.x, arrival.y, arrival.z, arrival.known ? 16 : (w.dimension === 'nether' ? 16 : 32), yMin, yMax);
+    if (!portal) {
+      portal = createPortal(w, arrival.x, arrival.y, arrival.z, yMin, yMax);
+      this.registerPortalNear(w.dimension, portal.x, portal.y, portal.z);
+    }
+    p.setPos(portal.x + 0.5, portal.y, portal.z + 0.5);
+    p.fallDistance = 0;
+    p.portalCooldown = 10;
+    this.sound.play('block.portal.travel', { volume: 0.25, pitch: Math.random() * 0.4 + 0.8 });
+  }
+
+  collectMeta(w = this.world) {
+    const m = this.worldMeta;
     m.lastPlayed = Date.now();
     m.time = w.time; m.dayTime = w.dayTime;
-    m.raining = w.raining; m.thundering = w.thundering; m.weatherTimer = w.weatherTimer;
-    m.gamerules = { ...w.gamerules };
+    if (w.dimension === 'overworld') { m.raining = w.raining; m.thundering = w.thundering; m.weatherTimer = w.weatherTimer; m.spawn = w.spawn; }
+    const rules = { ...w.gamerules };
+    if (w.dimension !== 'overworld') delete rules.doWeatherCycle;
+    m.gamerules = { ...(m.gamerules ?? {}), ...rules };
     m.difficulty = w.difficulty;
-    m.spawn = w.spawn;
+    m.dimension = w.dimension;
     m.player = this.player.serialize();
     m.stats = this.stats;
     m.gamemode = this.player.gamemode;
@@ -312,13 +440,13 @@ export class Game {
 
   async quitToTitle() {
     this.setScreen(new LoadingScreen(this, 'Saving world'));
-    await this.saveGame();
-    for (const c of [...this.world.chunks.values()]) {
-      if (c.modified && c.state >= 2) await this.storage.saveChunk(this.world.id, c, this.entities.collectChunkEntities(c));
-      this.renderer.freeChunk(c);
-    }
-    this.genPool?.destroy();
-    this.world = null; this.player = null; this.inGame = false;
+    this.inGame = false;
+    if (this.rainSound) { this.rainSound.stop?.(); this.rainSound = null; }
+    this.stopAmbientLoop();
+    const w = this.world;
+    this.world = null;
+    if (w) await this.unloadWorld(w);
+    this.player = null; this.inGameOnce = false;
     this.entities = new EntityManager(this);
     this.sound.stopMusic();
     this.setScreen(new TitleScreen(this));
@@ -444,6 +572,7 @@ export class Game {
   tick() {
     this.tickCount++;
     const w = this.world, p = this.player;
+    if (!w) return; // switching dimensions
     const inp = this.input;
     const b = inp.bindings;
     const active = !this.screen || (this.screen && !this.screen.pausesGame && this.screen instanceof SleepScreen === false && false);
@@ -466,12 +595,15 @@ export class Game {
     w.randomTicks(p.x, p.z, Math.min(8, this.settings.renderDistance));
     this.tickBlockEntities();
     this.tickSpawners();
+    this.tickEnchantBooks();
     this.entities.tick();
     this.fx.tick();
     if (this.settings.particles !== 'minimal') this.fx.animateTick(p.x, p.y, p.z);
     this.hud.tick();
     this.tickSleep();
     this.tickAmbient();
+    if (this.world.dimension === 'overworld') this.tickWeather(); else this.tickNetherAmbience();
+    if (this.world) this.checkPortal();
     // eye height smoothing & fov
     this.oEyeHeight = this.eyeHeight;
     this.eyeHeight += (p.eyeHeight - this.eyeHeight) * 0.5;
@@ -504,6 +636,58 @@ export class Game {
     if (h.mainHeight < 0.1) h.lastMain = main;
     if (h.offHeight < 0.1) h.lastOff = off;
     h.main = 1 - h.mainHeight; h.off = 1 - h.offHeight;
+  }
+
+  tickWeather() {
+    const w = this.world, p = this.player;
+    // rain loop volume follows how exposed the player is
+    const exposed = w.rain > 0.2 && w.canSeeSky(Math.floor(p.x), Math.floor(p.y + p.eyeHeight), Math.floor(p.z)) ? 1 : 0.25;
+    const biome = w.getBiomeDef(Math.floor(p.x), Math.floor(p.z));
+    const raining = w.rain > 0.2 && biome.downfall > 0 && !biome.snowy;
+    if (raining && !this.rainSound) this.rainSound = this.sound.play('weather.rain', { volume: 0.4, loop: true });
+    if ((!raining || !this.inGame) && this.rainSound) { this.rainSound.stop?.(); this.rainSound = null; }
+    if (this.rainSound?.setVolume) this.rainSound.setVolume(0.4 * w.rain * exposed);
+    // splash particles on exposed ground
+    if (raining && this.settings.particles !== 'minimal') {
+      const n = Math.floor(100 * w.rain * w.rain * (this.settings.particles === 'all' ? 1 : 0.5) / 10);
+      for (let i = 0; i < n; i++) {
+        const x = Math.floor(p.x) + Math.floor(Math.random() * 21) - 10, z = Math.floor(p.z) + Math.floor(Math.random() * 21) - 10;
+        const y = w.getHeight(x, z);
+        if (Math.abs(y - p.y) > 12) continue;
+        const def = BlockById[w.getBlockId(x, y, z)];
+        if (def.liquid === 'lava' || def.name === 'fire') this.fx.smokeAt(x + Math.random(), y + 1.1, z + Math.random());
+        else this.fx.sprite('splash_0', x + Math.random(), y + 1.02, z + Math.random(), 0, 0.05, 0, { life: 6, size: 0.05, gravity: 0.04, r: 0.5, g: 0.6, b: 1, frames: ['splash_0', 'splash_1', 'splash_2', 'splash_3'] });
+      }
+    }
+    // thunder & lightning
+    if (w.thunder > 0.9 && Math.random() < 1 / 1200) {
+      this.lightningFlash = 3;
+      const x = Math.floor(p.x) + Math.floor(Math.random() * 96) - 48, z = Math.floor(p.z) + Math.floor(Math.random() * 96) - 48;
+      const y = w.getHeight(x, z) + 1;
+      const d = Math.hypot(x - p.x, z - p.z);
+      this.sound.play('ambient.weather.thunder', { volume: 1, pitch: 0.8 + Math.random() * 0.2 });
+      if (d < 48 && w.gamerules.doFireTick && w.difficulty >= 2 && w.getBlock(x, y, z) === 0 && BlockById[w.getBlockId(x, y - 1, z)].solid) {
+        w.setBlock(x, y, z, packBlock(B.fire, 0)); w.scheduleTick(x, y, z, 30);
+      }
+      for (const e of this.entities.list) if (e.isLiving && Math.hypot(e.x - x, e.z - z) < 3 && Math.abs(e.y - y) < 6) { e.hurt({ type: 'lightning' }, 5); e.setOnFire?.(8); if (e.type === 'creeper') e.powered = true; }
+    }
+    if (this.lightningFlash > 0) this.lightningFlash--;
+  }
+
+  tickNetherAmbience() {
+    const p = this.player, w = this.world;
+    const biome = w.getBiomeDef(Math.floor(p.x), Math.floor(p.z));
+    const name = `ambient.nether.${biome.name}`;
+    if (this.ambientLoopName !== name) {
+      this.stopAmbientLoop();
+      this.ambientLoopName = name;
+      this.ambientLoop = this.sound.play(name, { volume: 0.5, loop: true });
+    }
+    if (Math.random() < 1 / 400) this.sound.play('ambient.nether.additions', { volume: 0.6, pitch: 0.8 + Math.random() * 0.4 });
+  }
+  stopAmbientLoop() {
+    if (this.ambientLoop) { this.ambientLoop.stop?.(); this.ambientLoop = null; }
+    this.ambientLoopName = null;
   }
 
   tickAmbient() {
@@ -558,7 +742,7 @@ export class Game {
       const eyeSky = w.getSkyLight(Math.floor(cam.eyeWorld[0]), Math.floor(cam.eyeWorld[1]), Math.floor(cam.eyeWorld[2]));
       r.render(w, cam, {
         renderDistance: rd, timeSec: performance.now() / 1000, worldTime: w.time + partial, partial, lookDir, gamma: this.settings.gamma,
-        eyeFluid, eyeSkyLight: Math.max(eyeSky, p.y > 50 ? 15 : eyeSky), nightVision: p.hasEffect('night_vision') ? 1 : 0, blindness: p.hasEffect('blindness'),
+        eyeFluid, eyeSkyLight: Math.max(eyeSky, p.y > 50 ? 15 : eyeSky), lightningFlash: this.lightningFlash > 0, nightVision: p.hasEffect('night_vision') ? 1 : 0, blindness: p.hasEffect('blindness'),
         selection: this.hideGui || p.spectator ? null : this.interaction.target, breakStage: this.interaction.breakStage(), cloudsOff: this.settings.clouds === 'off',
       });
       if (this.playerPreview) this.renderPlayerPreview();
@@ -866,6 +1050,8 @@ export class Game {
     const w = this.world;
     switch (def.interact) {
       case 'crafting_table': this.setScreen(new CraftingScreen(this)); return true;
+      case 'enchanting_table': this.setScreen(new EnchantmentScreen(this, [x, y, z])); return true;
+      case 'anvil': this.setScreen(new AnvilScreen(this, [x, y, z])); return true;
       case 'chest': {
         if (BlockById[w.getBlockId(x, y + 1, z)].opaque) return true;
         let be = w.getBlockEntity(x, y, z);
@@ -992,14 +1178,62 @@ export class Game {
       const s = c.sections[si];
       if (!s) continue;
       for (let i = 0; i < 4096; i++) {
-        if ((s[i] & ID_MASK) !== B.spawner) continue;
+        const id = s[i] & ID_MASK;
+        if (id !== B.spawner && id !== B.enchanting_table) continue;
         const x = (c.cx << 4) + (i & 15), y = MIN_Y + si * 16 + (i >> 8), z = (c.cz << 4) + ((i >> 4) & 15);
+        if (id === B.enchanting_table) { this.enchTables.set(`${x},${y},${z}`, { x, y, z }); continue; }
         const h = hash4(x, y, z, this.world.seed);
-        const type = ['zombie', 'zombie', 'skeleton', 'spider'][h & 3];
+        const type = this.world.dimension === 'nether' ? 'blaze' : ['zombie', 'zombie', 'skeleton', 'spider'][h & 3];
         this.spawners.set(`${x},${y},${z}`, { x, y, z, type, delay: 20 });
       }
     }
   }
+  // EnchantmentTableBlockEntity.bookAnimationTick
+  tickEnchantBooks() {
+    const p = this.player;
+    for (const b of this.enchTables.values()) {
+      const cx = b.x + 0.5, cy = b.y + 0.5, cz = b.z + 0.5;
+      if (Math.abs(cx - p.x) > 32 || Math.abs(cz - p.z) > 32) continue;
+      const a = b.anim ?? (b.anim = { time: 0, open: 0, oOpen: 0, rot: 0, oRot: 0, tRot: 0, flip: 0, oFlip: 0, flipT: 0, flipA: 0 });
+      a.oOpen = a.open; a.oRot = a.rot;
+      const near = !p.spectator && Math.hypot(p.x - cx, p.y - cy, p.z - cz) < 3;
+      if (near) {
+        a.tRot = Math.atan2(p.z - cz, p.x - cx);
+        a.open += 0.1;
+        if (a.open < 0.5 || Math.random() < 1 / 40) {
+          const f1 = a.flipT;
+          do { a.flipT += Math.floor(Math.random() * 4) - Math.floor(Math.random() * 4); } while (f1 === a.flipT);
+        }
+      } else { a.tRot += 0.02; a.open -= 0.1; }
+      while (a.rot >= Math.PI) a.rot -= Math.PI * 2;
+      while (a.rot < -Math.PI) a.rot += Math.PI * 2;
+      while (a.tRot >= Math.PI) a.tRot -= Math.PI * 2;
+      while (a.tRot < -Math.PI) a.tRot += Math.PI * 2;
+      let d = a.tRot - a.rot;
+      while (d >= Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      a.rot += d * 0.4;
+      a.open = Math.max(0, Math.min(1, a.open));
+      a.time++;
+      a.oFlip = a.flip;
+      let f = (a.flipT - a.flip) * 0.4;
+      f = Math.max(-0.2, Math.min(0.2, f));
+      a.flipA += (f - a.flipA) * 0.9;
+      a.flip += a.flipA;
+      // enchanting glyph particles drifting from nearby bookshelves
+      if (near && Math.random() < 0.5) {
+        for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
+          if (Math.abs(dx) < 2 && Math.abs(dz) < 2) continue;
+          if (Math.random() > 1 / 16) continue;
+          for (let dy = 0; dy <= 1; dy++) {
+            if (this.world.getBlockId(b.x + dx, b.y + dy, b.z + dz) !== B.bookshelf) continue;
+            this.fx.enchantGlyph?.(b.x + dx + 0.5, b.y + dy + 1.5, b.z + dz + 0.5, cx, b.y + 2, cz);
+          }
+        }
+      }
+    }
+  }
+
   tickSpawners() {
     const p = this.player, w = this.world;
     if (w.difficulty === 0) return;
@@ -1028,6 +1262,14 @@ export class Game {
     // find head part
     let hx = x, hz = z;
     if (!(meta & 4)) { const d = [[0, -1], [0, 1], [-1, 0], [1, 0]][meta & 3]; hx += d[0]; hz += d[1]; }
+    if (w.dimension !== 'overworld') {
+      // beds explode outside the Overworld (intentional game design)
+      w.setBlock(x, y, z, 0);
+      if (hx !== x || hz !== z) w.setBlock(hx, y, hz, 0);
+      else { const d = [[0, -1], [0, 1], [-1, 0], [1, 0]][meta & 3]; w.setBlock(x - d[0], y, z - d[1], 0); }
+      this.explode(hx + 0.5, y + 0.5, hz + 0.5, 5, { fire: true, source: null });
+      return true;
+    }
     p.spawnPoint = { x: hx, y, z: hz };
     const night = w.dayTime >= 12542 && w.dayTime <= 23459 || w.thundering;
     if (!night) { this.hud.setActionBar('You can sleep only at night'); this.hud.addChat('Respawn point set'); return true; }
@@ -1111,20 +1353,30 @@ export class Game {
   respawn() {
     const p = this.player, w = this.world;
     if (this.worldMeta.hardcore) { p.respawn({ x: p.x, y: p.y, z: p.z }); p.setGamemode('spectator'); this.setScreen(null); return; }
-    let pos = null;
+    if (w.dimension !== 'overworld') {
+      // beds only work in the Overworld: always return there
+      p.respawn({ x: p.x, y: p.y, z: p.z });
+      const sp = p.spawnPoint;
+      this.enterDimension('overworld', { kind: 'respawn', pos: sp ? { x: sp.x + 0.5, y: sp.y + 0.6, z: sp.z + 0.5 } : null, checkBed: !!sp }, 'Respawning');
+      return;
+    }
+    p.respawn(this.findRespawnPos());
+    this.setScreen(null);
+  }
+
+  // Validate the player's bed; fall back to world spawn.
+  findRespawnPos() {
+    const p = this.player, w = this.world;
     if (p.spawnPoint) {
       const sp = p.spawnPoint;
-      if (sp.forced || w.getBlockId(sp.x, sp.y, sp.z) === B.red_bed) pos = { x: sp.x + 0.5, y: sp.y + 0.6, z: sp.z + 0.5 };
-      else { p.spawnPoint = null; this.hud.addChat('You have no home bed or charged respawn anchor, or it was obstructed'); }
+      if (sp.forced || w.getBlockId(sp.x, sp.y, sp.z) === B.red_bed) return { x: sp.x + 0.5, y: sp.y + 0.6, z: sp.z + 0.5 };
+      p.spawnPoint = null;
+      this.hud.addChat('You have no home bed or charged respawn anchor, or it was obstructed');
     }
-    if (!pos) {
-      const s = w.spawn;
-      let y = s.y;
-      if (w.isLoaded(s.x, s.z)) { y = w.getTopSolidY(s.x, s.z) + 1; }
-      pos = { x: s.x + 0.5, y, z: s.z + 0.5 };
-    }
-    p.respawn(pos);
-    this.setScreen(null);
+    const s = w.spawn;
+    let y = s.y;
+    if (w.isLoaded(s.x, s.z)) y = w.getTopSolidY(s.x, s.z) + 1;
+    return { x: s.x + 0.5, y, z: s.z + 0.5 };
   }
 }
 

@@ -208,6 +208,21 @@ export class Effects {
       p.r = 0.7; p.g = 0.3; p.b = 0.9;
     }
   }
+  // rune specks drifting from bookshelves into an enchanting table
+  enchantGlyph(x, y, z, tx, ty, tz) {
+    const life = Math.floor(Math.random() * 10) + 30;
+    const p = this.sprite('generic_0', x, y, z, 0, 0, 0, { life, size: 0.05 + Math.random() * 0.03, collide: false, emissive: true });
+    const k = Math.random() * 0.6 + 0.4;
+    p.r = 0.9 * k; p.g = 0.9 * k; p.b = k;
+    const sx = x, sy = y, sz = z;
+    // EnchantmentTableParticle: glide from the shelf to the table, dipping at the end
+    p.update = (q) => {
+      const f = 1 - q.age / life;
+      let f1 = 1 - f; f1 *= f1; f1 *= f1;
+      q.x = tx + (sx - tx) * f; q.y = ty + (sy - ty) * f - f1 * 1.2; q.z = tz + (sz - tz) * f;
+      q.vx = q.vy = q.vz = 0;
+    };
+  }
   bubble(x, y, z) {
     this.sprite('bubble', x, y, z, (Math.random() - 0.5) * 0.02, 0.02, (Math.random() - 0.5) * 0.02, { life: 20, size: 0.06, collide: false, update: (p) => { p.vy += 0.002; if (!BlockById[this.world.getBlock(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z)) & ID_MASK].liquid) p.dead = true; } });
   }

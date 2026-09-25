@@ -211,6 +211,7 @@ export class Renderer {
 
   // ---------- environment ----------
   computeEnv(world, cam, opts) {
+    if (world.dimension === 'nether') return this.computeNetherEnv(world, cam, opts);
     const angle = world.celestialAngle(opts.partial);
     const biome = world.getBiomeDef(Math.floor(cam[0]), Math.floor(cam[2]));
     // day brightness
@@ -300,6 +301,28 @@ export class Renderer {
     };
   }
 
+  // Nether: no sky, sun or clouds; thick biome-coloured fog close to the camera.
+  computeNetherEnv(world, cam, opts) {
+    const biome = world.getBiomeDef(Math.floor(cam[0]), Math.floor(cam[2]));
+    let fog = hexToRgb(biome.fog ?? 0x330808);
+    const target = this.netherFog ?? fog.slice();
+    // fade between biome fog colours like vanilla's fog colour interpolation
+    for (let i = 0; i < 3; i++) target[i] += (fog[i] - target[i]) * 0.02;
+    this.netherFog = target;
+    fog = target.slice();
+    const rd = opts.renderDistance;
+    let fogStart = rd * 16 * 0.05, fogEnd = Math.min(rd * 16, 192) * 0.5;
+    let underwater = false, inLava = false;
+    if (opts.eyeFluid === 'lava') { inLava = true; fog = [0.6, 0.1, 0.0]; fogStart = 0.25; fogEnd = 1.0; }
+    else if (opts.eyeFluid === 'water') { underwater = true; fog = [0.05, 0.07, 0.2]; fogStart = -8; fogEnd = 48; }
+    if (opts.blindness) { fog = [0, 0, 0]; fogStart = 0; fogEnd = 5; }
+    return {
+      skyColor: fog, fogColor: fog, sunrise: [0, 0, 0, 0], sunDir: [0, 1, 0], celestialAngle: 0, starBrightness: 0,
+      cloudColor: [0, 0, 0], skyBrightness: 0, fogStart, fogEnd, underwater, inLava, rain: 0, moonPhase: 0,
+      horizonDark: 1, cloudsOff: true, noSky: true, nether: true,
+    };
+  }
+
   // ---------- frame ----------
   // cam: { pos:[x,y,z] (eye), yaw, pitch, roll, fov, bob:{x,y,rx,rz} }
   render(world, cam, opts) {
@@ -311,6 +334,7 @@ export class Renderer {
     this.lightmap.update({
       skyBrightness: env.skyBrightness, gamma: opts.gamma ?? 0.5, nightVision: opts.nightVision ?? 0,
       lightningFlash: opts.lightningFlash, underwaterBoost: env.underwater ? 1 : 0,
+      ambient: env.nether ? 0.1 : 0, constantAmbient: !!env.nether,
     });
     // matrices (camera-relative)
     const far = Math.max(256, opts.renderDistance * 16 * 2 + 64);

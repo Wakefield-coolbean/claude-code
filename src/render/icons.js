@@ -51,6 +51,14 @@ export class IconCache {
     return this.fire[i % Math.max(1, this.fire.length)];
   }
 
+  portalFrame(i) {
+    if (!this.portal) {
+      const frames = this.blockTexMap.get('nether_portal');
+      this.portal = frames ? frames.map((f) => rgbaToCanvas(f)) : [];
+    }
+    return this.portal[i % Math.max(1, this.portal.length)];
+  }
+
   get(id) {
     let c = this.icons.get(id);
     if (c) return c;

@@ -6,7 +6,7 @@ import { contactSheet, writePNG } from './png.mjs';
 import { collectItemTextureNames } from '../src/registry/items.js';
 import { generateItemTextures, ITEM_TEXTURE_WARNINGS } from '../src/textures/itemTextures.js';
 import { generateGuiTextures, GUI_SPRITE_SIZES } from '../src/textures/guiTextures.js';
-import { FONT, renderText, renderTitleLogo } from '../src/textures/font.js';
+import { FONT, SGA_GLYPHS, renderText, renderTitleLogo } from '../src/textures/font.js';
 
 const OUT = process.argv[2] ?? '/tmp/claude-0/-home-user-claude-code/1054d6a7-65b9-540d-9b00-48ba961164e3/scratchpad/gui';
 fs.mkdirSync(OUT, { recursive: true });
@@ -232,6 +232,43 @@ console.log(`gui: ${gui.size} sprites (${Object.keys(GUI_SPRITE_SIZES).length} r
   writePNG(path.join(OUT, 'container_mock.png'), big.w, big.h, big.data);
 }
 
+// Enchanting table + anvil mock-up
+{
+  const W = 190, H = 120, S = 3;
+  const scene = image(W, H, [30, 30, 36, 255]);
+  const panel = image(176, 84, [198, 198, 198, 255]);
+  blit(scene, panel, 7, 4);
+  blit(scene, gui.get('enchanting_book_background'), 7 + 12, 4 + 14);
+  const book = items.get('enchanted_book');
+  blit(scene, { w: 16, h: 16, data: book }, 7 + 12 + 18, 4 + 14 + 14);
+  const states = [['enchanting_button', 'enchanting_level_1', 'lorem ipsum'], ['enchanting_button_highlighted', 'enchanting_level_2', 'sit amet'],
+    ['enchanting_button_disabled', 'enchanting_level_3_disabled', 'brown fox']];
+  states.forEach(([b, lvl, words], i) => {
+    const bx = 7 + 60, by = 4 + 14 + i * 19;
+    blit(scene, gui.get(b), bx, by);
+    blit(scene, gui.get(lvl), bx + 1, by + 1);
+    const col = b.endsWith('disabled') ? [52, 45, 36] : b.endsWith('highlighted') ? [255, 255, 128] : [104, 96, 80];
+    blit(scene, renderText(words, { glyphs: SGA_GLYPHS, color: col, shadow: false }), bx + 20, by + 2);
+    const cost = renderText(String(i + 1) + (i === 2 ? '0' : ''), { color: b.endsWith('disabled') ? [64, 127, 32] : [128, 255, 32] });
+    blit(scene, cost, bx + 108 - 2 - cost.w, by + 19 - 9);
+  });
+  // badge row: all levels, enabled and disabled
+  ['enchanting_level_1', 'enchanting_level_2', 'enchanting_level_3', 'enchanting_level_1_disabled', 'enchanting_level_2_disabled', 'enchanting_level_3_disabled']
+    .forEach((n, i) => blit(scene, gui.get(n), 12 + i * 18, 92));
+  blit(scene, gui.get('anvil_arrow'), 124, 93);
+  blit(scene, gui.get('anvil_error'), 152, 90);
+  const big = image(W * S, H * S); blit(big, scene, 0, 0, S);
+  writePNG(path.join(OUT, 'enchant_mock.png'), big.w, big.h, big.data);
+  // rune alphabet sample
+  const lines = ['abcdefghijklm', 'nopqrstuvwxyz', 'the quick brown fox jumps over the lazy dog'].map((l) => renderText(l, { glyphs: SGA_GLYPHS }));
+  const lines2 = ['abcdefghijklm', 'nopqrstuvwxyz', 'the quick brown fox jumps over the lazy dog'].map((l) => renderText(l));
+  const RW = Math.max(...lines.map((l) => l.w)) + 8, RH = lines.length * 22 + 8;
+  const rs = image(RW, RH, [58, 58, 64, 255]);
+  lines.forEach((l, i) => { blit(rs, lines2[i], 4, 4 + i * 22); blit(rs, l, 4, 14 + i * 22); });
+  const rbig = image(RW * 5, RH * 5); blit(rbig, rs, 0, 0, 5);
+  writePNG(path.join(OUT, 'sga.png'), rbig.w, rbig.h, rbig.data);
+}
+
 // ---------------- font ----------------
 if (FONT.cellHeight !== 8 || FONT.ascent !== 7) fail('FONT cellHeight/ascent must be 8/7');
 const requiredChars = [];
@@ -249,6 +286,19 @@ for (const [ch, g] of Object.entries(FONT.glyphs)) {
   if (!'gjpqy,;_|'.includes(ch) && g.rows[7].includes('#') && !'█░'.includes(ch)) fail(`font: glyph ${JSON.stringify(ch)} uses descender row`);
 }
 if (FONT.glyphs[' '].width !== 3) fail('font: space must be 3 wide');
+// enchanting-table runes
+for (const ch of ' abcdefghijklmnopqrstuvwxyz') {
+  const g = SGA_GLYPHS[ch];
+  if (!g) { fail(`sga: missing glyph ${JSON.stringify(ch)}`); continue; }
+  if (!Array.isArray(g.rows) || g.rows.length !== 8) { fail(`sga: glyph ${ch} has ${g.rows?.length} rows`); continue; }
+  g.rows.forEach((r, i) => { if (r.length !== g.width || /[^#.]/.test(r)) fail(`sga: glyph ${ch} row ${i} malformed`); });
+  if (ch !== ' ' && !g.rows.some((r) => r.includes('#'))) fail(`sga: glyph ${ch} is empty`);
+  if (g.rows[7].includes('#')) fail(`sga: glyph ${ch} uses descender row`);
+}
+{ // runes must all be distinct
+  const seen = new Map();
+  for (const [ch, g] of Object.entries(SGA_GLYPHS)) { const k = g.rows.join('|'); if (seen.has(k)) fail(`sga: ${ch} duplicates ${seen.get(k)}`); seen.set(k, ch); }
+}
 {
   const lines = [
     'The quick brown fox jumps over the lazy dog 0123456789 !?',

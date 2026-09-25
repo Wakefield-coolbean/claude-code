@@ -122,9 +122,12 @@ export function getReverbIR(ctx) {
 const SCALES = {
   major: [0, 2, 4, 5, 7, 9, 11], lydian: [0, 2, 4, 6, 7, 9, 11], mixolydian: [0, 2, 4, 5, 7, 9, 10],
   dorian: [0, 2, 3, 5, 7, 9, 10], aeolian: [0, 2, 3, 5, 7, 8, 10],
+  phrygian: [0, 1, 3, 5, 7, 8, 10], harmonic: [0, 2, 3, 5, 7, 8, 11],
 };
 // pentatonic subsets (scale-degree indices)
 const PENTA = { major: [0, 1, 2, 4, 5], lydian: [0, 1, 2, 4, 5], mixolydian: [0, 1, 2, 4, 5], dorian: [0, 2, 3, 4, 6], aeolian: [0, 2, 3, 4, 6] };
+// darker five-note sets for the Nether (in-scale 1 b2 4 5 b6, hirajoshi 1 2 b3 5 b6, ...)
+const NETHER_PENTA = { phrygian: [0, 1, 3, 4, 5], aeolian: [0, 1, 2, 4, 5], harmonic: [0, 2, 3, 4, 6], dorian: [0, 2, 3, 4, 6] };
 // progressions (scale-degree indices; diminished degrees avoided)
 const PROGS = {
   major: [[0, 3], [0, 3, 5, 3], [0, 5, 3, 4], [3, 0, 5, 4], [0, 2, 3, 0], [5, 3, 0, 4], [0, 4, 5, 3], [3, 4, 2, 5], [0, 5, 1, 3]],
@@ -132,8 +135,10 @@ const PROGS = {
   mixolydian: [[0, 6, 3, 0], [0, 6], [0, 3, 6, 0], [0, 4, 6, 3]],
   dorian: [[0, 3], [0, 6, 3, 0], [0, 2, 3, 0], [0, 1, 6, 3], [0, 3, 4, 6]],
   aeolian: [[0, 5, 2, 6], [0, 3, 5, 6], [0, 5, 3, 4], [0, 6, 5, 6]],
+  phrygian: [[0, 1], [0, 1, 0, 6], [0, 5, 1, 0], [0, 3, 1, 0], [0, 6, 5, 1]],
+  harmonic: [[0, 5], [0, 3, 4, 0], [0, 5, 3, 4], [0, 4], [0, 3, 5, 4]],
 };
-const SHAPES = { seventh: [0, 2, 4, 6], add9: [0, 2, 4, 8], open: [0, 4, 8], nine: [0, 2, 4, 6, 8], sus2: [0, 1, 4], sus4: [0, 3, 4] };
+const SHAPES = { seventh: [0, 2, 4, 6], add9: [0, 2, 4, 8], open: [0, 4, 8], nine: [0, 2, 4, 6, 8], sus2: [0, 1, 4], sus4: [0, 3, 4], triad: [0, 2, 4], fifth: [0, 4, 7] };
 
 function weighted(r, items) {
   let tot = 0; for (const [, w] of items) tot += w;
@@ -145,23 +150,28 @@ function weighted(r, items) {
 export function composePiece(seed, kind = 'game', opts = {}) {
   const r = makeRng((seed >>> 0) ^ 0x2545f491);
   const menu = kind === 'menu';
+  const nether = kind === 'nether';
   const night = !!opts.night;
-  const modeName = weighted(r, menu ? [['major', 4], ['lydian', 3], ['mixolydian', 1], ['dorian', 1]]
-    : night ? [['dorian', 3], ['aeolian', 3], ['major', 1], ['lydian', 1]]
-      : [['major', 4], ['lydian', 3], ['dorian', 2], ['mixolydian', 1], ['aeolian', 1]]);
+  const modeName = weighted(r, nether ? [['phrygian', 4], ['aeolian', 3], ['harmonic', 2], ['dorian', 1]]
+    : menu ? [['major', 4], ['lydian', 3], ['mixolydian', 1], ['dorian', 1]]
+      : night ? [['dorian', 3], ['aeolian', 3], ['major', 1], ['lydian', 1]]
+        : [['major', 4], ['lydian', 3], ['dorian', 2], ['mixolydian', 1], ['aeolian', 1]]);
   const scale = SCALES[modeName];
-  const tonic = pick(r, [0, 2, 3, 4, 5, 7, 8, 9, 10]);
-  const bpm = menu ? rand(r, 66, 80) : rand(r, 58, 74);
+  const tonic = pick(r, nether ? [0, 1, 2, 3, 4, 5, 6] : [0, 2, 3, 4, 5, 7, 8, 9, 10]);
+  const bpm = nether ? rand(r, 50, 64) : menu ? rand(r, 66, 80) : rand(r, 58, 74);
   const beat = 60 / bpm;
   const meter = r() < (menu ? 0.3 : 0.4) ? 3 : 4;
   const bar = meter * beat;
   const target = opts.length ?? (menu ? rand(r, 110, 190) : rand(r, 125, 220));
   const barsPerChord = meter === 3 ? pick(r, [2, 2, 4]) : pick(r, [1, 2, 2]);
+  const bassBase = nether ? 31 : 36;
 
   const stepMidi = (step) => tonic + 12 * Math.floor(step / 7) + scale[((step % 7) + 7) % 7];
   const semis = (deg, s) => stepMidi(deg + s) - stepMidi(deg);
-  function makeChord(deg) {
-    const opts2 = [['seventh', 3], ['add9', 3], ['open', 2], ['nine', 1.5], ['sus2', 1], ['sus4', 1.5]].filter(([s]) => {
+  function makeChord(deg, force) {
+    const weights = nether ? [['fifth', 3], ['triad', 2.5], ['seventh', 1.5], ['add9', 1], ['sus4', 1]]
+      : [['seventh', 3], ['add9', 3], ['open', 2], ['nine', 1.5], ['sus2', 1], ['sus4', 1.5]];
+    const opts2 = force ? [[force, 1]] : weights.filter(([s]) => {
       if (s === 'add9' || s === 'nine') return semis(deg, 8) === 14;
       if (s === 'open') return semis(deg, 4) === 7 && semis(deg, 8) === 14;
       if (s === 'sus2') return semis(deg, 1) === 2 && semis(deg, 4) === 7;
@@ -171,11 +181,11 @@ export function composePiece(seed, kind = 'game', opts = {}) {
     const shape = SHAPES[weighted(r, opts2)];
     const pcs = shape.map((s) => ((stepMidi(deg + s) % 12) + 12) % 12);
     const rootPc = pcs[0];
-    const bass = 36 + ((rootPc - 36 % 12 + 12) % 12);
+    const bass = bassBase + ((rootPc - (bassBase % 12) + 12) % 12);
     return { deg, pcs, rootPc, bass };
   }
   let prevVoicing = null;
-  function voice(ch, lo = 52, hi = 74) {
+  function voice(ch, lo = nether ? 46 : 52, hi = nether ? 67 : 74) {
     const upper = ch.pcs.length >= 4 ? ch.pcs.slice(1) : ch.pcs.slice();
     let best = null, bestCost = Infinity;
     for (let rot = 0; rot < upper.length; rot++) {
@@ -201,14 +211,15 @@ export function composePiece(seed, kind = 'game', opts = {}) {
   const progs = PROGS[modeName];
   const pa = pick(r, progs);
   let pb = pick(r, progs); if (progs.length > 1) for (let k = 0; k < 4 && pb === pa; k++) pb = pick(r, progs);
-  const chordsA = pa.map(makeChord), chordsB = pb.map(makeChord);
+  const chordsA = pa.map((d) => makeChord(d)), chordsB = pb.map((d) => makeChord(d));
 
   // melody pitch ladder (pentatonic)
-  const pent = PENTA[modeName].map((d) => (tonic + scale[d]) % 12);
-  const mlo = menu ? 64 : 62, mhi = menu ? 88 : 86;
+  const pent = (nether ? NETHER_PENTA : PENTA)[modeName].map((d) => (tonic + scale[d]) % 12);
+  const mlo = nether ? 55 : menu ? 64 : 62, mhi = nether ? 80 : menu ? 88 : 86;
+  const mcenter = nether ? 65 : menu ? 74 : 72;
   const ladder = [];
   for (let m = mlo; m <= mhi; m++) if (pent.includes(m % 12)) ladder.push(m);
-  const center = ladder.reduce((bi, m, i) => (Math.abs(m - (menu ? 74 : 72)) < Math.abs(ladder[bi] - (menu ? 74 : 72)) ? i : bi), 0);
+  const center = ladder.reduce((bi, m, i) => (Math.abs(m - mcenter) < Math.abs(ladder[bi] - mcenter) ? i : bi), 0);
 
   function genMotif() {
     const len = randInt(r, 3, menu ? 7 : 5);
@@ -250,10 +261,10 @@ export function composePiece(seed, kind = 'game', opts = {}) {
   while (estimate() > 236 && plan.length > 3) plan.splice(plan.length - 2, 1);
   while (estimate() < 124) plan.splice(plan.length - 1, 0, { kind: 'A', B: false });
 
-  const patA = weighted(r, menu ? [['arp', 4], ['pulse', 2], ['roll', 2]] : [['roll', 4], ['sparse', 3], ['arp', 2], ['pulse', 1]]);
-  const patB = weighted(r, menu ? [['roll', 2], ['arp', 2], ['pulse', 2]] : [['arp', 3], ['roll', 2], ['pulse', 2], ['sparse', 1]]);
-  const densA = menu ? rand(r, 0.6, 0.85) : rand(r, 0.3, 0.55);
-  const densB = menu ? rand(r, 0.65, 0.9) : rand(r, 0.4, 0.7);
+  const patA = weighted(r, nether ? [['sparse', 4], ['roll', 3], ['pulse', 2]] : menu ? [['arp', 4], ['pulse', 2], ['roll', 2]] : [['roll', 4], ['sparse', 3], ['arp', 2], ['pulse', 1]]);
+  const patB = weighted(r, nether ? [['roll', 3], ['pulse', 2], ['arp', 1]] : menu ? [['roll', 2], ['arp', 2], ['pulse', 2]] : [['arp', 3], ['roll', 2], ['pulse', 2], ['sparse', 1]]);
+  const densA = nether ? rand(r, 0.2, 0.45) : menu ? rand(r, 0.6, 0.85) : rand(r, 0.3, 0.55);
+  const densB = nether ? rand(r, 0.3, 0.55) : menu ? rand(r, 0.65, 0.9) : rand(r, 0.4, 0.7);
 
   const notes = [], pads = [];
   const hum = () => (r() * 2 - 1) * 0.012;
@@ -266,7 +277,9 @@ export function composePiece(seed, kind = 'game', opts = {}) {
     const chords = sec.B ? chordsB : chordsA;
     const pattern = sec.kind === 'intro' || sec.kind === 'outro' ? pick(r, ['roll', 'sparse']) : sec.B ? patB : patA;
     const density = sec.kind === 'intro' ? (menu ? 0.3 : 0) : sec.kind === 'outro' ? 0.25 : sec.B ? densB : densA;
-    const padOn = r() < (menu ? 0.5 : 0.4) + (sec.B ? 0.2 : 0);
+    const padOn = nether || r() < (menu ? 0.5 : 0.4) + (sec.B ? 0.2 : 0);
+    // nether: a low tonic drone under every section
+    if (nether) pads.push({ t: T, dur: (sec.B ? secBarsB : secBarsA) * bar + 0.5, midis: [bassBase + tonic % 12 + 12, bassBase + tonic % 12 + 19], vel: 1.3, cutoff: 320 });
     const secStart = T;
     const Lc = barsPerChord * bar;
     for (const ch of chords) {
@@ -305,7 +318,7 @@ export function composePiece(seed, kind = 'game', opts = {}) {
         const k = randInt(r, 1, 2);
         for (let i = 0; i < k; i++) add(T + beat * randInt(r, 1, barsPerChord * meter - 1), pick(r, v), 0.23, Lc * 0.7);
       }
-      if (padOn) pads.push({ t: T, dur: Lc, midis: v.slice(0, 3).map((m) => (m > 64 ? m - 12 : m)), vel: 1 });
+      if (padOn) pads.push({ t: T, dur: Lc, midis: v.slice(0, 3).map((m) => (m > 64 ? m - 12 : m)), vel: nether ? 0.8 : 1, cutoff: nether ? 480 : 850 });
       T += Lc;
     }
     const secEnd = T;
@@ -329,7 +342,7 @@ export function composePiece(seed, kind = 'game', opts = {}) {
             const strong = Math.abs((t - secStart) / beat - Math.round((t - secStart) / beat)) < 0.01 || m.durs[i] >= 1.5;
             if (chord && strong) {
               const clash = (mm) => chord.pcs.some((pc) => { const d = ((mm - pc) % 12 + 12) % 12; return d === 1 || d === 11; });
-              if (clash(midi)) {
+              if (clash(midi) && !(nether && r() < 0.4)) {
                 for (const dd of [1, -1, 2, -2]) { const j = idx + dd; if (j >= 0 && j < ladder.length && !clash(ladder[j])) { idx = j; midi = ladder[j]; break; } }
               }
             }
@@ -356,7 +369,7 @@ export function composePiece(seed, kind = 'game', opts = {}) {
   });
 
   // final tonic chord, slowly rolled
-  const fin = makeChord(0);
+  const fin = makeChord(0, nether ? 'fifth' : undefined);
   const fv = voice(fin);
   add(T, fin.bass, 0.38, 6);
   fv.forEach((m, i) => add(T + 0.12 + i * 0.16, m, 0.24, 6));
@@ -465,7 +478,7 @@ export class MusicPlayer {
   _pad(p, t) {
     const ctx = this.ctx;
     const f = ctx.createBiquadFilter();
-    f.type = 'lowpass'; f.frequency.value = 850; f.Q.value = 0.4;
+    f.type = 'lowpass'; f.frequency.value = p.cutoff ?? 850; f.Q.value = 0.4;
     const g = ctx.createGain();
     const lvl = 0.035 * p.vel;
     const att = Math.min(2.5, p.dur * 0.4), end = t + p.dur;

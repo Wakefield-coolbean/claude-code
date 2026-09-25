@@ -113,10 +113,44 @@ const SRC = {
   '░': '#.#.#|.#.#.|#.#.#|.#.#.|#.#.#|.#.#.|#.#.#|.#.#.',
 };
 
-function buildGlyphs() {
+export const FONT = { cellHeight: 8, ascent: 7, glyphs: buildGlyphsFrom(SRC) };
+
+// Rune alphabet for the enchanting table (original runes in the spirit of the Standard Galactic
+// Alphabet). Same { width, rows } format and baseline conventions as FONT.glyphs; index by 'a'..'z' or ' '.
+const SGA_SRC = {
+  ' ': '...|...|...|...|...|...|...|...',
+  a: '.....|.....|....#|...#.|..#..|.#.#.|#...#',
+  b: '#....|#....|#....|#.##.|#..#.|#..#.|####.',
+  c: '.....|.....|#####|....#|....#|....#|.....',
+  d: '.....|.....|#.#.#|#.#.#|#####|..#..|..#..',
+  e: '.....|.....|#####|.....|#####|.....|#####',
+  f: '.....|..#..|.....|#####|..#..|..#..|..#..',
+  g: '.....|.....|#...#|.#.#.|..#..|..#..|#####',
+  h: '.....|.....|#####|#...#|#...#|.....|#####',
+  i: '.#.|.#.|...|.#.|.#.|...|.#.',
+  j: '#.#|#.#|...|#.#|#.#|...|#.#',
+  k: '..#..|..#..|#####|.....|#####|..#..|..#..',
+  l: '....|....|#...|.#..|..#.|.#..|#...',
+  m: '.....|.....|#.#.#|#.#.#|#.#.#|#.#.#|#####',
+  n: '.....|.....|#####|#...#|#...#|#...#|#...#',
+  o: '.....|.....|.###.|#...#|#.#.#|#...#|.###.',
+  p: '.....|.....|#....|#....|#####|....#|....#',
+  q: '.....|.....|#...#|.....|..#..|.....|#...#',
+  r: '.....|.....|#####|..#..|..#..|..#..|#####',
+  s: '.....|.....|..#..|.#.#.|#...#|.#.#.|..#..',
+  t: '.....|.....|#####|#....|#....|#....|#....',
+  u: '.....|.....|#...#|#...#|#...#|.#.#.|..#..',
+  v: '#.#|#.#|#.#|#.#|#.#|#.#|#.#',
+  w: '.....|.....|#...#|.#.#.|..#..|.....|..#..',
+  x: '...|...|...|.#.|...|#.#|...',
+  y: '.....|.....|....#|....#|#####|#....|#....',
+  z: '.....|.....|#####|#...#|#...#|#...#|#####',
+};
+
+function buildGlyphsFrom(src) {
   const glyphs = {};
-  for (const [ch, src] of Object.entries(SRC)) {
-    const rows = src.split('|');
+  for (const [ch, rowsSrc] of Object.entries(src)) {
+    const rows = rowsSrc.split('|');
     const width = rows[0].length;
     while (rows.length < 8) rows.push('.'.repeat(width));
     glyphs[ch] = { width, rows };
@@ -124,19 +158,19 @@ function buildGlyphs() {
   return glyphs;
 }
 
-export const FONT = { cellHeight: 8, ascent: 7, glyphs: buildGlyphs() };
+export const SGA_GLYPHS = buildGlyphsFrom(SGA_SRC);
 
 // Glyph for any character (unknown characters fall back to '?').
-export function glyphFor(ch) { return FONT.glyphs[ch] ?? FONT.glyphs['?']; }
+export function glyphFor(ch, glyphs = FONT.glyphs) { return glyphs[ch] ?? glyphs[ch.toLowerCase?.()] ?? glyphs['?'] ?? glyphs[' ']; }
 
 // Width in pixels of a string rendered with 1px spacing (no trailing spacing), ignoring § colour codes.
 const isCode = (str, i) => str[i] === '§' && i + 1 < str.length && /[0-9a-fk-or]/i.test(str[i + 1]);
 
-export function textWidth(str) {
+export function textWidth(str, glyphs = FONT.glyphs) {
   let w = 0;
   for (let i = 0; i < str.length; i++) {
     if (isCode(str, i)) { i++; continue; }
-    w += glyphFor(str[i]).width + 1;
+    w += glyphFor(str[i], glyphs).width + 1;
   }
   return Math.max(0, w - 1);
 }
@@ -149,8 +183,9 @@ export const FORMAT_COLORS = {
 
 // Render a string into an RGBA image { w, h, data }: 1px spacing, optional 1px drop shadow,
 // supports §0-§f colour codes and §r reset (other formatting codes k-o are skipped; a lone § is drawn).
-export function renderText(str, { color = [255, 255, 255], shadow = true } = {}) {
-  const w = textWidth(str) + (shadow ? 1 : 0), h = FONT.cellHeight + (shadow ? 1 : 0);
+// Pass { glyphs: SGA_GLYPHS } to draw enchanting-table runes.
+export function renderText(str, { color = [255, 255, 255], shadow = true, glyphs = FONT.glyphs } = {}) {
+  const w = textWidth(str, glyphs) + (shadow ? 1 : 0), h = FONT.cellHeight + (shadow ? 1 : 0);
   const data = new Uint8ClampedArray(Math.max(1, w) * h * 4);
   const put = (x, y, c) => { if (x < 0 || y < 0 || x >= w || y >= h) return; const i = (y * w + x) * 4; data[i] = c[0]; data[i + 1] = c[1]; data[i + 2] = c[2]; data[i + 3] = 255; };
   const pass = (shadowPass) => {
@@ -158,7 +193,7 @@ export function renderText(str, { color = [255, 255, 255], shadow = true } = {})
     for (let i = 0; i < str.length; i++) {
       const ch = str[i];
       if (isCode(str, i)) { const k = str[++i].toLowerCase(); col = k === 'r' ? color : (FORMAT_COLORS[k] ?? col); continue; }
-      const g = glyphFor(ch);
+      const g = glyphFor(ch, glyphs);
       const c = shadowPass ? col.map((v) => v >> 2) : col;
       const o = shadowPass ? 1 : 0;
       g.rows.forEach((row, y) => { for (let gx = 0; gx < g.width; gx++) if (row[gx] === '#') put(x + gx + o, y + o, c); });

@@ -39,6 +39,9 @@ const EXPORTS = [
   ['mob.cow.say', 0], ['mob.sheep.say', 0], ['mob.pig.say', 0], ['mob.chicken.say', 0], ['mob.zombie.say', 0],
   ['mob.skeleton.say', 0], ['mob.creeper.primed', 0], ['mob.spider.say', 0], ['mob.enderman.idle', 0],
   ['mob.enderman.portal', 0], ['ambient.cave', 3], ['ambient.cave', 1], ['random.door_open', 0], ['random.chest_open', 0],
+  ['ambient.nether.nether_wastes', 0], ['ambient.nether.warped_forest', 0], ['ambient.nether.soul_sand_valley', 0], ['ambient.nether.basalt_deltas', 0],
+  ['ambient.nether.crimson_forest', 0], ['mob.ghast.moan', 0], ['mob.blaze.breathe', 0], ['block.portal.trigger', 0], ['block.portal.ambient', 0],
+  ['block.enchantment_table.use', 0], ['mob.zombiepig.zpigangry', 0], ['dig.netherrack', 0], ['mob.magmacube.big', 0],
 ];
 
 const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
@@ -168,7 +171,7 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
   const detail = {};
   let worstGen = { ms: 0, name: '' };
   for (const s of sounds) {
-    const agg = { name: s.name, cat: s.cat, alias: s.alias, variants: s.variants, peak: 0, st: Infinity, rmsMin: Infinity, bad: 0, durMin: Infinity, durMax: 0, genMs: 0, centroid: 0 };
+    const agg = { name: s.name, cat: s.cat, alias: s.alias, loop: s.loop, variants: s.variants, peak: 0, st: Infinity, rmsMin: Infinity, bad: 0, durMin: Infinity, durMax: 0, genMs: 0, centroid: 0 };
     for (let v = 0; v < s.variants; v++) {
       if (!s.alias) {
         const t0 = performance.now(); A.synthesize(s.name, v, SR); const ms = performance.now() - t0;
@@ -188,10 +191,24 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
     }
     rows.push(agg);
   }
+  // loop seams: the wrap point must be no bigger a step than ordinary sample-to-sample motion
+  const loops = {};
+  for (const s of sounds.filter((x) => x.loop && !x.alias)) {
+    for (let v = 0; v < s.variants; v++) {
+      const { data: d, rate } = A.synthesize(s.name, v, SR);
+      const diffs = []; for (let i = 1; i < d.length; i += 3) diffs.push(Math.abs(d[i] - d[i - 1]));
+      diffs.sort((a, b) => a - b);
+      const p99 = diffs[Math.floor(diffs.length * 0.99)], jump = Math.abs(d[0] - d[d.length - 1]);
+      const w = Math.round(0.3 * rate); let a = 0, b = 0;
+      for (let i = 0; i < w; i++) { a += d[i] * d[i]; b += d[d.length - 1 - i] * d[d.length - 1 - i]; }
+      loops[s.name + '#' + v] = { jump, p99, levelRatio: Math.sqrt(a / (b + 1e-20)), seconds: d.length / rate };
+    }
+  }
+
   // voice analysis for vocal sounds (variant 0)
   const f0 = {};
   const F0 = { 'mob.cow.say': [50, 300, 300], 'mob.cow.hurt': [50, 400, 400], 'mob.sheep.say': [150, 600, 500], 'mob.pig.say': [60, 500, 400],
-    'mob.zombie.say': [45, 300, 220], 'mob.chicken.say': [200, 1200, 900], 'damage.hit': [80, 500, 400], 'random.burp': [50, 300, 250] };
+    'mob.zombie.say': [45, 300, 220], 'mob.chicken.say': [200, 1200, 900], 'damage.hit': [80, 500, 400], 'random.burp': [50, 300, 250], 'mob.ghast.moan': [200, 800, 700] };
   for (const [n, [fmin, fmax, lp]] of Object.entries(F0)) {
     const buf = await A.renderToBuffer(n, { variant: 0, sampleRate: SR });
     const tr = f0Track(buf.getChannelData(0), SR, fmin, fmax, lp);
@@ -201,9 +218,9 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
 
   // music
   const music = {};
-  for (const kind of ['game', 'menu']) {
+  for (const kind of ['game', 'menu', 'nether']) {
     const t0 = performance.now();
-    const { buffer, piece } = await A.renderMusic(MUSIC_SECONDS, { kind, seed: kind === 'game' ? 12345 : 777 });
+    const { buffer, piece } = await A.renderMusic(MUSIC_SECONDS, { kind, seed: kind === 'game' ? 12345 : kind === 'menu' ? 777 : 4242 });
     const ms = performance.now() - t0;
     const L = buffer.getChannelData(0), R = buffer.getChannelData(1);
     const bl = basic(L, buffer.sampleRate), br = basic(R, buffer.sampleRate);
@@ -213,7 +230,10 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
     const win = buffer.sampleRate * 2, prof = [];
     for (let s = 0; s + win <= mono.length; s += win) { let e = 0; for (let i = s; i < s + win; i++) e += mono[i] * mono[i]; prof.push(+Math.sqrt(e / win).toFixed(3)); }
     const notesIn = piece.notes.filter((n) => n.t < MUSIC_SECONDS).length;
-    music[kind] = { summary: piece.summary, duration: piece.duration, peak: Math.max(bl.peak, br.peak), rms: (bl.rms + br.rms) / 2, bad: bl.bad + br.bad, centroid: sp.centroid, peakHz: sp.peakHz, notesIn, profile: prof, renderMs: Math.round(ms), data: wantExport ? [b64(L), b64(R), buffer.sampleRate] : null };
+    // average note pitch over whole pieces (8 seeds) — nether should sit clearly lower
+    let ms2 = 0, mc = 0;
+    for (let sd = 1; sd <= 8; sd++) for (const n of A.composePiece(sd * 7919, kind).notes) { ms2 += n.midi; mc++; }
+    music[kind] = { meanMidi: ms2 / mc, mode: piece.mode, summary: piece.summary, duration: piece.duration, peak: Math.max(bl.peak, br.peak), rms: (bl.rms + br.rms) / 2, bad: bl.bad + br.bad, centroid: sp.centroid, peakHz: sp.peakHz, notesIn, profile: prof, renderMs: Math.round(ms), data: wantExport ? [b64(L), b64(R), buffer.sampleRate] : null };
   }
 
   // exports
@@ -280,6 +300,30 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
     live.farSoundSkipped = sm.play('random.explode', { x: 500, y: 64, z: 0 }) === null;
     sm.play('random.levelup'); sm.play('mob.enderman.scream', { x: 3, y: 65, z: -2 });
     for (const c of ['master', 'music', 'records', 'weather', 'blocks', 'hostile', 'neutral', 'players', 'ambient']) sm.setVolume(c, 0.8);
+    // looping sound + handle.setVolume
+    const rh = sm.play('weather.rain', { loop: true, volume: 0.8 });
+    const nb = sm.play('ambient.nether.crimson_forest', { loop: true });
+    await new Promise((r) => setTimeout(r, 600));
+    rh.setVolume(0.2); nb.setVolume(0.5);
+    live.loopVoice = !!(rh.voice && rh.voice.loop && nb.voice && nb.voice.loop);
+    for (let i = 0; i < 40; i++) sm.play('step.stone', { x: 1, y: 64, z: i % 9 }); // voice pressure must not steal the loops
+    await new Promise((r) => setTimeout(r, 50));
+    live.loopsSurvivePressure = !rh.voice.done && !nb.voice.done;
+    rh.stop(); nb.stop();
+    await new Promise((r) => setTimeout(r, 200));
+    live.loopsStopped = rh.voice.done && nb.voice.done;
+    // dimension: nether => no cave mood, additions play
+    sm._moodPeriod = 0.2; sm._mood = 0.5; sm._netherTimer = 0.05;
+    const beforeBuf = sm._waiting.size + sm._buffers.size;
+    let played = 0; const op = sm.play.bind(sm);
+    sm.play = (n, o) => { if (n === 'ambient.nether.additions' || n === 'ambient.cave') played += n === 'ambient.cave' ? 100 : 1; return op(n, o); };
+    for (let i = 0; i < 20; i++) sm.update(0.016, { underground: true, dimension: 'nether' });
+    sm.play = op;
+    live.netherAdditions = played >= 1 && played < 100;
+    live.netherCaveMood = sm._mood;
+    sm.startMusic('nether', { delay: 0.2 });
+    await new Promise((r) => setTimeout(r, 1500));
+    live.netherMusic = sm.musicState;
     sm.startMusic('menu', { delay: 0.2 });
     await new Promise((r) => setTimeout(r, 2500));
     live.musicAfterStart = sm.musicState;
@@ -302,7 +346,7 @@ const result = await page.evaluate(async ({ MUSIC_SECONDS, EXPORTS, wantExport }
   } catch (e) { live.errors.push(String(e && e.stack || e)); }
   console.warn = ow;
 
-  return { rows, detail, f0, music, exported, worstGen, live, spatialRes };
+  return { rows, detail, f0, music, exported, worstGen, live, spatialRes, loops };
 }, { MUSIC_SECONDS, EXPORTS, wantExport: !!EXPORT_DIR });
 
 // ------------------------------------------------------------ manual test page smoke test ----
@@ -337,7 +381,7 @@ for (const r of rows) {
   if (r.bad) fail(`${r.name}: ${r.bad} non-finite samples`);
   if (r.peak > 1.0) fail(`${r.name}: clipping (peak ${r.peak.toFixed(3)})`);
   if (r.st < 0.005 || r.rmsMin < 1e-4) fail(`${r.name}: (nearly) silent (short-term rms ${r.st.toFixed(4)})`);
-  if (r.durMin < 0.02 || r.durMax > 8) fail(`${r.name}: unreasonable duration ${r.durMin.toFixed(2)}..${r.durMax.toFixed(2)}s`);
+  if (r.durMin < 0.02 || r.durMax > (r.loop ? 12 : 8)) fail(`${r.name}: unreasonable duration ${r.durMin.toFixed(2)}..${r.durMax.toFixed(2)}s`);
   if (r.genMs > 100) fail(`${r.name}: synthesis took ${r.genMs.toFixed(0)}ms`);
 }
 const cen = (n) => detail[n].centroid;
@@ -365,7 +409,24 @@ expect(band('random.bow', 'lt250') + band('random.bow', 'b250_1k') > 0.2, 'bow h
 expect(byName['random.pop'].durMax < 0.2 && detail['random.pop'].peakHz > 250 && detail['random.pop'].peakHz < 1200, 'pickup pop is short and mid-pitched');
 expect(byName['random.click'].durMax < 0.1, 'ui click is short');
 expect(cen('mob.enderman.scream') > cen('mob.zombie.say'), 'enderman scream is higher than zombie groan');
-for (const kind of ['game', 'menu']) {
+for (const [k, L] of Object.entries(result.loops)) {
+  if (L.jump > L.p99 * 1.5 + 1e-4) fail(`${k}: loop seam jump ${L.jump.toFixed(4)} > typical step ${L.p99.toFixed(4)}`);
+  if (L.levelRatio < 0.6 || L.levelRatio > 1.6) fail(`${k}: loop level jumps at the seam (head/tail ${L.levelRatio.toFixed(2)})`);
+}
+expect(f0['mob.ghast.moan'] && f0['mob.ghast.moan'].median > 250 && f0['mob.ghast.moan'].median < 600, 'ghast moan is a high wail (250-600 Hz)');
+expect(cen('ambient.nether.warped_forest') > cen('ambient.nether.nether_wastes') * 1.2, 'warped forest bed is brighter than nether wastes');
+expect(cen('ambient.nether.soul_sand_valley') > cen('ambient.nether.nether_wastes'), 'soul sand valley (wind) brighter than nether wastes (drone)');
+for (const bed of ['nether_wastes', 'crimson_forest', 'warped_forest', 'soul_sand_valley', 'basalt_deltas']) {
+  const d = detail['ambient.nether.' + bed];
+  expect(d.bands.lt250 < 0.85, `${bed} bed is audible on small speakers (<250 Hz share ${d.bands.lt250.toFixed(2)})`);
+}
+expect(cen('mob.magmacube.small') > cen('mob.magmacube.big') * 1.3, 'small magma cube is higher than big');
+expect(detail['block.enchantment_table.use'].flatness < 0.1 && cen('block.enchantment_table.use') > 1500, 'enchanting is a bright shimmer');
+expect(cen('dig.basalt') < cen('dig.nether_bricks') && cen('dig.ancient_debris') < cen('dig.nether_bricks'), 'basalt / ancient debris are darker than nether bricks');
+expect(cen('dig.roots') > cen('dig.wart_block') * 1.5, 'roots rustle is brighter than squishy wart block');
+expect(music.nether.meanMidi < music.game.meanMidi - 3, `nether music sits lower (mean midi ${music.nether.meanMidi.toFixed(1)} vs ${music.game.meanMidi.toFixed(1)})`);
+expect(['phrygian', 'aeolian', 'harmonic', 'dorian'].includes(music.nether.mode), 'nether music uses a dark mode');
+for (const kind of ['game', 'menu', 'nether']) {
   const m = music[kind];
   if (m.bad) fail(`music ${kind}: non-finite samples`);
   if (m.rms < 0.005) fail(`music ${kind}: silent (rms ${m.rms.toFixed(4)})`);
@@ -384,6 +445,11 @@ if (live.ready) {
   if (!live.musicAfterSwitch || live.musicAfterSwitch.kind !== 'game' || live.musicAfterSwitch.state !== 'waiting') fail(`switch to game music: ${JSON.stringify(live.musicAfterSwitch)}`);
   if (!live.musicAfterStop || live.musicAfterStop.state !== 'off' || live.fadingLeft !== 0) fail(`stopMusic did not fade out cleanly (${JSON.stringify(live.musicAfterStop)}, fading ${live.fadingLeft})`);
   if (!live.moodReset) fail('cave ambience mood did not trigger');
+  if (!live.loopVoice) fail('looping sounds did not start as loops');
+  if (!live.loopsSurvivePressure) fail('voice stealing killed a looping bed');
+  if (!live.loopsStopped) fail('handle.stop() did not stop looping sounds');
+  if (!live.netherAdditions || live.netherCaveMood !== 0) fail(`nether dimension ambience wrong (additions ${live.netherAdditions}, cave mood ${live.netherCaveMood})`);
+  if (!live.netherMusic || live.netherMusic.kind !== 'nether' || live.netherMusic.state !== 'playing') fail(`nether music did not start (${JSON.stringify(live.netherMusic)})`);
   if (live.updateMaxMs > 15) fail(`update() blocked the main thread for ${live.updateMaxMs}ms`);
 }
 if (result.worstGen.ms > 15) warnings.push(`slowest main-thread synthesis (fallback path): ${result.worstGen.name} ${result.worstGen.ms.toFixed(1)}ms — normally runs in the worker`);
@@ -414,13 +480,15 @@ if (!QUIET) {
   console.log('\nVoice fundamentals (autocorrelation, Hz):');
   for (const [n, v] of Object.entries(f0)) console.log('  ' + pad(n, 18) + (v ? `median ${v.median.toFixed(0)}  range ${v.min.toFixed(0)}-${v.max.toFixed(0)}  track [${v.track.join(' ')}]` : 'unvoiced'));
   console.log('\nSpectral notes:');
-  for (const n of ['dig.glass', 'dig.stone', 'dig.wood', 'dig.wool', 'step.grass', 'random.explode', 'random.orb', 'random.levelup', 'entity.tnt.primed', 'mob.sheep.say']) {
+  for (const n of ['dig.glass', 'dig.stone', 'dig.wood', 'dig.wool', 'step.grass', 'random.explode', 'random.orb', 'random.levelup', 'entity.tnt.primed', 'mob.sheep.say',
+    'ambient.nether.nether_wastes', 'ambient.nether.crimson_forest', 'ambient.nether.warped_forest', 'ambient.nether.soul_sand_valley', 'ambient.nether.basalt_deltas']) {
     const d = detail[n], b = d.bands;
     console.log('  ' + pad(n, 18) + `centroid ${d.centroid.toFixed(0).padStart(5)}Hz  peak ${d.peakHz.toFixed(0).padStart(5)}Hz  flat ${d.flatness.toFixed(3)}  AM ${d.am.rate.toFixed(1)}Hz  bands <250:${b.lt250.toFixed(2)} <1k:${b.b250_1k.toFixed(2)} <4k:${b.b1k_4k.toFixed(2)} <8k:${b.b4k_8k.toFixed(2)} >8k:${b.gt8k.toFixed(2)}`);
   }
+  console.log('\nLoop seams:', Object.entries(result.loops).map(([k, L]) => `${k} jump ${L.jump.toFixed(4)} (typ ${L.p99.toFixed(4)}) lvl ${L.levelRatio.toFixed(2)} ${L.seconds.toFixed(1)}s`).join('; '));
   console.log('\nMusic (offline render):');
   for (const [k, m] of Object.entries(music)) {
-    console.log(`  ${k}: ${m.summary}; first ${MUSIC_SECONDS}s: ${m.notesIn} notes, rms ${m.rms.toFixed(3)}, peak ${m.peak.toFixed(2)}, centroid ${m.centroid.toFixed(0)}Hz, render ${m.renderMs}ms`);
+    console.log(`  ${k}: [mean pitch midi ${m.meanMidi.toFixed(1)}] ${m.summary}; first ${MUSIC_SECONDS}s: ${m.notesIn} notes, rms ${m.rms.toFixed(3)}, peak ${m.peak.toFixed(2)}, centroid ${m.centroid.toFixed(0)}Hz, render ${m.renderMs}ms`);
     console.log(`     loudness per 2s: [${m.profile.join(' ')}]`);
   }
   console.log('\nLive SoundManager:', JSON.stringify({ ...live, errors: live.errors.length }));

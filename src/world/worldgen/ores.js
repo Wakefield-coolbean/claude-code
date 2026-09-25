@@ -6,7 +6,7 @@ import { Rng, hash32, hashf } from './noise.js';
 import * as I from './ids.js';
 
 // replace-target sets
-const T_STONE = 1, T_DEEP = 2, T_BASE = 4; // stone-ish / deepslate-ish / any base stone
+export const T_STONE = 1, T_DEEP = 2, T_BASE = 4; // stone-ish / deepslate-ish / any base stone
 const TARGET = new Uint8Array(4096);
 TARGET[I.STONE] = T_STONE | T_BASE;
 TARGET[I.GRANITE] = T_STONE | T_BASE;
@@ -50,14 +50,21 @@ VEINS.forEach((v, i) => { v.salt = 0x0e5 + i * 7919; });
 
 const sph = new Float64Array(64 * 4); // sphere scratch (x, y, z, r)
 
-// ctx: { cx, cz, buf, seed, topMax (highest terrain y in chunk), biomeAt(x,z) -> biome name, colBiomeName(lx,lz) }
+// ctx: { cx, cz, buf, seed, topMax (highest terrain y in chunk), biomeNameAt(x,z) -> biome name }
 export function placeVeins(ctx) {
+  placeVeinList(ctx, VEINS, TARGET);
+}
+
+// Generic form: `veins` as above (kind 'ore' uses T_STONE -> ore / T_DEEP -> deep, kind 'blob' uses v.mask);
+// `target` maps block id -> bit mask of target classes. Optional ctx.minY bounds vein placement.
+export function placeVeinList(ctx, veins, target) {
   const { cx, cz, seed } = ctx;
   const rng = new Rng(0);
   const X0 = cx << 4, Z0 = cz << 4;
   const topMax = ctx.topMax;
-  for (let vi = 0; vi < VEINS.length; vi++) {
-    const v = VEINS[vi];
+  const minY = ctx.minY ?? MIN_Y;
+  for (let vi = 0; vi < veins.length; vi++) {
+    const v = veins[vi];
     const reach = Math.ceil(v.size / 8 + v.size / 16 + 3);
     for (let sx = cx - 1; sx <= cx + 1; sx++) {
       for (let sz = cz - 1; sz <= cz + 1; sz++) {
@@ -73,19 +80,19 @@ export function placeVeins(ctx) {
           const vs = rng.int(0x7fffffff);
           // cheap culls: out of chunk reach, out of world, above terrain
           if (x + reach < X0 || x - reach > X0 + 15 || z + reach < Z0 || z - reach > Z0 + 15) continue;
-          if (y - reach > topMax || y + reach < MIN_Y) continue;
+          if (y - reach > topMax || y + reach < minY) continue;
           if (v.biomes) {
             const bn = ctx.biomeNameAt(x, z);
             if (!v.biomes.has(bn)) continue;
           }
-          placeVein(ctx, v, x, y, z, vs);
+          placeVein(ctx, v, x, y, z, vs, target);
         }
       }
     }
   }
 }
 
-function placeVein(ctx, v, x, y, z, vs) {
+function placeVein(ctx, v, x, y, z, vs, TARGET) {
   const r = new Rng(vs);
   const size = v.size;
   const f = r.next() * Math.PI;
@@ -117,7 +124,7 @@ function placeVein(ctx, v, x, y, z, vs) {
     if (x1 > x2) continue;
     const z1 = Math.max(Z0, Math.floor(czs - rad)), z2 = Math.min(Z0 + 15, Math.floor(czs + rad));
     if (z1 > z2) continue;
-    const y1 = Math.max(MIN_Y + 1, Math.floor(cys - rad)), y2 = Math.min(318, Math.floor(cys + rad));
+    const y1 = Math.max(ctx.minY ?? MIN_Y + 1, Math.floor(cys - rad)), y2 = Math.min(ctx.maxY ?? 318, Math.floor(cys + rad));
     const inv = 1 / (rad * rad);
     for (let bx = x1; bx <= x2; bx++) {
       const dx = bx + 0.5 - cxs;

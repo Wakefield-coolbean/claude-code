@@ -14,6 +14,7 @@ export class Chunk {
     this.cz = cz;
     this.sections = new Array(SECTION_COUNT).fill(null); // Uint16Array(4096) | null
     this.light = new Array(SECTION_COUNT).fill(null);    // Uint8Array(4096) | null  (sky << 4 | block)
+    this.fullLight = SKY_FULL; // light value of unallocated sections (0 in dimensions without a sky)
     this.biomes = new Uint8Array(256);
     this.heightmap = new Int16Array(256).fill(MIN_Y - 1); // highest block that blocks/filters sky light
     this.features = [];          // feature descriptors (kept so re-generated neighbours can receive them)
@@ -48,10 +49,10 @@ export class Chunk {
   }
 
   getLightLocal(x, y, z) {
-    if (y >= MAX_Y) return SKY_FULL;
+    if (y >= MAX_Y) return this.fullLight;
     if (y < MIN_Y) return 0;
     const l = this.light[(y - MIN_Y) >> 4];
-    if (l === null) return SKY_FULL;
+    if (l === null) return this.fullLight;
     return l[((y - MIN_Y) & 15) << 8 | z << 4 | x];
   }
 
@@ -60,8 +61,8 @@ export class Chunk {
     if (si < 0 || si >= SECTION_COUNT) return;
     let l = this.light[si];
     if (l === null) {
-      if (v === SKY_FULL) return;
-      l = this.light[si] = new Uint8Array(4096).fill(SKY_FULL);
+      if (v === this.fullLight) return;
+      l = this.light[si] = new Uint8Array(4096).fill(this.fullLight);
     }
     l[((y - MIN_Y) & 15) << 8 | z << 4 | x] = v;
   }

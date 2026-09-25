@@ -228,3 +228,24 @@ export function fuelValue(id) {
 }
 
 export { Items };
+
+// ---------- Nether, enchanting & anvil ----------
+for (const w of ['crimson', 'warped']) shapeless([`${w}_stem`], `${w}_planks`, 4);
+shaped(['##', '##'], { '#': 'nether_brick' }, 'nether_bricks');
+shaped(['NW', 'WN'], { N: 'nether_brick', W: 'nether_wart' }, 'red_nether_bricks');
+shaped(['#N#', '#N#'], { '#': 'nether_bricks', N: 'nether_brick' }, 'nether_brick_fence', 6);
+shaped(['#  ', '## ', '###'], { '#': 'nether_bricks' }, 'nether_brick_stairs', 4);
+shaped(['###'], { '#': 'nether_bricks' }, 'nether_brick_slab', 6);
+shaped(['##', '##'], { '#': 'quartz' }, 'quartz_block');
+shapeless(['blaze_rod'], 'blaze_powder', 2);
+shapeless(['blaze_powder', 'slime_ball'], 'magma_cream');
+shaped(['##', '##'], { '#': 'magma_cream' }, 'magma_block');
+shapeless(['gunpowder', 'blaze_powder', 'coal'], 'fire_charge', 3);
+shapeless(['netherite_scrap', 'netherite_scrap', 'netherite_scrap', 'netherite_scrap', 'gold_ingot', 'gold_ingot', 'gold_ingot', 'gold_ingot'], 'netherite_ingot');
+shaped([' B ', 'D#D', '###'], { B: 'book', D: 'diamond', '#': 'obsidian' }, 'enchanting_table');
+shaped(['III', ' i ', 'iii'], { I: 'iron_block', i: 'iron_ingot' }, 'anvil');
+shaped(['nnn', 'nTn', 'nnn'], { n: 'iron_nugget', T: 'torch' }, 'lantern');
+smelt('netherrack', 'nether_brick', 0.1);
+smelt('ancient_debris', 'netherite_scrap', 2.0);
+smelt('nether_quartz_ore', 'quartz', 0.2);
+smelt('nether_gold_ore', 'gold_ingot', 1.0);

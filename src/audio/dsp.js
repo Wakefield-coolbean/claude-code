@@ -147,8 +147,9 @@ export function burst(out, sr, r, o) {
   let fl = 1, flT = 1, flCount = 0;
   const flPeriod = am ? Math.max(1, Math.round(sr / am.rate)) : 0;
   const flCoef = am ? 1 - Math.exp(-2.5 / flPeriod) : 0;
+  const fixed = typeof (o.f ?? 1000) === 'number' && typeof (o.q ?? 0.707) === 'number';
   for (let i = 0; i < n; i++) {
-    if ((i & 15) === 0) {
+    if ((i & 15) === 0 && (i === 0 || !fixed)) {
       const u = i / n, f = fF(u), q = qF(u);
       F1.set(f, q, sr); if (stages > 1) F2.set(f, q, sr);
       if (norm) comp = noiseNorm(mode, f, q, sr);
@@ -540,10 +541,63 @@ export function loopify(buf, sr, xf) {
   return res;
 }
 
+// Feedback comb filter (metallic / tube resonance at 1/delay Hz), in place.
+export function comb(buf, sr, delay, fb = 0.8, mix = 1) {
+  const d = Math.max(1, Math.round(delay * sr));
+  const line = new Float32Array(d);
+  let idx = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const y = buf[i] + line[idx] * fb;
+    line[idx] = y;
+    if (++idx >= d) idx = 0;
+    buf[i] = buf[i] * (1 - mix) + y * mix * (1 - fb);
+  }
+  return buf;
+}
+
+// Frequency rounded so that it completes a whole number of cycles in `L` seconds
+// (keeps tonal layers phase-continuous across a loop point).
+export const periodic = (f, L) => Math.max(1, Math.round(f * L)) / L;
+
+// Sum of steady sines with slow sinusoidal swells, computed with rotating phasors (no per-sample
+// trig). parts: [[freq, amp, swellFreq, swellPhase]]; swell gain = 0.65 + 0.35 sin(...).
+export function droneSines(out, sr, parts) {
+  for (const [f, amp, lf = 0, lph = 0] of parts) {
+    const w = TAU * f / sr, lw = TAU * lf / sr;
+    const cw = Math.cos(w), sw = Math.sin(w), cl = Math.cos(lw), sl = Math.sin(lw);
+    let c = 1, s = 0, lc = Math.cos(lph), ls = Math.sin(lph);
+    for (let i = 0; i < out.length; i++) {
+      out[i] += s * amp * (0.65 + 0.35 * ls);
+      const c2 = c * cw - s * sw; s = s * cw + c * sw; c = c2;
+      const l2 = lc * cl - ls * sl; ls = ls * cl + lc * sl; lc = l2;
+      if ((i & 1023) === 1023) { const k = 1 / Math.hypot(c, s), q = 1 / Math.hypot(lc, ls); c *= k; s *= k; lc *= q; ls *= q; }
+    }
+  }
+  return out;
+}
+
+// Seamless loop builder. build(tonal, noisy, total):
+//   tonal: L seconds, for layers that are exactly periodic in L (use periodic() frequencies);
+//   noisy: L + xf seconds, for noise / events; its tail is crossfaded into its head.
+export function loopBed(sr, L, xf, build) {
+  const tonal = alloc(sr, L), noisy = alloc(sr, L + xf);
+  build(tonal, noisy, L + xf);
+  const out = loopify(noisy, sr, xf);
+  const n = Math.min(out.length, tonal.length);
+  const res = out.length === n ? out : out.slice(0, n);
+  for (let i = 0; i < n; i++) res[i] += tonal[i];
+  return res;
+}
+
 // Final cleanup: DC block, edge fades, trim silent tail, loudness normalise (capped by peak).
+// dc: true (18 Hz high-pass) | 'mean' (subtract the mean; keeps loops seamless) | false
 export function finalize(buf, sr, o = {}) {
   const target = o.target ?? 0.22, peak = o.peak ?? 0.89;
-  if (o.dc !== false) highpass(buf, sr, o.hp ?? 18);
+  if (o.dc === 'mean') {
+    let m = 0; for (let i = 0; i < buf.length; i++) m += buf[i];
+    m /= buf.length || 1;
+    for (let i = 0; i < buf.length; i++) buf[i] -= m;
+  } else if (o.dc !== false) highpass(buf, sr, o.hp ?? 18);
   let end = buf.length;
   if (o.trim !== false) {
     let p = peakOf(buf);
@@ -552,7 +606,7 @@ export function finalize(buf, sr, o = {}) {
     end = Math.min(buf.length, end + Math.round(0.01 * sr));
   }
   let b = end < buf.length ? buf.slice(0, end) : buf;
-  const fi = Math.min(b.length, Math.max(1, Math.round((o.fadeIn ?? 0.0005) * sr)));
+  const fi = Math.min(b.length, Math.round((o.fadeIn ?? 0.0005) * sr));
   for (let i = 0; i < fi; i++) b[i] *= i / fi;
   const fo = Math.min(b.length, Math.round((o.fadeOut ?? 0.012) * sr));
   for (let i = 0; i < fo; i++) b[b.length - 1 - i] *= i / fo;
