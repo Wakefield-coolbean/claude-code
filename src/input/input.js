@@ -35,11 +35,13 @@ export class Input {
     window.addEventListener('mousemove', (e) => this.onMouseMove(e));
     target.addEventListener('wheel', (e) => { e.preventDefault(); this.onWheel(e); }, { passive: false });
     target.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.lockErrors = 0;
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === target;
+      if (this.pointerLocked) { this.lockErrors = 0; this.pointerLockFailed = false; }
       if (!this.pointerLocked && this.wantsCapture) this.onCaptureChange?.(false);
     });
-    document.addEventListener('pointerlockerror', () => { this.pointerLockFailed = true; });
+    document.addEventListener('pointerlockerror', () => this.lockFailed());
     // touch: basic support maps to drag-look
     target.addEventListener('touchstart', (e) => { const t = e.touches[0]; this.mx = t.clientX; this.my = t.clientY; }, { passive: true });
   }
@@ -101,18 +103,25 @@ export class Input {
     this.my = (e.clientY - r.top) * (this.target.height / r.height);
   }
 
+  // A single failed request (e.g. not triggered by a click) must not disable locking for good:
+  // only give up after repeated errors, such as in a sandboxed frame without pointer-lock permission.
+  lockFailed() { if (++this.lockErrors >= 3) this.pointerLockFailed = true; }
+
   capture() {
     this.wantsCapture = true;
-    if (this.pointerLockSupported && !this.pointerLockFailed && !this.pointerLocked) {
+    this.target.style.cursor = 'none';
+    if (this.pointerLockSupported && !this.pointerLockFailed && !this.pointerLocked && !document.pointerLockElement) {
       try {
-        const p = this.target.requestPointerLock({ unadjustedMovement: false });
-        if (p && p.catch) p.catch(() => { this.pointerLockFailed = true; });
-      } catch (err) { this.pointerLockFailed = true; }
+        let p;
+        try { p = this.target.requestPointerLock({ unadjustedMovement: false }); } catch (e) { p = this.target.requestPointerLock(); }
+        if (p && p.catch) p.catch(() => this.lockFailed());
+      } catch (err) { this.lockFailed(); }
     }
   }
   release() {
     this.wantsCapture = false;
     this.dragLook = false;
+    this.target.style.cursor = '';
     if (document.pointerLockElement) document.exitPointerLock();
   }
 
