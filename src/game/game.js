@@ -33,6 +33,7 @@ import { generateBlockTextures } from '../textures/blockTextures.js';
 import { generateItemTextures } from '../textures/itemTextures.js';
 import { generateGuiTextures } from '../textures/guiTextures.js';
 import { generateEntityTextures } from '../textures/entityTextures.js';
+import { applyPlaceholderSkins } from '../textures/placeholderSkins.js';
 import { generateParticleTextures } from '../textures/particleTextures.js';
 import { generateEnvironmentTextures } from '../textures/environmentTextures.js';
 import { renderTitleLogo } from '../textures/logo.js';
@@ -89,6 +90,7 @@ export class Game {
     const itemTex = generateItemTextures();
     const guiTex = generateGuiTextures();
     const entityTex = generateEntityTextures();
+    applyPlaceholderSkins(entityTex);
     const particleTex = generateParticleTextures();
     const envTex = generateEnvironmentTextures();
     this.blockTexMap = blockTex;
