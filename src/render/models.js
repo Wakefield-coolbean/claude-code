@@ -43,6 +43,7 @@ function quadruped(tex, { legH, bodyFrom, bodySize, bodyUV, headPivot, headBoxes
 export const MODELS = {
   player: () => humanoid('player'),
   zombie: () => humanoid('zombie'),
+  villager: () => humanoid('villager', { hat: false }),
   skeleton: () => humanoid('skeleton', { armW: 2, legW: 2, texH: 32, hat: false, limbs64: false }),
   creeper: () => {
     const m = quadruped('creeper', {
@@ -208,7 +209,7 @@ export function animate(type, m, s) {
   const headX = -s.headPitch; // vanilla xRot (down positive)
   if (c.head) { c.head.ry = s.headYaw; c.head.rx = headX; }
   switch (type) {
-    case 'player': case 'zombie': case 'skeleton': case 'armor1': case 'armor2': {
+    case 'player': case 'villager': case 'zombie': case 'skeleton': case 'armor1': case 'armor2': {
       c.rightArm.rx = Math.cos(ls * 0.6662 + PI) * 2 * la * 0.5;
       c.leftArm.rx = Math.cos(ls * 0.6662) * 2 * la * 0.5;
       c.rightLeg.rx = Math.cos(ls * 0.6662) * 1.4 * la;

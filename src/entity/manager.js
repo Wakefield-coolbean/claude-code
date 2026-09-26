@@ -262,6 +262,14 @@ export class EntityManager {
   onChunkLit(c) {
     if (!c.fresh || c.animalsSpawned) return;
     c.animalsSpawned = true;
+    for (const f of c.features ?? []) {
+      if (f.type !== 'v_house') continue;
+      const n = f.kind === 'small' ? 1 : 2;
+      for (let i = 0; i < n; i++) {
+        const m = this.game.spawnMob('villager', f.x + 0.5 + (i ? 0.6 : 0), f.y + 1, f.z + 0.5);
+        if (m) { m.home = { x: f.x + 0.5, y: f.y + 1, z: f.z + 0.5 }; m.persistent = true; }
+      }
+    }
     if (Math.random() < 0.1) this.spawnAnimalGroup((c.cx << 4) + 8, (c.cz << 4) + 8);
   }
 

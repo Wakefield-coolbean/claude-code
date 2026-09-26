@@ -19,6 +19,7 @@ import { BINFO, pickTree } from './biomeinfo.js';
 import { Fractal, Rng, hash32, hashf } from './noise.js';
 import * as I from './ids.js';
 import { NetherGenerator } from './nether.js';
+import { VillagePlanner } from './village.js';
 
 const WH = MAX_Y - MIN_Y;         // 384
 const NY = WH / 8 + 1;            // 49 corner rows (8-block cells)
@@ -37,6 +38,7 @@ export class WorldGenerator {
     this.type = options.type ?? 'default';
     this.flat = this.type === 'flat';
     this.climate = new Climate(this.seed, this.type);
+    this.villages = new VillagePlanner(this.seed, this.climate);
     this.caves = new CaveNoise(this.seed);
     this.sample = makeSample();
     const h = (k) => hash32(this.seed, k, 0x5eed, 9);
@@ -99,6 +101,71 @@ export class WorldGenerator {
   // Structures only exist in the Nether for now.
   findNearestFortress() { return null; }
 
+  // Village pieces centred in this chunk become features; returns true if any village touches it.
+  emitVillages(cx, cz, features) {
+    if (this.flat || !this.villages) return false;
+    const plans = this.villages.forChunk(cx, cz);
+    if (!plans.length) return false;
+    const { buf, colTop, used } = this;
+    const X0 = cx << 4, Z0 = cz << 4;
+    const WATER_ID = I.WATER;
+    const surface = (lx, lz) => {
+      const col = (lz << 4) | lx;
+      let y = colTop[col];
+      let wet = false;
+      while (y < SEA + 8 && (buf[((y + 1 - MIN_Y) << 8) | col] & 0xfff) === WATER_ID) { y++; wet = true; }
+      return { y, wet };
+    };
+    const inChunk = (x, z) => x >= X0 && x < X0 + 16 && z >= Z0 && z < Z0 + 16;
+    let touched = false;
+    for (const plan of plans) {
+      // keep trees off village ground (2-block margin)
+      const mark = (x0, z0, x1, z1) => {
+        for (let x = Math.max(X0, x0 - 2); x <= Math.min(X0 + 15, x1 + 2); x++)
+          for (let z = Math.max(Z0, z0 - 2); z <= Math.min(Z0 + 15, z1 + 2); z++) { used[((z - Z0) << 4) | (x - X0)] = 1; touched = true; }
+      };
+      for (const p of plan.pieces) mark(p.x0, p.z0, p.x1, p.z1);
+      for (const rd of plan.roads) mark(rd[0], rd[1], rd[2], rd[3]);
+      // road cells in this chunk (roads may cross, so dedupe)
+      const cells = [], seen = new Set();
+      for (const rd of plan.roads) {
+        for (let x = Math.max(X0, rd[0]); x <= Math.min(X0 + 15, rd[2]); x++) for (let z = Math.max(Z0, rd[1]); z <= Math.min(Z0 + 15, rd[3]); z++) {
+          const k = (x - X0) | ((z - Z0) << 4);
+          if (seen.has(k)) continue;
+          seen.add(k);
+          if (plan.pieces.some((p) => p.type === 'v_well' && x >= p.x0 && x <= p.x1 && z >= p.z0 && z <= p.z1)) continue;
+          const s = surface(x - X0, z - Z0);
+          cells.push([x, z, s.y, s.wet ? 1 : 0]);
+        }
+      }
+      if (cells.length) features.push({ type: 'v_road', style: plan.style, x: X0 + 8, z: Z0 + 8, r: 9, cells });
+      for (const p of plan.pieces) {
+        const mx = (p.x0 + p.x1) >> 1, mz = (p.z0 + p.z1) >> 1;
+        if (!inChunk(mx, mz)) continue;
+        const s = surface(mx - X0, mz - Z0);
+        if (s.wet && p.type !== 'v_lamp') continue;
+        const r = Math.max(p.x1 - p.x0, p.z1 - p.z0) / 2 + 3;
+        features.push({ ...p, style: plan.style, x: mx, z: mz, y: s.y, r });
+      }
+    }
+    return touched;
+  }
+
+  // nearest village centre to (x, z) within `radius` blocks, or null
+  findNearestVillage(x, z, radius = 1200) {
+    if (!this.villages) return null;
+    const R = 24 * 16;
+    let best = null, bd = Infinity;
+    for (let rx = Math.floor((x - radius) / R); rx <= Math.floor((x + radius) / R); rx++)
+      for (let rz = Math.floor((z - radius) / R); rz <= Math.floor((z + radius) / R); rz++) {
+        const p = this.villages.regionPlan(rx, rz);
+        if (!p) continue;
+        const d = Math.hypot(p.cx - x, p.cz - z);
+        if (d < bd && d <= radius) { bd = d; best = { x: p.cx, z: p.cz, style: p.style }; }
+      }
+    return best;
+  }
+
   placeFeature(access, feature) {
     if (this.flat) return false;
     return placeFeatureImpl(access, feature);
@@ -107,6 +174,17 @@ export class WorldGenerator {
   getSpawnPoint() {
     if (this._spawn) return { ...this._spawn };
     if (this.flat) { this._spawn = { x: 0, y: -60, z: 0 }; return { ...this._spawn }; }
+    // start next to the well of a nearby village when there is one
+    const v = this.findNearestVillage(0, 0, 800);
+    if (v) {
+      const sx = v.x - 3, sz = v.z;
+      const col = this.generateColumn(sx >> 4, sz >> 4);
+      for (const f of col.features) {
+        if (f.type !== 'v_road') continue;
+        const c = f.cells.find((q) => q[0] === sx && q[1] === sz && !q[3]);
+        if (c) { this._spawn = { x: sx, y: c[2] + 1, z: sz }; return { ...this._spawn }; }
+      }
+    }
     const o = this.sample;
     let best = null, fallback = null;
     // spiral search on a 16-block lattice: prefer temperate dry land, accept any dry land
@@ -484,6 +562,8 @@ export class WorldGenerator {
     const X0 = cx << 4, Z0 = cz << 4;
     const seed = this.seed;
     used.fill(0);
+    // ---- villages (placed before trees; their ground is kept clear of trees and lakes) ----
+    const inVillage = this.emitVillages(cx, cz, features);
     // ---- trees ----
     const r = new Rng(hash32(seed, cx, cz, 0x7ee5));
     const K = 28;
@@ -515,7 +595,7 @@ export class WorldGenerator {
     const roll = rl.next(), lx = rl.int(16), lz = rl.int(16), ls = rl.int(0x7fffffff);
     const lcol = (lz << 4) | lx;
     const linfo = BINFO[colBiome[lcol]];
-    const surfaceOk = !linfo.water && linfo.surface !== 2 && colTop[lcol] > SEA && colTop[lcol] < 200;
+    const surfaceOk = !inVillage && !linfo.water && linfo.surface !== 2 && colTop[lcol] > SEA && colTop[lcol] < 200;
     if (roll < 1 / 48 && surfaceOk) {
       features.push({ type: 'lake', fluid: 'water', x: X0 + lx, y: colTop[lcol], z: Z0 + lz, seed: ls, frozen: linfo.freezes });
     } else if (roll > 1 - 1 / 280 && surfaceOk) {

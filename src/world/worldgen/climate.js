@@ -66,14 +66,14 @@ const MIDDLE = [
   ['snowy_plains', 'snowy_plains', 'snowy_plains', 'snowy_taiga', 'taiga'],
   ['plains', 'plains', 'forest', 'taiga', 'taiga'],
   ['plains', 'plains', 'forest', 'birch_forest', 'dark_forest'],
-  ['savanna', 'savanna', 'forest', 'jungle', 'jungle'],
+  ['savanna', 'savanna', 'plains', 'forest', 'jungle'],
   ['desert', 'desert', 'desert', 'desert', 'desert'],
 ].map((r) => r.map(b));
 const MIDDLE_VARIANT = [
   ['snowy_plains', null, 'snowy_taiga', null, null],
   [null, null, null, null, 'taiga'],
   ['flower_forest', 'sunflower_plains', null, 'birch_forest', null],
-  [null, null, 'plains', 'jungle', 'jungle'],
+  [null, null, null, null, 'jungle'],
   [null, null, null, null, null],
 ].map((r) => r.map((n) => (n ? b(n) : -1)));
 const PLATEAU = [
@@ -84,8 +84,10 @@ const PLATEAU = [
   ['badlands', 'badlands', 'badlands', 'badlands', 'badlands'],
 ].map((r) => r.map(b));
 
-function tempIndex(t) { return t < -0.62 ? 0 : t < -0.22 ? 1 : t < 0.22 ? 2 : t < 0.62 ? 3 : 4; }
-function humidIndex(h) { return h < -0.55 ? 0 : h < -0.15 ? 1 : h < 0.2 ? 2 : h < 0.55 ? 3 : 4; }
+// Band edges on the uniformised [-1, 1] parameters: extremes (frozen, desert) are narrow and the
+// temperate bands wide, and the two driest humidity bands (plains) cover about half the range.
+function tempIndex(t) { return t < -0.74 ? 0 : t < -0.32 ? 1 : t < 0.3 ? 2 : t < 0.76 ? 3 : 4; }
+function humidIndex(h) { return h < -0.45 ? 0 : h < 0.05 ? 1 : h < 0.35 ? 2 : h < 0.68 ? 3 : 4; }
 
 // Sample record (reused, never allocated per call)
 export function makeSample() {

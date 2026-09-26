@@ -55,6 +55,33 @@ const SKINS = {
   },
 };
 
+// Villager: a hooded traveller in a rust-coloured robe with a cream sash (our own design).
+SKINS.villager = (t, r) => {
+  const HOOD = [[46, 82, 58], [40, 74, 52], [52, 90, 64]];
+  const ROBE = [[150, 74, 44], [140, 68, 40], [160, 82, 50]];
+  const SKIN = [[214, 168, 128], [206, 160, 120]];
+  paint(t, [0, 0, 32, 16], HOOD, r);                       // head: hood everywhere
+  paint(t, [9, 10, 15, 16], SKIN, r);                      // face opening
+  px(t, [[10, 12], [13, 12]], [46, 34, 28]);               // eyes
+  px(t, [[10, 11], [13, 11]], [120, 90, 70]);              // brows in hood shadow
+  px(t, row(14, 11, 12), [150, 100, 84]);                  // mouth
+  px(t, row(10, 9, 14), [120, 92, 70]);                    // hood shadow on the forehead
+  paint(t, [16, 16, 40, 32], ROBE, r);                     // body
+  px(t, [...row(26, 16, 39)], [230, 214, 170]);            // sash
+  px(t, [[23, 26], [24, 26]], [200, 160, 60]);             // clasp
+  paint(t, [40, 16, 56, 32], ROBE, r);                     // right arm
+  paint(t, [32, 48, 48, 64], ROBE, r);                     // left arm
+  for (const [x0, y0] of [[40, 16], [32, 48]]) {
+    px(t, row(y0 + 12, x0, x0 + 15), [230, 214, 170]);     // cuffs
+    for (const y of [y0 + 14, y0 + 15]) px(t, row(y, x0, x0 + 15), SKIN[0]); // hands
+  }
+  for (const [x0, y0] of [[0, 16], [16, 48]]) {           // legs: robe hem, trousers, boots
+    paint(t, [x0, y0, x0 + 16, y0 + 16], ROBE, r);
+    paint(t, [x0, y0 + 10, x0 + 16, y0 + 13], [[70, 58, 50], [64, 52, 46]], r);
+    paint(t, [x0, y0 + 13, x0 + 16, y0 + 16], [[58, 40, 28], [50, 34, 24]], r);
+  }
+};
+
 export function drawOriginalSkin(name, tex, shooting = false) {
   SKINS[name](tex, rng(name.length * 7919 + (shooting ? 5 : 0)), shooting);
 }

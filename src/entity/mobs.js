@@ -832,5 +832,38 @@ export class Chicken extends Animal {
   loot(killer, looting) { return [{ item: 'feather', count: rnd(0, 2 + looting) }, { item: this.fireTicks > 0 ? 'cooked_chicken' : 'chicken', count: 1 }]; }
 }
 
-export const MOB_TYPES = { zombie: Zombie, skeleton: Skeleton, creeper: Creeper, spider: Spider, enderman: Enderman, pig: Pig, cow: Cow, sheep: Sheep, chicken: Chicken };
+// Villagers wander their village by day and head home at night; they panic when hurt.
+class Villager extends Animal {
+  constructor(world) {
+    super(world, 'villager');
+    this.size(0.6, 1.95, 1.62);
+    this.maxHealth = this.health = 20;
+    this.speed = 0.5;
+    this.preferGrass = false;
+    this.ambientInterval = 1e9;
+    this.home = null;
+  }
+  playSound(kind) {
+    if (kind === 'hurt' || kind === 'death') this.game?.sound?.play('damage.hit', { x: this.x, y: this.y + 1, z: this.z, volume: 0.6 });
+  }
+  think() {
+    if (!this.home) this.home = { x: this.x, y: this.y, z: this.z };
+    if (this.panicTime > 0) { super.think(); return; }
+    const w = this.world, h = this.home;
+    const night = w.dayTime % 24000 > 12500 && w.dayTime % 24000 < 23400;
+    const far = Math.hypot(this.x - h.x, this.z - h.z);
+    if (night || far > 24) {
+      if (far > 1.5 && (!this.navigating || this.age % 40 === 0)) this.moveTo(h.x, h.y, h.z, 0.7);
+      return;
+    }
+    const p = this.game?.player;
+    if (p && !p.dead && !p.spectator && this.distanceTo(p) < 6 && Math.random() < 0.02) { this.lookTarget = p; this.lookTime = 60; }
+    if (this.lookTime > 0 && this.lookTarget) { this.lookTime--; this.lookAtEntity(this.lookTarget, 0.3); return; }
+    this.randomStroll(0.6, 80, 8);
+  }
+  extraData() { return { home: this.home }; }
+  loadExtra(d) { this.home = d.home ?? null; }
+}
+
+export const MOB_TYPES = { villager: Villager, zombie: Zombie, skeleton: Skeleton, creeper: Creeper, spider: Spider, enderman: Enderman, pig: Pig, cow: Cow, sheep: Sheep, chicken: Chicken };
 export { packBlock };

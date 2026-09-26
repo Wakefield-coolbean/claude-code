@@ -4,6 +4,7 @@
 import { IS_SOLID, IS_LIQUID } from '../../registry/blocks.js';
 import { packBlock } from '../../constants.js';
 import { Rng } from './noise.js';
+import { placeVillageFeature } from './village.js';
 import * as I from './ids.js';
 
 const LEAVES = new Uint8Array(4096);
@@ -88,7 +89,7 @@ export function placeFeature(access, f) {
     case 'tree': return placeTree(access, f);
     case 'lake': return placeLake(access, f);
     case 'dungeon': return placeDungeon(access, f);
-    default: return false;
+    default: return f.type.startsWith('v_') ? placeVillageFeature(access, f) : false;
   }
 }
 

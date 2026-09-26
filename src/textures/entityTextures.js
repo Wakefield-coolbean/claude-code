@@ -1013,7 +1013,7 @@ function drawEnchantingBook(c) {
 // ---------------------------------------------------------------------------------------------
 
 export const ENTITY_TEXTURE_SIZES = {
-  player: [64, 64], zombie: [64, 64], skeleton: [64, 32], creeper: [64, 32], spider: [64, 32],
+  player: [64, 64], villager: [64, 64], zombie: [64, 64], skeleton: [64, 32], creeper: [64, 32], spider: [64, 32],
   pig: [64, 64], cow: [64, 64], sheep: [64, 64], sheep_fur: [64, 64], chicken: [64, 32],
   enderman: [64, 32], shield: [64, 64],
   zombified_piglin: [64, 64], ghast: [64, 64], ghast_shooting: [64, 64], blaze: [64, 32],
@@ -1026,7 +1026,7 @@ for (const m of ARMOR_MATERIALS) {
 }
 
 const DRAWERS = {
-  player: drawPlayer, zombie: (c) => drawOriginalSkin('zombie', c), skeleton: drawSkeleton, creeper: (c) => drawOriginalSkin('creeper', c),
+  player: drawPlayer, villager: (c) => drawOriginalSkin('villager', c), zombie: (c) => drawOriginalSkin('zombie', c), skeleton: drawSkeleton, creeper: (c) => drawOriginalSkin('creeper', c),
   spider: drawSpider, pig: drawPig, cow: drawCow, sheep: drawSheep, sheep_fur: drawSheepFur,
   chicken: drawChicken, enderman: (c) => drawOriginalSkin('enderman', c), shield: drawShield,
   zombified_piglin: (c) => drawOriginalSkin('zombified_piglin', c), ghast: (c) => drawOriginalSkin('ghast', c), ghast_shooting: (c) => drawOriginalSkin('ghast', c, true),
