@@ -38,7 +38,7 @@ export class Input {
     this.lockErrors = 0;
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === target;
-      if (this.pointerLocked) { this.lockErrors = 0; this.pointerLockFailed = false; }
+      if (this.pointerLocked) { this.lockErrors = 0; this.pointerLockFailed = false; this.lockWorked = true; this.target.style.cursor = 'none'; }
       if (!this.pointerLocked && this.wantsCapture) this.onCaptureChange?.(false);
     });
     document.addEventListener('pointerlockerror', () => this.lockFailed());
@@ -75,6 +75,8 @@ export class Input {
     if (this.wantsCapture && !this.pointerLocked) {
       this.capture();
       if (this.pointerLockFailed || !this.pointerLockSupported) this.dragLook = true;
+      // the click that grabs the mouse shouldn't also break or place a block
+      else { this.mouse[e.button] = false; this.mousePressedThisFrame[e.button] = false; }
     }
   }
   onMouseUp(e) {
@@ -103,20 +105,26 @@ export class Input {
     this.my = (e.clientY - r.top) * (this.target.height / r.height);
   }
 
-  // A single failed request (e.g. not triggered by a click) must not disable locking for good:
-  // only give up after repeated errors, such as in a sandboxed frame without pointer-lock permission.
-  lockFailed() { if (++this.lockErrors >= 3) this.pointerLockFailed = true; }
+  // Browsers reject some lock requests (no recent click, or re-locking within ~1 s of pressing Esc).
+  // Those are retried on the next click; we only fall back to drag-to-look when locking has never
+  // worked in this session and keeps failing (e.g. a sandboxed frame without pointer-lock permission).
+  lockFailed() {
+    if (!this.lockWorked && ++this.lockErrors >= 3) {
+      this.pointerLockFailed = true;
+      if (this.wantsCapture) this.target.style.cursor = 'crosshair';
+    }
+  }
 
   capture() {
     this.wantsCapture = true;
-    this.target.style.cursor = 'none';
     if (this.pointerLockSupported && !this.pointerLockFailed && !this.pointerLocked && !document.pointerLockElement) {
       try {
-        let p;
-        try { p = this.target.requestPointerLock({ unadjustedMovement: false }); } catch (e) { p = this.target.requestPointerLock(); }
+        const p = this.target.requestPointerLock();
         if (p && p.catch) p.catch(() => this.lockFailed());
       } catch (err) { this.lockFailed(); }
     }
+    // without a lock the cursor stays visible so drag-to-look is usable
+    this.target.style.cursor = this.pointerLocked ? 'none' : this.pointerLockFailed || !this.pointerLockSupported ? 'crosshair' : '';
   }
   release() {
     this.wantsCapture = false;
@@ -124,6 +132,9 @@ export class Input {
     this.target.style.cursor = '';
     if (document.pointerLockElement) document.exitPointerLock();
   }
+
+  // game wants the mouse but the browser hasn't granted the lock yet: the HUD asks for a click
+  get awaitingLock() { return this.wantsCapture && !this.captured; }
 
   get captured() { return this.pointerLocked || (this.wantsCapture && (this.pointerLockFailed || !this.pointerLockSupported)); }
 

@@ -47,6 +47,12 @@ export class Hud {
     if (!p) return;
     const w = gui.width, h = gui.height;
     const settings = g.settings;
+    if (g.inGame && !g.screen && g.input.awaitingLock) {
+      // lock was refused (e.g. clicked too soon after Esc): ask for a click instead of half-working look
+      gui.fill(0, 0, w, h, 'rgba(0,0,0,0.45)');
+      gui.textCentered('Click to resume', w / 2, h / 2 - 4, '#ffffff');
+      return;
+    }
     if (g.hideGui) return;
     this.renderVignette(gui, p);
     if (p.portalTime > 0) this.renderPortalOverlay(gui, p);
