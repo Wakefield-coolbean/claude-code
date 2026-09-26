@@ -1225,11 +1225,18 @@ function flightStep(f, dt) {
       }
       case 'pro': {
         target = v > 0.3 ? velAng : upAng;
-        // ascent guidance: in thick air never lean further than the flight profile allows
+        // ascent guidance (after Pitch Over): follow a gravity-turn program, never steeper than the profile
+        // and never leaning further than the thick air allows
         const vr = (f.vx * ux + f.vy * uy);
-        if (dom.id === 'home' && rho > 0.0005 && vr > 0 && f.thrusting) {
-          const tilt = wrapPi(upAng - target), lim = maxTilt(f, alt);
-          if (Math.abs(tilt) > lim) target = upAng - Math.sign(tilt) * lim;
+        // circularize assist: burning near the top of a suborbital arc flies flat until the orbit closes
+        if (dom.id === 'home' && alt > 45 && f.thrusting && f.el && f.el.eps < 0 && f.el.pe < dom.atm + 1) {
+          target = flatBurnAngle(f, rx, ry, rr, upAng, alt, Math.max(alt, dom.atm + 4));
+        } else if (dom.id === 'home' && alt < dom.atm && vr > 0 && f.thrusting) {
+          const hh = rx * f.vy - ry * f.vx, side = hh > 0 ? -1 : 1; // lean the way we're already drifting (east by default)
+          const lim = maxTilt(f, alt);
+          const tiltVel = Math.abs(wrapPi(upAng - velAng));
+          const tilt = clamp(Math.max(tiltVel, lim - 0.12), 0, lim);
+          target = upAng - side * tilt;
         }
         break;
       }
@@ -1243,16 +1250,7 @@ function flightStep(f, dt) {
       }
       case 'prof': target = upAng - (maxTilt(f, alt) - 0.05); break; // autopilot ascent profile
       case 'ap': target = f.apAngle != null ? f.apAngle : upAng; break; // autopilot-computed thrust direction
-      case 'horiz': { // autopilot circularization: flat, nudging up when sinking
-        const vr = f.vx * ux + f.vy * uy;
-        const hh = rx * f.vy - ry * f.vx;
-        const vh = Math.abs(hh) / rr, gl = dom.gm / (rr * rr);
-        const hold = f.ap.circAlt || alt;
-        const want = (gl - (vh * vh) / rr) - vr * 0.7 + (hold - alt) * 0.1;
-        const pitchUp = Math.asin(clamp(want / Math.max(f._aT || 0.1, 0.1), -0.5, 0.95));
-        target = upAng + (hh >= 0 ? 1 : -1) * (Math.PI / 2 - pitchUp);
-        break;
-      }
+      case 'horiz': target = flatBurnAngle(f, rx, ry, rr, upAng, alt, f.ap.circAlt || alt); break; // autopilot circularization
     }
   }
   const turn = 0.8 + top.turn + (rho > 0.01 && f.stages.length ? 0.3 : 0);
@@ -1447,6 +1445,16 @@ function flightStep(f, dt) {
   const inSpace = f.dom.id !== 'home' || hAlt > home.atm;
   if (inSpace) f.stats.spaceT += dt;
   if (inSpace && top.labs) f.stats.sci += top.labs * dt * (f.dom.id === 'moon' ? 3 : f.dom.id === 'rubra' ? 6 : 1);
+}
+// point along the horizon (direction of travel), pitching up just enough to hold `hold` altitude
+function flatBurnAngle(f, rx, ry, rr, upAng, alt, hold) {
+  const ux = rx / rr, uy = ry / rr;
+  const vr = f.vx * ux + f.vy * uy;
+  const hh = rx * f.vy - ry * f.vx;
+  const vh = Math.abs(hh) / rr, gl = f.dom.gm / (rr * rr);
+  const want = (gl - (vh * vh) / rr) - vr * 0.7 + (hold - alt) * 0.1;
+  const pitchUp = Math.asin(clamp(want / Math.max(f._aT || 0.1, 0.1), -0.5, 0.95));
+  return upAng + (hh >= 0 ? 1 : -1) * (Math.PI / 2 - pitchUp);
 }
 function maxTilt(f, alt) { return Math.pow(clamp(alt / 48, 0, 1), 0.65) * (Math.PI / 2) + 0.05; }
 function hasActiveThrust(f) {
@@ -3190,10 +3198,13 @@ function renderStack() {
   d.extras.forEach((id, i) => top.appendChild(stackRow('Extra', PARTS[id], () => d.extras.splice(i, 1))));
   box.appendChild(top);
   const cur = curStageIdx();
+  const per = rocketStats(d, mods).perStage;
   d.stages.forEach((s, i) => {
     const sec = el('div', 'sec' + (i === cur ? ' sel' : ''));
     const order = d.stages.length - i;
-    sec.innerHTML = `<h4>Stage ${order} <span class="rk" style="font-weight:800;color:var(--ink-3)">${order === 1 ? 'fires first' : 'fires ' + ['', '1st', '2nd', '3rd', '4th', '5th'][order]}</span><span class="sp"></span></h4>`;
+    const ps = per[i];
+    const info = ps && (ps.dv > 0 || ps.thrust > 0) ? `<span class="rk num" style="font-weight:800;color:var(--ink-2);text-transform:none;letter-spacing:0">${fmtNum(Math.round(ps.dv * SPD))} m/s · TWR ${ps.twr.toFixed(2)}</span>` : '';
+    sec.innerHTML = `<h4>Stage ${order} <span class="rk" style="font-weight:800;color:var(--ink-3)">${order === 1 ? 'fires first' : 'fires ' + ['', '1st', '2nd', '3rd', '4th', '5th'][order]}</span><span class="sp"></span></h4>${info ? `<div class="row" style="padding-top:0">${info}</div>` : ''}`;
     const xs = el('button', 'x', '×'); xs.setAttribute('aria-label', 'Remove stage'); xs.onclick = (e) => { e.stopPropagation(); d.stages.splice(i, 1); selStage = -1; AudioSys.sfx('click'); designChanged(); };
     sec.querySelector('.sp').replaceWith(xs); xs.style.marginLeft = 'auto';
     sec.onclick = () => { selStage = i; renderStack(); };
@@ -3683,6 +3694,8 @@ function flightHint(f) {
   if (f.steer === 'up' && home && f.rho > 0.002 && el2 && el2.vr > 0 && f.alt > 1.5 && f.alt < 10 && save.firsts.space && acts[4]) return [`Going for orbit? ${K(4)} Pitch Over now`, ''];
   if (home && f.engineOn && s && s.eng && s.eng.kind !== 'solid' && el2 && el2.apo > 78 && el2.pe < 70 && f.alt < 70) return [`Apoapsis ${fmtAlt(el2.apo)}: cut engine ${K(3)} and coast up`, 'good'];
   if (home && !f.engineOn && acts[3] && el2 && el2.pe < 70 && el2.apo > 70 && el2.tAp < 12 && el2.eps < 0 && f.alt > 55) return [`Near the top: relight ${K(3)} to reach orbit`, 'good'];
+  if (home && f.engineOn && f.thrusting && f.alt > 45 && el2 && el2.eps < 0 && el2.pe < 70 && el2.apo >= 70) return [`Flying flat for orbit: keep burning until Periapsis passes 70 km (now ${el2.pe < 0 ? 'below ground' : fmtAlt(el2.pe)})`, ''];
+  if (home && f.engineOn && f.thrusting && f.inOrbit && f.steer !== 'retro') return [`ORBIT! Cut the engine ${K(3)} to save fuel`, 'good'];
   if (f.inOrbit && home && save.firsts.orbit1 && hasFuelLeft(f) && f.steer !== 'retro') { const mw = moonWindow(f); return [mw === 'BURN NOW!' ? `Moon window: BURN NOW! ${K(3)} until Apoapsis reaches 5,000 km` : `Moon window ${mw}. Then burn ${K(3)} prograde to 5,000 km. Home: ${K(4)} Point Retro`, mw === 'BURN NOW!' ? 'good' : '']; }
   if (f.inOrbit && home) return [`In orbit! ${K(9)} speeds up time. To come home: ${K(4)} Point Retro, then ${K(3)} burn`, 'good'];
   if (home && f.steer === 'retro' && f.engineOn && el2 && el2.pe > 0 && f.alt > 70) return [`Burning retro. Cut ${K(3)} once Periapsis is below 40 km`, ''];
@@ -4225,7 +4238,7 @@ function boot() {
   $('btnSound').onclick = () => toggleSound();
   $('goal').onclick = () => showGoals();
   $('btnPause').onclick = () => openPause();
-  $('btnTakeover').onclick = () => { if (flight) { flight.plan = 'manual'; flight.autoStage = !!save.up.a_stage && save.assistStage; flight.autoLand = !!save.up.a_land && save.assistLand; $('apBadge').hidden = true; toast('You have control!'); } };
+  $('btnTakeover').onclick = () => { if (flight) { flight.plan = 'manual'; flight.throttle = 1; if (['prof', 'horiz', 'ap', 'kick'].includes(flight.steer)) flight.steer = flight.landed ? 'up' : 'pro'; flight.autoStage = !!save.up.a_stage && save.assistStage; flight.autoLand = !!save.up.a_land && save.assistLand; $('apBadge').hidden = true; toast('You have control!'); } };
   window.addEventListener('keydown', onKey);
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); else { offlineCheck(); lastT = performance.now(); } });
   window.addEventListener('pagehide', saveGame);
