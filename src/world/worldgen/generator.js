@@ -174,8 +174,8 @@ export class WorldGenerator {
   getSpawnPoint() {
     if (this._spawn) return { ...this._spawn };
     if (this.flat) { this._spawn = { x: 0, y: -60, z: 0 }; return { ...this._spawn }; }
-    // start next to the well of a nearby village when there is one
-    const v = this.findNearestVillage(0, 0, 800);
+    // about one world in four starts next to the well of a nearby village
+    const v = (hash32(this.seed, 0x51a7, 0, 0) & 3) === 0 ? this.findNearestVillage(0, 0, 800) : null;
     if (v) {
       const sx = v.x - 3, sz = v.z;
       const col = this.generateColumn(sx >> 4, sz >> 4);

@@ -1109,7 +1109,7 @@ export class Game {
   fillLoot(be, x, y, z) {
     // chests generated in dungeons get loot the first time they are opened
     const nearSpawner = [...this.spawners.keys()].some((k) => { const [a, b, c] = k.split(',').map(Number); return Math.abs(a - x) < 8 && Math.abs(b - y) < 4 && Math.abs(c - z) < 8; });
-    if (!nearSpawner) return;
+    if (!nearSpawner) { if (this.inVillageHouse(x, y, z)) this.rollLoot(be, VILLAGE_LOOT, 3, 7); return; }
     const table = [['bread', 1, 1, 20], ['wheat', 1, 4, 20], ['iron_ingot', 1, 4, 10], ['gold_ingot', 1, 4, 5], ['redstone', 1, 4, 15], ['coal', 1, 4, 15],
       ['string', 1, 8, 10], ['gunpowder', 1, 8, 10], ['bone', 1, 8, 10], ['rotten_flesh', 1, 8, 10], ['bucket', 1, 1, 10], ['saddle', 1, 1, 20],
       ['name_tag', 1, 1, 20], ['golden_apple', 1, 1, 15], ['enchanted_golden_apple', 1, 1, 2], ['iron_horse_armor', 1, 1, 0], ['diamond', 1, 2, 3], ['apple', 1, 3, 10]];
@@ -1123,6 +1123,34 @@ export class Game {
           if (it) be.inventory.slots[Math.floor(Math.random() * 27)] = new ItemStack(it.id, a + Math.floor(Math.random() * (b - a + 1)));
           break;
         }
+      }
+    }
+  }
+
+  // generated village houses are recorded as chunk features; chests inside them get village loot
+  inVillageHouse(x, y, z) {
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      const c = this.world.getChunk((x >> 4) + dx, (z >> 4) + dz);
+      for (const f of c?.features ?? []) {
+        if (f.type === 'v_house' && x >= f.x0 && x <= f.x1 && z >= f.z0 && z <= f.z1 && y > f.y && y <= f.y + 4) return true;
+      }
+    }
+    return false;
+  }
+
+  rollLoot(be, table, minRolls, maxRolls) {
+    const total = table.reduce((s, t) => s + t[3], 0);
+    const rolls = minRolls + Math.floor(Math.random() * (maxRolls - minRolls + 1));
+    for (let i = 0; i < rolls; i++) {
+      let r = Math.random() * total;
+      for (const [name, a, b, wgt] of table) {
+        if ((r -= wgt) >= 0) continue;
+        const it = Items[name];
+        if (!it) break;
+        let slot = Math.floor(Math.random() * 27);
+        for (let k = 0; k < 27 && be.inventory.slots[slot]; k++) slot = (slot + 1) % 27;
+        be.inventory.slots[slot] = new ItemStack(it.id, Math.min(it.stack ?? 64, a + Math.floor(Math.random() * (b - a + 1))));
+        break;
       }
     }
   }
@@ -1380,6 +1408,14 @@ export class Game {
     return { x: s.x + 0.5, y, z: s.z + 0.5 };
   }
 }
+
+// everyday household odds and ends: [item, min, max, weight]
+const VILLAGE_LOOT = [
+  ['bread', 1, 4, 15], ['wheat', 2, 7, 12], ['wheat_seeds', 2, 8, 12], ['apple', 1, 5, 10], ['carrot', 1, 4, 8], ['potato', 1, 4, 8],
+  ['stick', 2, 8, 10], ['oak_planks', 2, 8, 8], ['torch', 1, 6, 8], ['coal', 1, 4, 8], ['cobblestone', 2, 10, 6], ['leather', 1, 3, 5],
+  ['string', 1, 4, 5], ['feather', 1, 4, 5], ['flint', 1, 3, 4], ['bone', 1, 3, 4], ['paper', 1, 4, 4], ['oak_sapling', 1, 2, 4],
+  ['iron_nugget', 1, 5, 4], ['iron_ingot', 1, 2, 2], ['bucket', 1, 1, 1], ['book', 1, 2, 2], ['cooked_porkchop', 1, 2, 2],
+];
 
 function wrapDiff(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }
 function nextFrame() { return new Promise((r) => requestAnimationFrame(() => r())); }
