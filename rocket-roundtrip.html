@@ -234,6 +234,15 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 .act .tip { position: absolute; bottom: 7px; left: 0; right: 0; font-size: 10.5px; font-weight: 900; opacity: .9; }
 .maplbl { position: absolute; transform: translate(-50%, 18px); font-size: 12.5px; font-weight: 900; color: #fff; background: rgba(27,29,61,.75); border: 2px solid rgba(255,255,255,.6); border-radius: 8px; padding: 1px 7px; pointer-events: none; white-space: nowrap; }
 .maplbl.me { background: var(--orange); border-color: #fff; transform: translate(-50%, -34px); }
+#steerPad { position: absolute; left: 16px; bottom: calc(118px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 8px; padding: 8px; }
+#steerPad.off { visibility: hidden; }
+.steer { position: relative; width: 70px; height: 70px; border: 3px solid var(--ink); border-radius: 18px; background: var(--violet); color: #fff; box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center; touch-action: none; transition: transform .06s, box-shadow .06s; }
+.steer svg { width: 38px; height: 38px; }
+.steer .skey { position: absolute; bottom: 3px; right: 6px; font-family: var(--display); font-size: 13px; opacity: .85; }
+.steer.on { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: #5b3fe0; }
+.dialbox { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#dial { width: 80px; height: 80px; }
+.dialtxt { font-size: 11.5px; font-weight: 900; color: var(--ink-2); }
 #btnPause { position: absolute; right: 16px; bottom: calc(118px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 44px; }
 #vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 0 rgba(255,59,79,0); transition: box-shadow .2s; }
 #vignette.on { animation: vig .6s ease-in-out infinite; }
@@ -334,6 +343,14 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
   #apBadge { top: auto; bottom: calc(274px + env(safe-area-inset-bottom, 0px)); font-size: 11.5px; max-width: calc(100% - 20px); }
   #feed { top: 30%; }
   #hint { max-width: calc(100% - 70px); }
+  #hud #steerPad { left: 10px; right: 10px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; padding: 0; background: transparent; border: 0; box-shadow: none; pointer-events: none; }
+  #steerPad .steer { pointer-events: auto; width: 64px; height: 64px; }
+  #dial { width: 60px; height: 60px; }
+  .dialbox { background: rgba(255,255,255,.9); border: 2.5px solid var(--ink); border-radius: 14px; padding: 3px 6px; }
+  #hint { bottom: calc(228px + env(safe-area-inset-bottom, 0px)); }
+  #purse { bottom: calc(282px + env(safe-area-inset-bottom, 0px)); }
+  #apBadge { bottom: calc(330px + env(safe-area-inset-bottom, 0px)); }
+  #btnPause { bottom: calc(282px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 520px) {
   .starsbox { display: none; }
@@ -419,6 +436,11 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
     <div id="feed"></div>
     <div id="hint" hidden></div>
     <div id="actionBar"></div>
+    <div class="card" id="steerPad" hidden>
+      <button class="steer" id="steerL" aria-label="Steer left (hold, or hold the left arrow key)"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M30 28 A12 12 0 1 0 12 12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M4 8 L14 4 L15 15 Z" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg><span class="skey">&larr;</span></button>
+      <div class="dialbox"><canvas id="dial" width="160" height="160" aria-label="Attitude dial"></canvas><div class="dialtxt num" id="dialTxt">Up</div></div>
+      <button class="steer" id="steerR" aria-label="Steer right (hold, or hold the right arrow key)"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 28 A12 12 0 1 1 28 12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M36 8 L26 4 L25 15 Z" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg><span class="skey">&rarr;</span></button>
+    </div>
     <button class="card btn icon-btn" id="btnPause" aria-label="Pause"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2" width="4" height="14" rx="1.5" fill="#1b1d3d"/><rect x="11" y="2" width="4" height="14" rx="1.5" fill="#1b1d3d"/></svg></button>
   </section>
 
@@ -872,7 +894,7 @@ function newFlight(design, mods, opts = {}) {
     plan: opts.plan || 'manual', autoStage: !!opts.autoStage, autoLand: !!opts.autoLand, orbitsTarget: opts.orbitsTarget || 2,
     firsts: Object.assign({}, opts.firsts || {}),
     launched: false, ignited: false, landed: false, landedOn: null, onPad: true,
-    engineOn: false, throttle: 1, steer: 'up', kickT: 0,
+    engineOn: false, throttle: 1, steer: 'up', kickT: 0, steerInput: 0, manualOff: 0, canSteer: false,
     temp: 20, power: c.top.power, powerMax: c.top.power, health: mods.health, healthMax: mods.health, alive: true,
     g: 1, gSmooth: 1, wobble: 0, q: 0, rho: 1, heatFlux: 0, thrusting: false, thrustVis: [],
     escapeT: 0, ejected: false,
@@ -1021,6 +1043,7 @@ function steerLabel(f) {
     if (inAtm && vr > 0 && f.dom.id === 'home') return { label: 'Pitch Over', to: 'kick' };
     return { label: 'Point Prograde', to: 'pro' };
   }
+  if (s === 'manual') return { label: 'Point Prograde', to: 'pro' };
   if (s === 'kick' || s === 'pro' || s === 'prof' || s === 'horiz' || s === 'ap') return { label: 'Point Retro', to: 'retro' };
   if (s === 'retro') {
     if (f.alt < 3 && f.el && Math.abs(f.el.v) < 1) return { label: 'Point Up', to: 'up' };
@@ -1170,7 +1193,7 @@ function maxWarpAllowed(f) {
   const burning = f.thrusting;
   if (inAtm) m = Math.min(m, burning ? 2 : 5);
   else if (burning) m = Math.min(m, f.ionOnly ? 50 : 5);
-  if (f.escapeT > 0 || f.top.retroT > 0 || (f.rho > 0 && f.top.chutes.some(c => c.st === 'deploying'))) m = 1;
+  if (f.escapeT > 0 || f.top.retroT > 0 || (f.rho > 0 && f.top.chutes.some(c => c.st === 'deploying')) || f.steerInput) m = 1;
   const el = f.el;
   if (el && !f.landed) {
     if (el.vr < 0) {
@@ -1206,6 +1229,14 @@ function flightStep(f, dt) {
   const upAng = Math.atan2(uy, ux);
   const capsuleOnly = f.stages.length === 0;
   const anyChute = top.chutes.some(c => (c.st === 'open' || c.st === 'deploying') && c.dep > 0.05);
+  // hand steering: allowed unless the capsule's aerodynamics or open chutes are in charge
+  const aeroLocked = (anyChute && rho > 0) || (capsuleOnly && rho > 0.0008 && v > 0.4);
+  f.canSteer = f.launched && !f.landed && !aeroLocked && f.escapeT <= 0 && !f.over;
+  const turnRate = 0.8 + top.turn + (rho > 0.01 && f.stages.length ? 0.3 : 0);
+  if (f.canSteer && f.steerInput) {
+    if (f.steer !== 'manual') { f.steer = 'manual'; f.manualOff = wrapPi(f.att - upAng); }
+    f.manualOff = wrapPi(f.manualOff + f.steerInput * turnRate * 0.7 * dt);
+  }
   if (f.landed || (!f.launched)) target = upAng;
   else if (anyChute && rho > 0) target = upAng;
   else if (capsuleOnly && rho > 0.0008 && v > 0.4 && f.escapeT <= 0) target = velAng + Math.PI; // blunt capsule flies shield-first
@@ -1258,12 +1289,12 @@ function flightStep(f, dt) {
       }
       case 'prof': target = upAng - (maxTilt(f, alt) - 0.05); break; // autopilot ascent profile
       case 'ap': target = f.apAngle != null ? f.apAngle : upAng; break; // autopilot-computed thrust direction
+      case 'manual': target = upAng + f.manualOff; break; // held tilt, relative to the local horizon
       case 'horiz': target = flatBurnAngle(f, rx, ry, rr, upAng, alt, f.ap.circAlt || alt); break; // autopilot circularization
     }
   }
-  const turn = 0.8 + top.turn + (rho > 0.01 && f.stages.length ? 0.3 : 0);
   const d = wrapPi(target - f.att);
-  const stepA = turn * dt;
+  const stepA = turnRate * dt;
   f.att += Math.abs(d) < stepA ? d : Math.sign(d) * stepA;
   if (f.landed || !f.launched) f.att = upAng;
   const wob = f.wobble > 0.02 ? Math.sin(f.t * 9) * f.wobble * 0.5 : 0;
@@ -1570,6 +1601,7 @@ function flightTick(f, dtReal) {
     }
     return;
   }
+  if (f.steerInput && f.canSteer && f.plan !== 'manual') { f.plan = 'manual'; f.throttle = 1; pushEvent(f, { t: 'apOff' }); }
   const maxW = maxWarpAllowed(f);
   f.warp = Math.min(f.warpReq, maxW);
   const simDt = Math.min(dtReal, 0.05) * f.warp;
@@ -2949,6 +2981,7 @@ let resultsTimer = null, relaunchTimer = null;
 let confirmPrestige = false, confirmReset = false;
 let padSmokeT = 0;
 const emitters = new Map();
+const steerHeld = { L: false, R: false, kL: false, kR: false };
 
 function freshSave() {
   const parts = {}; for (const id of STARTER_PARTS) parts[id] = 1;
@@ -3412,6 +3445,7 @@ function enterHangar() {
   world.position.set(0, -(BODIES.home.r + PAD_H) * RS, 0);
   padGroup.visible = true;
   $('hud').hidden = true; $('hangar').hidden = false; $('topbar').hidden = false; $('results').hidden = true;
+  $('steerPad').hidden = true; releaseSteer();
   $('vignette').classList.remove('on');
   flight = null; camMode = 'auto';
   AudioSys.level(0, 0);
@@ -3472,6 +3506,8 @@ function startFlight() {
   buildActionBar(); updateActionBar(); renderStagesCard();
   $('feed').innerHTML = '';
   $('apBadge').hidden = plan === 'manual';
+  $('steerPad').hidden = false; $('steerPad').classList.add('off');
+  releaseSteer();
   save.stats.flights++;
   saveGame();
 }
@@ -3519,6 +3555,7 @@ function processEvents() {
       case 'shieldGone': popup('Heat shield gone!', 'It burned away', 'bad'); break;
       case 'pilotLost': AudioSys.sfx('sad'); break;
       case 'takeoff': break;
+      case 'apOff': $('apBadge').hidden = true; toast('Autopilot off: you are steering'); break;
       case 'over': scheduleResults(); break;
     }
   }
@@ -3700,9 +3737,9 @@ function flightHint(f) {
   const el2 = f.el, v = el2 ? el2.v : 0;
   if (f.landed && f.landedOn && f.landedOn !== 'home') return [`You're on the ${BODIES[f.landedOn].name}! ${K(4)} Point Up, then ${K(3)} to blast off for home`, 'good'];
   const home = f.dom.id === 'home';
-  if (f.steer === 'up' && home && f.rho > 0.002 && el2 && el2.vr > 0 && f.alt > 1.5 && f.alt < 10 && save.firsts.space && acts[4]) return [`Going for orbit? ${K(4)} Pitch Over now`, ''];
+  if (f.steer === 'up' && home && f.rho > 0.002 && el2 && el2.vr > 0 && f.alt > 1.5 && f.alt < 10 && acts[4] && (save.firsts.space || save.stats.flights <= 3)) return [save.firsts.space ? `Going for orbit? Hold ◀ ▶ (or ← →) to lean east, or ${K(4)} Pitch Over for an automatic turn` : `Hold ◀ ▶ (or the ← → keys) to steer`, ''];
   if (home && f.engineOn && s && s.eng && s.eng.kind !== 'solid' && el2 && el2.apo > 78 && el2.pe < 70 && f.alt < 70) return [`Apoapsis ${fmtAlt(el2.apo)}: cut engine ${K(3)} and coast up`, 'good'];
-  if (home && !f.engineOn && acts[3] && el2 && el2.pe < 70 && el2.apo > 70 && el2.tAp < 12 && el2.eps < 0 && f.alt > 55) return [`Near the top: relight ${K(3)} to reach orbit`, 'good'];
+  if (home && !f.engineOn && acts[3] && el2 && el2.pe < 70 && el2.apo > 70 && el2.tAp < 12 && el2.eps < 0 && f.alt > 55) return [f.steer === 'manual' ? `Near the top: steer flat along the horizon, then relight ${K(3)}` : `Near the top: relight ${K(3)} to reach orbit`, 'good'];
   if (home && f.engineOn && f.thrusting && f.alt > 45 && el2 && el2.eps < 0 && el2.pe < 70 && el2.apo >= 70) return [`Flying flat for orbit: keep burning until Periapsis passes 70 km (now ${el2.pe < 0 ? 'below ground' : fmtAlt(el2.pe)})`, ''];
   if (home && f.engineOn && f.thrusting && f.inOrbit && f.steer !== 'retro') return [`ORBIT! Cut the engine ${K(3)} to save fuel`, 'good'];
   if (f.inOrbit && home && save.firsts.orbit1 && hasFuelLeft(f) && f.steer !== 'retro') { const mw = moonWindow(f); return [mw === 'BURN NOW!' ? `Moon window: BURN NOW! ${K(3)} until Apoapsis reaches 5,000 km` : `Moon window ${mw}. Then burn ${K(3)} prograde to 5,000 km. Home: ${K(4)} Point Retro`, mw === 'BURN NOW!' ? 'good' : '']; }
@@ -3772,6 +3809,10 @@ function updateHUD(dt) {
   $('gHeat').style.width = hk * 100 + '%'; $('gHeat').style.background = gc(hk);
   $('gG').style.width = gk * 100 + '%'; $('gG').style.background = gc(gk);
   $('gPow').style.width = pk * 100 + '%'; $('gPow').style.background = pk < 0.2 ? 'var(--red)' : 'var(--lime)';
+  $('steerPad').classList.toggle('off', !f.canSteer);
+  $('steerL').classList.toggle('on', f.canSteer && (steerHeld.L || steerHeld.kL));
+  $('steerR').classList.toggle('on', f.canSteer && (steerHeld.R || steerHeld.kR));
+  drawDial(f);
   if (hudT < 0.1) return;
   hudT = 0;
   const el2 = f.el || orbitEl(f.x, f.y, f.vx, f.vy, f.dom);
@@ -3817,6 +3858,45 @@ function moonWindow(f) {
   const w = Math.abs(el2.h) / (el2.r * el2.r);
   const t = lead / w;
   return t < 4 || lead > TAU - 0.06 ? 'BURN NOW!' : 'in ' + fmtTime(t);
+}
+
+// ---------------- hand steering ----------------
+function releaseSteer() { steerHeld.L = steerHeld.R = steerHeld.kL = steerHeld.kR = false; }
+let dialT = 0;
+function drawDial(f) {
+  const now = performance.now(); if (now - dialT < 33) return; dialT = now;
+  const cv = $('dial'), ctx = cv.getContext('2d'), S = cv.width, c = S / 2, r = S / 2 - 6;
+  const dom = f.dom, upAng = Math.atan2(f.y - dom.y, f.x - dom.x);
+  const scr = a => -Math.PI / 2 - wrapPi(a - upAng); // world angle -> canvas angle (up is up, east is right)
+  ctx.clearRect(0, 0, S, S);
+  ctx.save(); ctx.beginPath(); ctx.arc(c, c, r, 0, TAU); ctx.clip();
+  ctx.fillStyle = f.rho > 0.0002 ? '#6fc8ff' : '#1b2a6b'; ctx.fillRect(0, 0, S, c);
+  ctx.fillStyle = dom.id === 'moon' ? '#a9aebb' : dom.id === 'rubra' ? '#d9774a' : '#6ccf4b'; ctx.fillRect(0, c, S, c);
+  ctx.strokeStyle = 'rgba(27,29,61,.35)'; ctx.lineWidth = 2;
+  for (const d of [-60, -30, 30, 60]) { const a = -Math.PI / 2 + d * Math.PI / 180; ctx.beginPath(); ctx.moveTo(c + Math.cos(a) * r * 0.82, c + Math.sin(a) * r * 0.82); ctx.lineTo(c + Math.cos(a) * r, c + Math.sin(a) * r); ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle = '#1b1d3d'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(c - r, c); ctx.lineTo(c + r, c); ctx.stroke();
+  ctx.beginPath(); ctx.arc(c, c, r, 0, TAU); ctx.stroke();
+  // prograde (yellow circle) and retrograde (yellow cross) markers
+  const v = Math.hypot(f.vx, f.vy);
+  if (v > 0.05 && f.launched && !f.landed) {
+    const a = scr(Math.atan2(f.vy, f.vx)), px = c + Math.cos(a) * r * 0.7, py = c + Math.sin(a) * r * 0.7;
+    ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#1b1d3d'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(px, py, 10, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#1b1d3d'; ctx.beginPath(); ctx.arc(px, py, 3, 0, TAU); ctx.fill();
+    const b = a + Math.PI, qx = c + Math.cos(b) * r * 0.7, qy = c + Math.sin(b) * r * 0.7;
+    ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(qx - 7, qy - 7); ctx.lineTo(qx + 7, qy + 7); ctx.moveTo(qx + 7, qy - 7); ctx.lineTo(qx - 7, qy + 7); ctx.stroke();
+  }
+  // the rocket, pointing where the nose points
+  ctx.save(); ctx.translate(c, c); ctx.rotate(scr(f.att) + Math.PI / 2);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1b1d3d'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(0, -r * 0.62); ctx.lineTo(11, -r * 0.2); ctx.lineTo(11, r * 0.35); ctx.lineTo(-11, r * 0.35); ctx.lineTo(-11, -r * 0.2); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ff4f8b'; ctx.beginPath(); ctx.moveTo(-11, r * 0.1); ctx.lineTo(-22, r * 0.42); ctx.lineTo(-11, r * 0.35); ctx.closePath(); ctx.moveTo(11, r * 0.1); ctx.lineTo(22, r * 0.42); ctx.lineTo(11, r * 0.35); ctx.closePath(); ctx.fill(); ctx.stroke();
+  if (f.thrusting && f.alive) { ctx.fillStyle = '#ff8a2a'; ctx.beginPath(); ctx.moveTo(-7, r * 0.38); ctx.lineTo(0, r * 0.62 + Math.random() * 6); ctx.lineTo(7, r * 0.38); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  const tilt = Math.round(wrapPi(f.att - upAng) * 180 / Math.PI);
+  const pitch = 90 - Math.abs(tilt);
+  $('dialTxt').textContent = Math.abs(tilt) < 2 ? 'Straight up' : `${Math.abs(pitch)}° ${pitch >= 0 ? 'above' : 'below'} horizon ${tilt < 0 ? '→' : '←'}`;
 }
 
 // ---------------- rocket visuals per frame ----------------
@@ -4125,7 +4205,7 @@ function openPause() {
   paused = true;
   const m = $('modal');
   m.innerHTML = `<div class="sheet"><h2>Paused</h2><p class="subt">Leaving now ends the flight with no pay. The pilot walks home safe.</p>
-    <div class="tipbox"><b>Controls:</b> every action is a numbered button. Tap it, or press its number key on a keyboard.</div>
+    <div class="tipbox"><b>Controls:</b> every action is a numbered button. Tap it, or press its number key on a keyboard. Hold ◀ ▶ (or the ← → arrow keys) to steer by hand; [4] switches back to automatic pointing.</div>
     <div class="btns"><button class="btn orange" id="pResume">Resume</button><button class="btn" id="pSound">${save.sound ? 'Mute sound' : 'Unmute sound'}</button><button class="btn red" id="pQuit">Abandon flight</button></div></div>`;
   m.hidden = false;
   $('pResume').onclick = closePause;
@@ -4160,6 +4240,10 @@ function offlineCheck() {
 // ---------------- input ----------------
 function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    if (mode === 'flight' && $('results').hidden && $('modal').hidden) { e.preventDefault(); AudioSys.init(); if (e.key === 'ArrowLeft') steerHeld.kL = true; else steerHeld.kR = true; }
+    return;
+  }
   let n = null;
   if (/^Digit[0-9]$/.test(e.code)) n = +e.code.slice(5);
   else if (/^Numpad[0-9]$/.test(e.code)) n = +e.code.slice(6);
@@ -4188,6 +4272,7 @@ function frame(now) {
   let t0 = T();
   if (mode === 'flight' && flight) {
     if (!paused && $('results').hidden) {
+      flight.steerInput = (steerHeld.L || steerHeld.kL ? 1 : 0) - (steerHeld.R || steerHeld.kR ? 1 : 0);
       flightTick(flight, dt);
       P.sim += T() - t0; t0 = T();
       processEvents();
@@ -4255,6 +4340,15 @@ function boot() {
   $('btnPause').onclick = () => openPause();
   $('btnTakeover').onclick = () => { if (flight) { flight.plan = 'manual'; flight.throttle = 1; if (['prof', 'horiz', 'ap', 'kick'].includes(flight.steer)) flight.steer = flight.landed ? 'up' : 'pro'; flight.autoStage = !!save.up.a_stage && save.assistStage; flight.autoLand = !!save.up.a_land && save.assistLand; $('apBadge').hidden = true; toast('You have control!'); } };
   window.addEventListener('keydown', onKey);
+  window.addEventListener('keyup', (e) => { if (e.key === 'ArrowLeft') steerHeld.kL = false; if (e.key === 'ArrowRight') steerHeld.kR = false; });
+  window.addEventListener('blur', releaseSteer);
+  for (const [id, k] of [['steerL', 'L'], ['steerR', 'R']]) {
+    const b = $(id);
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); AudioSys.init(); try { b.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ } steerHeld[k] = true; });
+    const up = () => { steerHeld[k] = false; };
+    b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+    b.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); else { offlineCheck(); lastT = performance.now(); } });
   window.addEventListener('pagehide', saveGame);
   window.addEventListener('resize', () => showCoach());

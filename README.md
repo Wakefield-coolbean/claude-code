@@ -6,14 +6,15 @@
 
 Build a rocket, launch it, stage it, and bring your pilot home alive. If the pilot dies, the flight pays nothing.
 
-**Controls:** every flight action is a numbered on-screen button. Tap it, or press its number key.
+**Controls:** every flight action is a numbered on-screen button. Tap it, or press its number key. To steer by hand, hold the ◀ ▶ buttons (or the ← → arrow keys); the rocket keeps that tilt when you let go, and the dial shows your nose against your direction of travel (yellow circle).
 
 | Key | Action |
 | --- | --- |
 | 1 | Launch / next stage (or call a rescue when stranded) |
 | 2 | Fire / drop side boosters |
 | 3 | Engine on / off (liquid engines only) |
-| 4 | Steering: pitch over, point retro, point prograde, point up |
+| 4 | Automatic pointing: pitch over, point retro, point prograde, point up |
+| ← → | Steer by hand (hold) |
 | 5 | Parachutes (drogue first, then mains) |
 | 6 | Landing legs & airbags |
 | 7 | Retro rockets |
