@@ -260,7 +260,15 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 .stamp { font-family: var(--display); font-size: 34px; color: var(--red); border: 5px solid var(--red); border-radius: 14px; padding: 4px 14px; transform: rotate(-6deg); display: inline-block; margin: 8px auto; background: rgba(255,255,255,.85); animation: stamp .45s cubic-bezier(.2,1.6,.4,1) .9s both; }
 @keyframes stamp { from { transform: rotate(-6deg) scale(2.4); opacity: 0; } }
 .tipbox { background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 13.5px; margin: 8px 0; }
-.sheet .btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.sheet .btns { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; position: sticky; bottom: -20px; background: var(--paper); padding: 10px 0 20px; margin-bottom: -20px; }
+@media (max-height: 720px) {
+  .sheet { padding-top: 12px; }
+  .sheet h2 { font-size: 27px; }
+  .reshead canvas { width: 64px; height: 64px; }
+  .rrow { padding: 4px 2px; font-size: 14px; }
+  .rrow .ra { font-size: 17px; }
+  .rtotal b { font-size: 32px; }
+}
 .sheet .btns .btn { flex: 1; font-size: 17px; padding: 12px; }
 #toast { position: absolute; left: 50%; bottom: calc(120px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 30; pointer-events: none; }
 #toast div { background: var(--ink); color: #fff; border-radius: 999px; padding: 8px 16px; font-size: 14px; animation: popin .3s both, fadeout .4s ease-in 2.2s forwards; }
@@ -1541,6 +1549,7 @@ function killPilot(f, why, burn, exploded) {
 function finishFlight(f, result) {
   if (f.over) return;
   f.over = true; f.result = result;
+  f.warnings = []; f.danger = false;
   f.endT = 0;
   if (result === 'landed') {
     award(f, 'safe');
@@ -2822,7 +2831,7 @@ function explosion(p, scale = 1, cols) {
   }
   for (let i = 0; i < 18 * Math.min(1.5, scale); i++) {
     const d = new V3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-    puff(p.clone().add(d.clone().multiplyScalar(Math.random() * 3 * scale)), d.multiplyScalar(4 * scale).add(up.clone().multiplyScalar(3)), 2 * scale, (6 + Math.random() * 5) * scale, 2.2 + Math.random() * 1.5, [0x6b6f80, 0x8a8e9e, 0x4a4d5c][i % 3]);
+    puff(p.clone().add(d.clone().multiplyScalar(Math.random() * 3 * scale)), d.multiplyScalar(9 * scale).add(up.clone().multiplyScalar(4)), 1.2 * scale, (2.5 + Math.random() * 2.5) * scale, 1.4 + Math.random() * 1.2, [0x9a9eb0, 0xb9bdcc, 0x7c8092][i % 3], up);
   }
   const pal = cols || [0xff4f8b, 0xffd23f, 0x2fb8f0, 0xffffff, 0xff7a1a, 0x4fcf5a];
   for (let i = 0; i < 22; i++) {
@@ -2931,7 +2940,7 @@ let save, mods;
 let mode = 'loading';
 let flight = null, model = null, hangarModel = null;
 let debris = [];
-let camMode = 'rocket', camShake = 0;
+let camMode = 'auto', camShake = 0;
 let selStage = -1, buildCat = 'pod', tab = 'build';
 let lastPred = null, predT = 0;
 let hudT = 0, moodCache = '', faceT = 0;
@@ -3404,7 +3413,7 @@ function enterHangar() {
   padGroup.visible = true;
   $('hud').hidden = true; $('hangar').hidden = false; $('topbar').hidden = false; $('results').hidden = true;
   $('vignette').classList.remove('on');
-  flight = null; camMode = 'rocket';
+  flight = null; camMode = 'auto';
   AudioSys.level(0, 0);
   refreshMods();
   rebuildHangarRocket();
@@ -3459,7 +3468,7 @@ function startFlight() {
   $('purse').classList.remove('lost');
   $('pName').textContent = pilotName();
   debris = []; clearFX(); lastPred = null;
-  camState.init = false; camState.mapBlend = 0; camMode = 'rocket';
+  camState.init = false; camState.mapBlend = 0; camMode = 'auto';
   buildActionBar(); updateActionBar(); renderStagesCard();
   $('feed').innerHTML = '';
   $('apBadge').hidden = plan === 'manual';
@@ -3648,7 +3657,7 @@ function pressAction(n) {
   const acts = flightActions(flight);
   const a = acts[n];
   if (!a || a.disabled) return;
-  if (n === 0) { camMode = camMode === 'rocket' ? 'map' : 'rocket'; AudioSys.sfx('click'); updateActionBar(); return; }
+  if (n === 0) { camMode = mapWanted() ? 'rocket' : 'map'; AudioSys.sfx('click'); updateActionBar(); return; }
   if (n !== 9 && flight.plan !== 'manual' && n !== 8) { /* manual input during autopilot is allowed */ }
   doAction(flight, n);
   if (n === 9) toast('Time warp ' + flight.warpReq + '×');
@@ -3664,7 +3673,7 @@ function updateActionBar() {
     if (!a) { b.classList.add('gone'); b.tabIndex = -1; continue; }
     b.classList.remove('gone'); b.tabIndex = 0;
     let label = a.label;
-    if (n === 0) label = camMode === 'rocket' ? 'Map View' : 'Rocket View';
+    if (n === 0) label = mapWanted() ? 'Rocket View' : 'Map View';
     if (n === 9) label = f.warp > 1 || f.warpReq > 1 ? `Warp ${f.warp}×` : 'Time Warp';
     b.querySelector('.lab').textContent = label;
     b.classList.toggle('dis', !!a.disabled);
@@ -3770,7 +3779,7 @@ function updateHUD(dt) {
   $('tAlt').textContent = fmtAlt(f.launched ? Math.max(0, f.alt) : 0);
   $('tSpd').textContent = fmtSpeed(el2.v);
   $('tVs').textContent = (el2.vr >= 0 ? '▲ ' : '▼ ') + Math.round(Math.abs(el2.vr) * SPD) + ' m/s';
-  const showOrbit = f.launched && (f.alt > 12 || f.dom.id !== 'home');
+  const showOrbit = f.launched && !f.landed && (f.alt > 12 || f.dom.id !== 'home');
   $('tAp').textContent = !showOrbit ? '—' : el2.eps >= 0 ? 'Escaping!' : fmtAlt(el2.apo);
   $('tPe').textContent = !showOrbit ? '—' : el2.pe < 0 ? 'Below surface' : fmtAlt(el2.pe);
   if (f.inOrbit) { $('tXL').textContent = 'Orbits'; $('tX').textContent = f.stats.orbits + (f.orbitSweep / TAU).toFixed(2).slice(1); }
@@ -3908,6 +3917,12 @@ function updatePlasma(dt) {
 }
 
 // ---------------- camera ----------------
+// map view: when the player asks for it, or automatically while cruising far from everything
+function mapWanted() {
+  if (camMode === 'map') return true;
+  if (camMode === 'rocket' || !flight) return false;
+  return flight.launched && !flight.landed && flight.alive && flight.alt > 900;
+}
 function updateCamera(dt) {
   const w = window.innerWidth, h = window.innerHeight;
   if (mode === 'hangar' || mode === 'loading') {
@@ -3941,7 +3956,7 @@ function updateCamera(dt) {
   const dir = up.clone().multiplyScalar(elev).add(east.clone().multiplyScalar(0.34)).add(new V3(0, 0, 1)).normalize();
   const offRocket = dir.multiplyScalar(D);
   // map view framing
-  const mapB = camMode === 'map' ? 1 : 0;
+  const mapB = mapWanted() ? 1 : 0;
   camState.mapBlend += (mapB - camState.mapBlend) * Math.min(1, dt * 3);
   let pos = center.clone().add(offRocket), look = center.clone(), camUp = up.clone();
   if (camState.mapBlend > 0.001) {
@@ -3957,7 +3972,7 @@ function updateCamera(dt) {
     pos.lerp(mp, t); look.lerp(c, t); camUp.lerp(new V3(0, 1, 0), t).normalize();
   }
   if (!camState.init) { camState.off.copy(pos); camState.look.copy(look); camState.up.copy(camUp); camState.init = true; }
-  const k = 1 - Math.exp(-dt * (camMode === 'map' ? 4 : 5));
+  const k = 1 - Math.exp(-dt * (mapB ? 4 : 5));
   camState.off.lerp(pos, k); camState.look.lerp(look, k); camState.up.lerp(camUp, k).normalize();
   camera.position.copy(camState.off);
   if (camShake > 0.01) { camera.position.add(new V3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(camShake * 2)); camShake *= Math.max(0, 1 - dt * 3); }
@@ -4182,9 +4197,9 @@ function frame(now) {
         predT -= dt;
         if (predT <= 0 && flight.launched && !flight.landed) {
           predT = 0.35;
-          lastPred = (flight.alt > 25 || camMode === 'map') ? predictPath(flight) : null;
+          lastPred = (flight.alt > 25 || mapWanted()) ? predictPath(flight) : null;
         }
-        const showPath = !!lastPred && (camMode === 'map' || (flight.alt > 60 && flight.alive));
+        const showPath = !!lastPred && (mapWanted() || (flight.alt > 60 && flight.alive));
         setPath(lastPred, showPath);
         P.pred += T() - t0; t0 = T();
         updateDebris(dt, flight.warp);
