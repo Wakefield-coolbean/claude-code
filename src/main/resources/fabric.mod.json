@@ -1,0 +1,25 @@
+{
+	"schemaVersion": 1,
+	"id": "totemdestroypop",
+	"version": "${version}",
+	"name": "Totem Destroy Pop",
+	"description": "Plays a quieter totem pop sound and totem particles when a Totem of Undying item burns or is otherwise destroyed on the ground.",
+	"authors": [
+		"wakefield-coolbean"
+	],
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.totemdestroypop.TotemDestroyPopClient"
+		]
+	},
+	"mixins": [
+		"totemdestroypop.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
