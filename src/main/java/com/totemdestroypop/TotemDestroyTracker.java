@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.particle.Particle;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
@@ -13,6 +14,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -41,6 +43,7 @@ public final class TotemDestroyTracker {
 
 	private static final List<PendingTotem> pending = new ArrayList<>();
 	private static final List<RecentExplosion> recentExplosions = new ArrayList<>();
+	private static final List<ParticleBurst> bursts = new ArrayList<>();
 	private static long tick;
 	private static int soundsThisTick;
 
@@ -102,6 +105,8 @@ public final class TotemDestroyTracker {
 		soundsThisTick = 0;
 		pending.removeIf(totem -> tick - totem.removedTick > EXPLOSION_WINDOW_TICKS);
 		recentExplosions.removeIf(explosion -> tick - explosion.tick > EXPLOSION_WINDOW_TICKS);
+		TotemDestroyPopConfig config = TotemDestroyPopConfig.get();
+		bursts.removeIf(burst -> !burst.spray(config));
 	}
 
 	private static boolean wasBeingDestroyed(ItemEntity item, ClientLevel level, TotemDestroyPopConfig config) {
@@ -133,15 +138,59 @@ public final class TotemDestroyTracker {
 	}
 
 	private static void pop(ItemEntity item, ClientLevel level, TotemDestroyPopConfig config) {
-		Minecraft client = Minecraft.getInstance();
-		if (config.particleTicks > 0) {
-			// Same emitter a real totem pop uses; it keeps working from the removed item's last position.
-			client.particleEngine.createTrackingEmitter(item, ParticleTypes.TOTEM_OF_UNDYING, config.particleTicks);
+		if (config.particleTicks > 0 && config.particlesPerTick > 0) {
+			ParticleBurst burst = new ParticleBurst(level, item.getX(), item.getY(0.5), item.getZ(), config.particleTicks);
+			bursts.add(burst);
+			// Spray the first round straight away, the way a real pop does.
+			burst.spray(config);
 		}
 		if (config.volume > 0.0F && soundsThisTick < config.maxSoundsPerTick) {
 			soundsThisTick++;
 			float pitch = config.pitch * (0.95F + level.getRandom().nextFloat() * 0.1F);
 			level.playLocalSound(item.getX(), item.getY(), item.getZ(), SoundEvents.TOTEM_USE, SoundSource.PLAYERS, config.volume, pitch, false);
+		}
+	}
+
+	/** A smaller version of the emitter a real totem pop uses: fewer particles per tick, and scaled down. */
+	private static final class ParticleBurst {
+		private final ClientLevel level;
+		private final double x;
+		private final double y;
+		private final double z;
+		private int ticksLeft;
+
+		ParticleBurst(ClientLevel level, double x, double y, double z, int ticks) {
+			this.level = level;
+			this.x = x;
+			this.y = y;
+			this.z = z;
+			this.ticksLeft = ticks;
+		}
+
+		/** Sprays one tick's worth of particles; returns false once the burst is over. */
+		boolean spray(TotemDestroyPopConfig config) {
+			Minecraft client = Minecraft.getInstance();
+			if (client.level != level || ticksLeft-- <= 0) {
+				return false;
+			}
+			RandomSource random = level.getRandom();
+			for (int i = 0; i < config.particlesPerTick; i++) {
+				// Random direction inside a unit sphere, with the same upward push as the vanilla emitter.
+				double dx;
+				double dy;
+				double dz;
+				do {
+					dx = random.nextDouble() * 2.0 - 1.0;
+					dy = random.nextDouble() * 2.0 - 1.0;
+					dz = random.nextDouble() * 2.0 - 1.0;
+				} while (dx * dx + dy * dy + dz * dz > 1.0);
+				Particle particle = client.particleEngine.createParticle(ParticleTypes.TOTEM_OF_UNDYING,
+						x + dx * 0.1, y + dy * 0.1, z + dz * 0.1, dx, dy + 0.2, dz);
+				if (particle != null) {
+					particle.scale(config.particleSize);
+				}
+			}
+			return true;
 		}
 	}
 
