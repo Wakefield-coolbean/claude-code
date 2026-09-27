@@ -6,10 +6,11 @@
 
 Build a rocket, launch it, stage it, and bring your pilot home alive. If the pilot dies, the flight pays nothing.
 
-**Controls:** every flight action is a numbered on-screen button. Tap it, or press its number key. To steer by hand, hold the ◀ ▶ buttons (or the ← → arrow keys); the rocket keeps that tilt when you let go, and the dial shows your nose against your direction of travel (yellow circle).
+**Controls:** the big round button (or Space) always does the sensible next step: launch, drop the empty stage, open the parachute when it's safe, put the legs down, fire the retro rockets. Steer by holding the ◀ ▶ buttons (or the ← → arrow keys); the rocket keeps that tilt when you let go, and the dial shows your nose against your direction of travel (yellow circle). Every action also has its own numbered button and number key:
 
 | Key | Action |
 | --- | --- |
+| Space | Do the next step (the big button) |
 | 1 | Launch / next stage (or call a rescue when stranded) |
 | 2 | Fire / drop side boosters |
 | 3 | Engine on / off (liquid engines only) |
@@ -21,5 +22,7 @@ Build a rocket, launch it, stage it, and bring your pilot home alive. If the pil
 | 8 | Eject the capsule |
 | 9 | Time warp |
 | 0 | Rocket view / map view |
+
+If a rocket can't launch, the hangar says why and offers free one-tap fixes (auto-fix, your last rocket that flew, or the free starter rocket).
 
 Progress saves automatically in the browser's local storage.

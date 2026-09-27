@@ -132,7 +132,11 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 #btnLaunch { font-family: var(--display); font-weight: 400; font-size: 30px; padding: 14px 36px; border-radius: 20px; background: var(--orange); color: #fff; letter-spacing: .02em; text-shadow: 0 2px 0 var(--orange-d); box-shadow: 0 6px 0 var(--ink); }
 #btnLaunch:not(.blocked) { animation: bob 1.6s ease-in-out infinite; }
 #btnLaunch.blocked { background: #9aa1b8; text-shadow: none; }
-#launchWhy { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); width: max-content; max-width: min(460px, calc(100vw - 32px)); background: var(--red); color: #fff; font-size: 14px; line-height: 1.3; padding: 8px 14px; border: 3px solid var(--ink); border-radius: 14px; box-shadow: var(--hard); text-align: center; }
+#launchWhy .fixes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 7px; }
+#launchWhy .fixes .btn { font-size: 13px; padding: 5px 10px; }
+.fixbox { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.fixbox .label { margin-bottom: 0; }
+#launchWhy { position: absolute; left: 50%; bottom: calc(100% + 12px); transform: translateX(-50%); width: max-content; max-width: min(520px, calc(100vw - 32px)); background: var(--red); color: #fff; font-size: 14px; line-height: 1.3; padding: 8px 14px; border: 3px solid var(--ink); border-radius: 14px; box-shadow: var(--hard); text-align: center; }
 #launchWhy.shake { animation: shakeX .25s linear 3; }
 @keyframes shakeX { 0%,100% { transform: translateX(-50%); } 25% { transform: translateX(calc(-50% - 5px)); } 75% { transform: translateX(calc(-50% + 5px)); } }
 @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
@@ -209,45 +213,9 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
 .pop.bad { background: var(--red); }
 @keyframes popin { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @keyframes fadeout { to { opacity: 0; transform: translateY(-12px); } }
-#hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(118px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: #fff; font-size: 15px; padding: 8px 16px; border-radius: 999px; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
-#hint kbd { font-family: var(--display); background: var(--lemon); color: var(--ink); border-radius: 6px; padding: 0 6px; margin: 0 2px; }
-#hint.good { background: var(--lime-d); }
-#hint.bad { background: var(--red-d); }
-#actionBar { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: repeat(10, minmax(0, 92px)); gap: 8px; width: min(1000px, calc(100% - 32px)); }
-.act { position: relative; height: 90px; border: 3px solid var(--ink); border-radius: 16px; box-shadow: 0 5px 0 var(--ink); background: var(--paper); padding: 26px 4px 6px; font-size: 13.5px; line-height: 1.1; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; transition: transform .06s, box-shadow .06s; }
-.act:active:not(.dis) { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
-.act .key { position: absolute; top: 5px; left: 50%; transform: translateX(-50%); font-family: var(--display); font-size: 17px; width: 28px; height: 22px; line-height: 21px; border-radius: 7px; background: var(--ink); color: #fff; }
-.act .lab { position: relative; z-index: 1; font-weight: 900; }
-.act .fill { position: absolute; left: 0; bottom: 0; height: 5px; background: rgba(27,29,61,.35); width: 0; }
-.act.gone { visibility: hidden; }
-.act.dis { filter: grayscale(.6) opacity(.6); cursor: default; }
-.act.hot { animation: pulse 0.9s ease-in-out infinite; }
-@keyframes pulse { 0%,100% { box-shadow: 0 5px 0 var(--ink), 0 0 0 0 rgba(255,210,63,.9); } 50% { box-shadow: 0 5px 0 var(--ink), 0 0 0 7px rgba(255,210,63,0); } }
-.act[data-n="1"] { background: var(--orange); color: #fff; }
-.act[data-n="2"] { background: var(--pink); color: #fff; }
-.act[data-n="3"] { background: var(--sky); color: #fff; }
-.act[data-n="4"] { background: var(--violet); color: #fff; }
-.act[data-n="5"] { background: var(--lime); color: #fff; }
-.act[data-n="6"] { background: var(--lemon); }
-.act[data-n="7"] { background: #ff9d4d; }
-.act[data-n="8"] { background: var(--red); color: #fff; }
-.act[data-n="9"] { background: #2b2f5e; color: #fff; }
-.act[data-n="0"] { background: var(--paper); }
-.act[data-n="1"] .key, .act[data-n="8"] .key, .act[data-n="9"] .key { background: #fff; color: var(--ink); }
-.act.chute-bad { background: #b7c0cf !important; }
-.act .tip { position: absolute; bottom: 7px; left: 0; right: 0; font-size: 10.5px; font-weight: 900; opacity: .9; }
+/* flight controls live in the block at the end of this stylesheet */
 .maplbl { position: absolute; transform: translate(-50%, 18px); font-size: 12.5px; font-weight: 900; color: #fff; background: rgba(27,29,61,.75); border: 2px solid rgba(255,255,255,.6); border-radius: 8px; padding: 1px 7px; pointer-events: none; white-space: nowrap; }
 .maplbl.me { background: var(--orange); border-color: #fff; transform: translate(-50%, -34px); }
-#steerPad { position: absolute; left: 16px; bottom: calc(118px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 8px; padding: 8px; }
-#steerPad.off { visibility: hidden; }
-.steer { position: relative; width: 70px; height: 70px; border: 3px solid var(--ink); border-radius: 18px; background: var(--violet); color: #fff; box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center; touch-action: none; transition: transform .06s, box-shadow .06s; }
-.steer svg { width: 38px; height: 38px; }
-.steer .skey { position: absolute; bottom: 3px; right: 6px; font-family: var(--display); font-size: 13px; opacity: .85; }
-.steer.on { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: #5b3fe0; }
-.dialbox { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-#dial { width: 80px; height: 80px; }
-.dialtxt { font-size: 11.5px; font-weight: 900; color: var(--ink-2); }
-#btnPause { position: absolute; right: 16px; bottom: calc(118px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 44px; }
 #vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 0 rgba(255,59,79,0); transition: box-shadow .2s; }
 #vignette.on { animation: vig .6s ease-in-out infinite; }
 @keyframes vig { 0%,100% { box-shadow: inset 0 0 60px 10px rgba(255,59,79,.55); } 50% { box-shadow: inset 0 0 110px 30px rgba(255,59,79,.85); } }
@@ -310,7 +278,6 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
   #telemetry .big { font-size: 28px; }
   .tl { font-size: 12px; }
   #altbar { display: none; }
-  #purse { top: auto; bottom: calc(222px + env(safe-area-inset-bottom, 0px)); padding: 5px 12px 5px 6px; }
   #purse .money { font-size: 22px; }
   #purse .cond { display: none; }
   #purse .coin { width: 26px; height: 26px; font-size: 15px; }
@@ -319,13 +286,6 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
   #pilotCard .ps { display: none; }
   .gauges { font-size: 10.5px; }
   #stagesCard { display: none; }
-  #actionBar { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; width: calc(100% - 20px); }
-  .act { height: 62px; font-size: 12px; padding-top: 22px; border-radius: 13px; }
-  .act .key { font-size: 14px; height: 18px; line-height: 17px; width: 24px; top: 4px; }
-  .act .tip { display: none; }
-  #hint { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); font-size: 13px; white-space: normal; text-align: center; border-radius: 14px; width: max-content; }
-  #btnPause { bottom: auto; top: calc(14px + env(safe-area-inset-top, 0px)); right: auto; left: 50%; transform: translateX(-50%); }
-  #apBadge { top: calc(66px + env(safe-area-inset-top, 0px)); }
   #feed { top: calc(100px + env(safe-area-inset-top, 0px)); }
   .pop { font-size: 19px; }
 }
@@ -343,18 +303,7 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
   #telemetry .tl span:nth-child(3), #telemetry .tl span:nth-child(4), #telemetry .tl span:nth-child(9), #telemetry .tl span:nth-child(10) { display: none; }
   #warnList .wl:nth-child(n+2) { display: none; }
   #warnList .wl { font-size: 11px; padding: 2px 6px; }
-  #btnPause { top: auto; left: auto; transform: none; right: 10px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); width: 40px; height: 40px; }
-  #apBadge { top: auto; bottom: calc(274px + env(safe-area-inset-bottom, 0px)); font-size: 11.5px; max-width: calc(100% - 20px); }
   #feed { top: 30%; }
-  #hint { max-width: calc(100% - 70px); }
-  #hud #steerPad { left: 10px; right: 10px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; padding: 0; background: transparent; border: 0; box-shadow: none; pointer-events: none; }
-  #steerPad .steer { pointer-events: auto; width: 64px; height: 64px; }
-  #dial { width: 60px; height: 60px; }
-  .dialbox { background: rgba(255,255,255,.9); border: 2.5px solid var(--ink); border-radius: 14px; padding: 3px 6px; }
-  #hint { bottom: calc(228px + env(safe-area-inset-bottom, 0px)); }
-  #purse { bottom: calc(282px + env(safe-area-inset-bottom, 0px)); }
-  #apBadge { bottom: calc(330px + env(safe-area-inset-bottom, 0px)); }
-  #btnPause { bottom: calc(282px + env(safe-area-inset-bottom, 0px)); }
 }
 @media (max-width: 860px) { #launchWhy { display: none !important; } }
 @media (max-width: 520px) {
@@ -363,6 +312,81 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
   #goal { grid-template-columns: 1fr; }
   .brand { font-size: 0; }
 }
+/* ================= flight controls =================
+   steering bottom-left, one big "do the next thing" button bottom-right,
+   a panel of icon buttons in between. Actions you can't use right now stay
+   in place as faint outlines, so every button keeps its spot. */
+#hint { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(112px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: #fff; font-size: 15px; padding: 8px 16px; border-radius: 999px; white-space: nowrap; max-width: min(760px, calc(100% - 32px)); overflow: hidden; text-overflow: ellipsis; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+#hint kbd { font-family: var(--display); background: var(--lemon); color: var(--ink); border-radius: 6px; padding: 0 6px; margin: 0 2px; }
+#hint.good { background: var(--lime-d); }
+#hint.bad { background: var(--red-d); }
+#actionBar { position: absolute; left: 316px; right: 176px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); margin: 0 auto; max-width: 760px; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; padding: 7px; background: rgba(27,29,61,.55); border-radius: 20px; }
+.act { position: relative; height: 72px; border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 var(--ink); background: var(--paper); padding: 6px 2px 5px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; text-align: center; overflow: hidden; transition: transform .06s, box-shadow .06s, background .15s, opacity .15s; }
+.act:active:not(.dis):not(.gone) { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.act .ico { width: 30px; height: 30px; display: grid; place-items: center; }
+.act .ico svg { width: 30px; height: 30px; }
+.act .lab { font-size: 11.5px; font-weight: 900; line-height: 1.05; max-width: 100%; }
+.act .key { position: absolute; top: 3px; left: 4px; font-family: var(--display); font-size: 12px; min-width: 17px; height: 17px; line-height: 17px; border-radius: 5px; background: rgba(27,29,61,.8); color: #fff; }
+.act .fill { position: absolute; left: 0; bottom: 0; height: 4px; background: rgba(27,29,61,.4); width: 0; }
+.act.gone { background: rgba(255,255,255,.18) !important; color: rgba(255,255,255,.55) !important; border-color: rgba(255,255,255,.3); box-shadow: none; pointer-events: none; }
+.act.gone .lab, .act.gone .fill { visibility: hidden; }
+.act.gone .key { background: rgba(255,255,255,.25); }
+.act.dis { opacity: .6; cursor: default; }
+.act.hot { animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse { 0%,100% { box-shadow: 0 4px 0 var(--ink), 0 0 0 0 rgba(255,210,63,.95); } 50% { box-shadow: 0 4px 0 var(--ink), 0 0 0 7px rgba(255,210,63,0); } }
+.act[data-n="1"] { background: var(--orange); color: #fff; }
+.act[data-n="2"] { background: var(--pink); color: #fff; }
+.act[data-n="3"] { background: var(--sky); color: #fff; }
+.act[data-n="4"] { background: var(--violet); color: #fff; }
+.act[data-n="5"] { background: var(--lime); color: #fff; }
+.act[data-n="6"] { background: var(--lemon); }
+.act[data-n="7"] { background: #ff9d4d; }
+.act[data-n="8"] { background: var(--red); color: #fff; }
+.act[data-n="9"] { background: #3a3f75; color: #fff; }
+.act[data-n="0"] { background: var(--paper); }
+.act.chute-bad:not(.gone) { background: #b7c0cf !important; }
+#goBtn { position: absolute; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 138px; height: 138px; border-radius: 50%; border: 4px solid var(--ink); box-shadow: 0 6px 0 var(--ink); background: #9aa1b8; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px; text-align: center; touch-action: none; transition: transform .06s, box-shadow .06s, background .15s; }
+#goBtn .gi svg { width: 40px; height: 40px; }
+#goBtn .gl { font-family: var(--display); font-size: 18px; line-height: 1.05; text-shadow: 0 2px 0 rgba(27,29,61,.35); }
+#goBtn .gs { font-size: 11px; font-weight: 900; opacity: .92; }
+#goBtn.ready { background: var(--orange); animation: goPulse 1s ease-in-out infinite; }
+#goBtn.ready.c5 { background: var(--lime-d); }
+#goBtn.ready.c6 { background: var(--lemon-d); }
+#goBtn.ready.c2 { background: var(--pink); }
+#goBtn.ready.c9 { background: #3a3f75; animation: none; }
+#goBtn:active, #goBtn.press { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); }
+#goBtn.nope { animation: shake .25s linear 2; }
+@keyframes goPulse { 0%,100% { box-shadow: 0 6px 0 var(--ink), 0 0 0 0 rgba(255,210,63,.9); } 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 12px rgba(255,210,63,0); } }
+#steerPad { position: absolute; left: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; align-items: center; gap: 8px; padding: 8px; }
+#steerPad.off .steer { opacity: .35; pointer-events: none; }
+.steer { position: relative; width: 78px; height: 78px; border: 3px solid var(--ink); border-radius: 20px; background: var(--violet); color: #fff; box-shadow: 0 5px 0 var(--ink); display: grid; place-items: center; touch-action: none; transition: transform .06s, box-shadow .06s, opacity .15s; }
+.steer svg { width: 40px; height: 40px; }
+.steer .skey { position: absolute; bottom: 3px; right: 7px; font-family: var(--display); font-size: 13px; opacity: .85; }
+.steer.on { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); background: #5b3fe0; }
+.dialbox { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 92px; }
+#dial { width: 80px; height: 80px; }
+.dialtxt { font-size: 11px; font-weight: 900; color: var(--ink-2); text-align: center; line-height: 1.1; }
+#btnPause { position: absolute; right: 282px; top: calc(14px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; }
+@media (max-width: 1000px) {
+  #actionBar { left: 10px; right: 10px; max-width: none; bottom: calc(118px + env(safe-area-inset-bottom, 0px)); grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; padding: 5px; border-radius: 16px; }
+  .act { height: 50px; padding: 3px 2px 3px; gap: 0; border-radius: 12px; box-shadow: 0 3px 0 var(--ink); }
+  .act .ico, .act .ico svg { width: 22px; height: 22px; }
+  .act .lab { font-size: 10.5px; }
+  .act .key { font-size: 10px; min-width: 14px; height: 14px; line-height: 14px; top: 2px; left: 3px; }
+  #goBtn { right: 10px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: 98px; height: 98px; padding: 6px; }
+  #goBtn .gi svg { width: 28px; height: 28px; }
+  #goBtn .gl { font-size: 14px; }
+  #goBtn .gs { font-size: 10px; }
+  #steerPad { left: 10px; right: 118px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 6px; justify-content: space-between; }
+  .steer { width: 72px; height: 84px; }
+  .dialbox { width: auto; flex: 1; }
+  #dial { width: 64px; height: 64px; }
+  #hint { bottom: calc(232px + env(safe-area-inset-bottom, 0px)); font-size: 13px; white-space: normal; text-align: center; border-radius: 14px; width: max-content; }
+  #purse { top: auto; bottom: calc(286px + env(safe-area-inset-bottom, 0px)); padding: 5px 12px 5px 6px; }
+  #apBadge { top: auto; bottom: calc(336px + env(safe-area-inset-bottom, 0px)); font-size: 11.5px; max-width: calc(100% - 20px); }
+  #btnPause { top: auto; right: 10px; bottom: calc(286px + env(safe-area-inset-bottom, 0px)); width: 40px; height: 40px; }
+}
+@media (max-width: 1000px) and (min-width: 861px) { #purse .cond { display: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
@@ -447,6 +471,7 @@ button:focus-visible { outline: 3px solid var(--sky); outline-offset: 2px; }
       <div class="dialbox"><canvas id="dial" width="160" height="160" aria-label="Attitude dial"></canvas><div class="dialtxt num" id="dialTxt">Up</div></div>
       <button class="steer" id="steerR" aria-label="Steer right (hold, or hold the right arrow key)"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 28 A12 12 0 1 1 28 12" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round"/><path d="M36 8 L26 4 L25 15 Z" fill="currentColor" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/></svg><span class="skey">&rarr;</span></button>
     </div>
+    <button id="goBtn" aria-label="Do the next step (Space)"><span class="gi"></span><span class="gl">LAUNCH</span><span class="gs">Space</span></button>
     <button class="card btn icon-btn" id="btnPause" aria-label="Pause"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2" width="4" height="14" rx="1.5" fill="#1b1d3d"/><rect x="11" y="2" width="4" height="14" rx="1.5" fill="#1b1d3d"/></svg></button>
   </section>
 
@@ -995,6 +1020,10 @@ function actStage(f) {
     if (s) {
       if (s.eng) s.lit = true;
       if (s.bst && !s.eng) s.bst.lit = true; // booster-only stage
+      if (s.bst && s.eng && !s.bst.lit) { // light the boosters too if the core alone can't lift the rocket
+        const e = s.eng, Fc = e.thrust * KTH * f.mods.thrust * (e.veVac ? e.ve / e.veVac : 1);
+        if (Fc < craftMass(f) * G0 * 1.05) { s.bst.lit = true; pushEvent(f, { t: 'boosters' }); }
+      }
     }
     pushEvent(f, { t: 'ignite' });
     return;
@@ -3199,6 +3228,65 @@ function addStage() {
 }
 function designChanged() { saveGame(); renderStack(); renderParts(); rebuildHangarRocket(); }
 
+// ---------------- rocket repair: always a free way back to a flyable rocket ----------------
+const owned = id => !!save.parts[id] || PARTS[id].cost === 0;
+function bestOwnedSolid() { return PART_IDS.filter(id => PARTS[id].cat === 'engine' && PARTS[id].kind === 'solid' && owned(id)).sort((a, b) => PARTS[b].thrust - PARTS[a].thrust)[0] || 'srb_fire'; }
+function cheapestOwnedTank() { return PART_IDS.filter(id => PARTS[id].cat === 'tank' && owned(id)).sort((a, b) => PARTS[a].m - PARTS[b].m)[0] || null; }
+function sameDesign(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function autoFix(d0) {
+  const d = cloneDesign(d0), steps = [];
+  const ok = () => rocketStats(d, mods).ok;
+  const step = (label, fn) => { if (!ok() && fn()) steps.push(label); };
+  step('add a free parachute', () => { if (d.chutes.length) return false; d.chutes.push('chute_hanky'); return true; });
+  step('add an engine stage', () => { if (d.stages.length) return false; d.stages.push({ deco: 'deco_bolt', tanks: [], engine: bestOwnedSolid(), boost: null, fins: null }); return true; });
+  step('take useless tanks off solid motors', () => { let c = false; for (const s of d.stages) if (s.engine && PARTS[s.engine].kind === 'solid' && s.tanks.length) { s.tanks = []; c = true; } return c; });
+  step('give engineless stages a motor', () => { let c = false; for (const s of d.stages) if (!s.engine && !s.boost) { s.engine = 'srb_fire'; c = true; } return c; });
+  step('fuel the liquid engines', () => { let c = false; const t = cheapestOwnedTank(); for (const s of d.stages) if (s.engine && PARTS[s.engine].kind !== 'solid' && !s.tanks.length) { if (t) s.tanks.push(t); else s.engine = bestOwnedSolid(); c = true; } return c; });
+  for (let guard = 0; guard < 40 && !ok(); guard++) {
+    const st = rocketStats(d, mods), heavy = st.mass > mods.padMax, weak = st.twr < 1;
+    const b = d.stages[d.stages.length - 1];
+    if (d.extras.length) { d.extras.pop(); steps.push('remove extras'); continue; }
+    if (d.stages.length > 1) { d.stages.shift(); steps.push('remove the top stage'); continue; }
+    if (!b) break;
+    if (weak && b.engine && PARTS[b.engine].kind === 'solid' && b.engine !== bestOwnedSolid()) { b.engine = bestOwnedSolid(); steps.push('fit your strongest motor'); continue; }
+    if (b.tanks.length > 1) { b.tanks.pop(); steps.push('remove a fuel tank'); continue; }
+    if (d.gear.length) { d.gear.pop(); steps.push('remove landing gear'); continue; }
+    if (heavy && b.boost) { if (b.boost.n > 2) b.boost.n -= 2; else b.boost = null; steps.push('remove boosters'); continue; }
+    if (d.shield) { d.shield = null; steps.push('remove the heat shield'); continue; }
+    if (d.chutes.length > 1) { d.chutes.pop(); steps.push('remove a parachute'); continue; }
+    if (d.nose && PARTS[d.nose].m > 0.1) { d.nose = null; steps.push('remove the nose cone'); continue; }
+    break;
+  }
+  return ok() ? { design: d, steps: [...new Set(steps)] } : null;
+}
+function applyDesign(d, msg) {
+  save.design = cloneDesign(d); selStage = -1;
+  AudioSys.init(); AudioSys.sfx('buy'); toast(msg);
+  designChanged();
+}
+function fixButtons() {
+  const out = [], d = design();
+  const fix = autoFix(d);
+  if (fix && !sameDesign(fix.design, d)) {
+    const txt = fix.steps.slice(0, 2).join(', ') + (fix.steps.length > 2 ? '…' : '');
+    const b = el('button', 'btn small lime', esc('Auto-fix: ' + txt));
+    b.onclick = () => applyDesign(fix.design, 'Rocket fixed! Ready for the pad.');
+    out.push(b);
+  }
+  if (save.lastFlown && !sameDesign(save.lastFlown, d) && rocketStats(save.lastFlown, mods).ok) {
+    const b = el('button', 'btn small sky', 'Last rocket that flew');
+    b.onclick = () => applyDesign(save.lastFlown, 'Back to your last rocket.');
+    out.push(b);
+  }
+  const starter = defaultDesign();
+  if (!sameDesign(starter, d)) {
+    const b = el('button', 'btn small', 'Free starter rocket');
+    b.onclick = () => applyDesign(starter, 'Starter rocket ready. It always costs nothing.');
+    out.push(b);
+  }
+  return out;
+}
+
 // ---------------- hangar UI ----------------
 function isUnlockedReq(p) { return !p.req || save.ever[p.req]; }
 function renderChips() {
@@ -3295,12 +3383,20 @@ function renderRocketStats() {
     cell('Pilot limit', (st.craft.top.pod.g * mods.gtol).toFixed(1) + ' G');
   const w = $('rwarn'); w.innerHTML = '';
   for (const x of st.warnings) w.appendChild(el('div', 'warn ' + (x.lvl === 'bad' ? 'bad' : ''), esc(x.text)));
-  // the launch button always answers: when the rocket can't fly, say why right above it
+  // the launch button always answers: when the rocket can't fly, say why right above it and offer free fixes
   const bad = st.warnings.find(x => x.lvl === 'bad');
   $('btnLaunch').classList.toggle('blocked', !st.ok);
   $('btnLaunch').textContent = !st.ok && window.innerWidth <= 860 ? 'FIX ROCKET FIRST' : 'TO THE PAD!';
-  $('launchWhy').hidden = !bad;
-  if (bad) $('launchWhy').textContent = "Can't launch: " + bad.text;
+  const why = $('launchWhy');
+  why.hidden = !bad;
+  if (bad) {
+    why.innerHTML = '';
+    why.appendChild(el('div', '', esc("Can't launch: " + bad.text)));
+    const row = el('div', 'fixes'); for (const b of fixButtons()) row.appendChild(b); why.appendChild(row);
+    const box = el('div', 'fixbox', '<span class="label">One-tap fixes (free)</span>');
+    for (const b of fixButtons()) box.appendChild(b);
+    w.appendChild(box);
+  }
   return st;
 }
 function renderUpgrades() {
@@ -3467,7 +3563,7 @@ function enterHangar() {
   world.position.set(0, -(BODIES.home.r + PAD_H) * RS, 0);
   padGroup.visible = true;
   $('hud').hidden = true; $('hangar').hidden = false; $('topbar').hidden = false; $('results').hidden = true;
-  $('steerPad').hidden = true; releaseSteer();
+  $('steerPad').hidden = true; releaseSteer(); $('goBtn').hidden = true;
   $('vignette').classList.remove('on');
   flight = null; camMode = 'auto';
   AudioSys.level(0, 0);
@@ -3508,6 +3604,7 @@ function startFlight() {
   AudioSys.init();
   clearTimeout(relaunchTimer); relaunchTimer = null;
   save.coach.pad = true;
+  save.lastFlown = cloneDesign(design());
   $('coach').hidden = true;
   const plan = save.plan;
   flight = newFlight(design(), mods, {
@@ -3534,7 +3631,7 @@ function startFlight() {
   buildActionBar(); updateActionBar(); renderStagesCard();
   $('feed').innerHTML = '';
   $('apBadge').hidden = plan === 'manual';
-  $('steerPad').hidden = false; $('steerPad').classList.add('off');
+  $('steerPad').hidden = false; $('steerPad').classList.add('off'); $('goBtn').hidden = false;
   releaseSteer();
   save.stats.flights++;
   saveGame();
@@ -3704,14 +3801,44 @@ function spawnSatellites(n) {
 // ---------------- action bar ----------------
 const ACT_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
 const actEls = {};
+const ACT_ICONS = {
+  1: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3c3.5 2.5 5 6.5 4.5 11h-9C11 9.5 12.5 5.5 16 3z" fill="currentColor"/><path d="M8 16.5h16" stroke="currentColor" stroke-width="2.4" stroke-dasharray="3 2.5"/><rect x="11.5" y="19" width="9" height="9" rx="2" fill="currentColor" opacity=".6"/></svg>',
+  2: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 5c2 1.6 3 4 3 7v12H6V12c0-3 1-5.4 3-7zM23 5c2 1.6 3 4 3 7v12h-6V12c0-3 1-5.4 3-7z" fill="currentColor"/><path d="M7 26l2 3.5 2-3.5M21 26l2 3.5 2-3.5" stroke="currentColor" stroke-width="2" fill="none" stroke-linejoin="round"/></svg>',
+  3: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3c1 5 7 8 7 15a7 7 0 0 1-14 0c0-4 2-6 3-8 1 3 2 4 3 4-1-4 0-8 1-11z" fill="currentColor"/></svg>',
+  4: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="10" stroke="currentColor" stroke-width="3" fill="none"/><path d="M16 2v7M16 23v7M2 16h7M23 16h7" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="3" fill="currentColor"/></svg>',
+  5: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 15a13 11 0 0 1 26 0z" fill="currentColor"/><path d="M4 15l10 10M28 15L18 25M16 15v10" stroke="currentColor" stroke-width="2" fill="none"/><rect x="13" y="24" width="6" height="5" rx="1.5" fill="currentColor"/></svg>',
+  6: '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="11" y="4" width="10" height="13" rx="3" fill="currentColor"/><path d="M12 15L5 27M20 15l7 12" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path d="M2 28h7M23 28h7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>',
+  7: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M10 4h12l3 12H7z" fill="currentColor"/><path d="M10 19l1.5 8 1.5-8zM19 19l1.5 8 1.5-8z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  8: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2l6 7h-4v5h-4V9h-4z" fill="currentColor"/><path d="M10 17h12l3 11H7z" fill="currentColor"/></svg>',
+  9: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 7l11 9-11 9zM17 7l11 9-11 9z" fill="currentColor"/></svg>',
+  0: '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="7" fill="currentColor"/><ellipse cx="16" cy="16" rx="14" ry="6" stroke="currentColor" stroke-width="2.4" fill="none" transform="rotate(-20 16 16)"/></svg>',
+  wait: '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 4h14M9 28h14M10 4c0 7 12 7 12 12S10 21 10 28M22 4c0 7-12 7-12 12s12 5 12 12" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>',
+};
+// plain-language, short names for the panel (the full name stays in the tooltip / screen reader label)
+function shortLabel(n, a, f) {
+  const L = a.label;
+  switch (n) {
+    case 1: return L === 'LAUNCH' ? 'Launch' : L === 'Call Rescue' ? 'Rescue' : L;
+    case 2: return L === 'Fire Boosters' ? 'Boosters' : L === 'Drop Boosters' ? 'Drop Boost' : 'Burning';
+    case 3: return L === 'Ignite Motor' ? 'Ignite' : L.startsWith('Solid') ? 'Burning' : L;
+    case 4: return { 'Pitch Over': 'Pitch Over', 'Point Retro': 'Aim Back', 'Point Prograde': 'Aim Ahead', 'Point Up': 'Aim Up' }[L] || L;
+    case 5: return L === 'Drogue Chute' ? 'Drogue' : 'Chute';
+    case 6: return 'Legs';
+    case 7: return 'Retro';
+    case 8: return 'Eject';
+    case 9: return f.warp > 1 || f.warpReq > 1 ? `Warp ${Math.round(f.warp)}×` : 'Warp';
+    case 0: return mapWanted() ? 'Rocket' : 'Map';
+  }
+  return L;
+}
 function buildActionBar() {
   const bar = $('actionBar'); bar.innerHTML = '';
   for (const n of ACT_ORDER) {
     const b = el('button', 'act gone');
     b.dataset.n = n;
-    b.innerHTML = `<span class="key">${n}</span><span class="lab"></span><span class="tip"></span><span class="fill"></span>`;
+    b.innerHTML = `<span class="key">${n}</span><span class="ico">${ACT_ICONS[n]}</span><span class="lab"></span><span class="fill"></span>`;
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); pressAction(n); });
-    b.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pressAction(n); } });
+    b.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pressAction(n); } });
     bar.appendChild(b); actEls[n] = b;
   }
 }
@@ -3723,11 +3850,10 @@ function pressAction(n) {
   const a = acts[n];
   if (!a || a.disabled) return;
   if (n === 0) { camMode = mapWanted() ? 'rocket' : 'map'; AudioSys.sfx('click'); updateActionBar(); return; }
-  if (n !== 9 && flight.plan !== 'manual' && n !== 8) { /* manual input during autopilot is allowed */ }
   doAction(flight, n);
   if (n === 9) toast('Time warp ' + flight.warpReq + '×');
   AudioSys.sfx('click');
-  const b = actEls[n]; if (b) { b.style.transform = 'translateY(4px)'; setTimeout(() => (b.style.transform = ''), 90); }
+  const b = actEls[n]; if (b) { b.style.transform = 'translateY(3px)'; setTimeout(() => (b.style.transform = ''), 90); }
   updateActionBar();
 }
 function updateActionBar() {
@@ -3735,31 +3861,72 @@ function updateActionBar() {
   const acts = flightActions(f);
   for (const n of ACT_ORDER) {
     const b = actEls[n], a = acts[n];
-    if (!a) { b.classList.add('gone'); b.tabIndex = -1; continue; }
-    b.classList.remove('gone'); b.tabIndex = 0;
+    if (!a) { b.classList.add('gone'); b.tabIndex = -1; b.classList.remove('hot'); b.setAttribute('aria-hidden', 'true'); continue; }
+    b.classList.remove('gone'); b.tabIndex = 0; b.removeAttribute('aria-hidden');
     let label = a.label;
     if (n === 0) label = mapWanted() ? 'Rocket View' : 'Map View';
     if (n === 9) label = f.warp > 1 || f.warpReq > 1 ? `Warp ${Math.round(f.warp)}×` : 'Time Warp';
-    b.querySelector('.lab').textContent = label;
+    b.querySelector('.lab').textContent = shortLabel(n, a, f);
     b.classList.toggle('dis', !!a.disabled);
     b.classList.toggle('hot', !!a.hot && !a.disabled);
     b.classList.toggle('chute-bad', n === 5 && (!!a.danger || !!a.early));
-    const tip = b.querySelector('.tip');
-    tip.textContent = n === 5 ? (a.danger ? 'too fast!' : a.early ? 'too high' : a.safe ? 'safe now' : '') : '';
     b.querySelector('.fill').style.width = a.fill != null ? Math.round(clamp(a.fill, 0, 1) * 100) + '%' : '0';
-    b.setAttribute('aria-label', `${n}: ${label}`);
+    const extra = n === 5 ? (a.danger ? ' (too fast)' : a.early ? ' (too high)' : a.safe ? ' (safe now)' : '') : '';
+    b.title = `[${n}] ${label}${extra}`;
+    b.setAttribute('aria-label', `${n}: ${label}${extra}`);
   }
+  updateGo();
+}
+// ---- the big button: always does the sensible next step ----
+function smartAction(f) {
+  if (!f || f.over) return null;
+  const A = flightActions(f), el2 = f.el;
+  const go = (n, label, sub) => ({ n, label, sub: sub || 'Space', ready: true });
+  const wait = (n, label, sub) => ({ n, label, sub, ready: false });
+  if (A[1] && A[1].label === 'LAUNCH') return go(1, 'LAUNCH');
+  if (A[1] && A[1].label === 'Call Rescue') return go(1, 'RESCUE', 'pays 25%');
+  if (f.ignited && !f.launched && f.padT > 0.4) return A[2] && A[2].label === 'Fire Boosters' ? go(2, 'BOOSTERS', 'too heavy!') : wait(null, 'TOO HEAVY', 'fix it in the hangar');
+  if (A[2] && A[2].label === 'Drop Boosters') return go(2, 'DROP BOOSTERS');
+  if (A[1] && A[1].hot) return go(1, A[1].label === 'Drop Stage' ? 'DROP STAGE' : 'NEXT STAGE');
+  if (A[5] && A[5].hot) return go(5, A[5].label === 'Drogue Chute' ? 'DROGUE' : 'PARACHUTE');
+  if (A[6] && A[6].hot) return go(6, 'LEGS DOWN');
+  if (A[7] && A[7].hot) return go(7, 'RETRO!');
+  if (f.landed && f.landedOn && f.landedOn !== 'home' && A[3] && !f.engineOn) return go(3, 'BLAST OFF');
+  if (A[5] && el2 && el2.vr < 0 && f.rho > 0.0002) return wait(5, A[5].label === 'Drogue Chute' ? 'DROGUE' : 'PARACHUTE', A[5].danger ? 'too fast, wait…' : 'too high, wait…');
+  if (A[9] && f.launched && !f.thrusting && !f.steerInput && maxWarpAllowed(f) > f.warp * 1.5) return { n: 9, label: 'SPEED UP', sub: 'time warp', ready: true, calm: true };
+  return wait(null, 'FLYING', 'nothing to do yet');
+}
+let goState = null;
+function updateGo() {
+  const b = $('goBtn'); if (!b || !flight) return;
+  const g = smartAction(flight);
+  b.hidden = !g;
+  if (!g) return;
+  goState = g;
+  b.className = (g.ready ? 'ready' : '') + (g.n != null ? ' c' + g.n : '');
+  b.querySelector('.gi').innerHTML = g.ready && g.n != null ? ACT_ICONS[g.n] : ACT_ICONS.wait;
+  b.querySelector('.gl').textContent = g.label;
+  b.querySelector('.gs').textContent = g.sub;
+  b.setAttribute('aria-label', g.ready ? `${g.label} (Space)` : `${g.label}: ${g.sub}`);
+}
+function pressGo() {
+  AudioSys.init();
+  if (mode !== 'flight' || !flight || !$('results').hidden || !$('modal').hidden) return;
+  const g = smartAction(flight), b = $('goBtn');
+  if (!g || !g.ready || g.n == null) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); AudioSys.sfx('warn'); return; }
+  b.classList.add('press'); setTimeout(() => b.classList.remove('press'), 110);
+  pressAction(g.n);
 }
 function flightHint(f) {
   const acts = flightActions(f);
   const s = bottomStage(f);
   const K = n => `<kbd>${n}</kbd>`;
   if (f.over) return null;
-  if (!f.ignited && !f.launched) return f.plan !== 'manual' ? ['Autopilot is launching…', ''] : [`Press ${K(1)} to LAUNCH!`, 'good'];
+  if (!f.ignited && !f.launched) return f.plan !== 'manual' ? ['Autopilot is launching…', ''] : [`Tap the big LAUNCH button (or press Space)`, 'good'];
   if (f.ignited && !f.launched && f.padT > 0.5) return acts[2] && acts[2].label === 'Fire Boosters' ? [`Too heavy! Fire boosters ${K(2)}`, 'bad'] : ['Too heavy to lift off. Lighten the rocket in the hangar.', 'bad'];
   if (f.wobble > 0.25) return [`Unstable! Cut engine ${K(3)} or EJECT ${K(8)}`, 'bad'];
   if (f.plan !== 'manual') return null;
-  if (acts[1] && acts[1].hot && f.stages.length && !chutesOpen(f)) return [`Out of fuel. Press ${K(1)} to drop the empty stage`, ''];
+  if (acts[1] && acts[1].hot && f.stages.length && !chutesOpen(f)) return [`Out of fuel: tap ${acts[1].label === 'Drop Stage' ? 'DROP STAGE' : 'NEXT STAGE'} (Space) to drop the empty stage`, ''];
   if (acts[2] && acts[2].label === 'Drop Boosters') return [`Boosters empty. Drop them with ${K(2)}`, ''];
   if (acts[1] && acts[1].label === 'Call Rescue') return [`Stuck with no fuel? ${K(1)} calls a rescue (pays 25%)`, 'bad'];
   const el2 = f.el, v = el2 ? el2.v : 0;
@@ -3779,10 +3946,10 @@ function flightHint(f) {
   if (el2 && el2.vr < 0 && acts[5]) {
     if (acts[5].danger) return [`Too fast for the parachute (${Math.round(v * SPD)} m/s). Wait…`, 'bad'];
     if (acts[5].early && f.alt < f.dom.atm) return ['Air is too thin here: a chute would rip as you speed up. Wait…', ''];
-    if (acts[5].safe) return [`Open the parachute now! ${K(5)}`, 'good'];
+    if (acts[5].safe) return [`Open the parachute now! Tap the big button (Space)`, 'good'];
   }
-  if (el2 && el2.vr < 0 && acts[6] && f.alt < 3) return [`Deploy landing gear ${K(6)}`, 'good'];
-  if (el2 && el2.vr < 0 && acts[7] && f.alt < 0.3) return [`Fire retro rockets ${K(7)} just before touchdown`, 'good'];
+  if (el2 && el2.vr < 0 && acts[6] && f.alt < 3) return [`Put the landing legs down (Space)`, 'good'];
+  if (el2 && el2.vr < 0 && acts[7] && f.alt < 0.3) return [`Fire the retro rockets just before touchdown (Space)`, 'good'];
   if (f.warp === 1 && el2 && el2.vr < 0 && chutesOpen(f) && f.alt > 2) return [`Long way down… ${K(9)} speeds up time`, ''];
   return null;
 }
@@ -3838,6 +4005,7 @@ function updateHUD(dt) {
   $('gG').style.width = gk * 100 + '%'; $('gG').style.background = gc(gk);
   $('gPow').style.width = pk * 100 + '%'; $('gPow').style.background = pk < 0.2 ? 'var(--red)' : 'var(--lime)';
   $('steerPad').classList.toggle('off', !f.canSteer);
+  if (!f.alive || f.over) $('goBtn').hidden = true;
   $('steerL').classList.toggle('on', f.canSteer && (steerHeld.L || steerHeld.kL));
   $('steerR').classList.toggle('on', f.canSteer && (steerHeld.R || steerHeld.kR));
   drawDial(f);
@@ -4268,6 +4436,9 @@ function offlineCheck() {
 // ---------------- input ----------------
 function onKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if ((e.code === 'Space' || e.key === ' ') && mode === 'flight') {
+    e.preventDefault(); if (!e.repeat) pressGo(); return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
     if (mode === 'flight' && $('results').hidden && $('modal').hidden) { e.preventDefault(); AudioSys.init(); if (e.key === 'ArrowLeft') steerHeld.kL = true; else steerHeld.kR = true; }
     return;
@@ -4370,6 +4541,8 @@ function boot() {
   window.addEventListener('keydown', onKey);
   window.addEventListener('keyup', (e) => { if (e.key === 'ArrowLeft') steerHeld.kL = false; if (e.key === 'ArrowRight') steerHeld.kR = false; });
   window.addEventListener('blur', releaseSteer);
+  $('goBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); pressGo(); });
+  $('goBtn').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pressGo(); } });
   for (const [id, k] of [['steerL', 'L'], ['steerR', 'R']]) {
     const b = $(id);
     b.addEventListener('pointerdown', (e) => { e.preventDefault(); AudioSys.init(); try { b.setPointerCapture(e.pointerId); } catch (err) { /* capture is optional */ } steerHeld[k] = true; });
