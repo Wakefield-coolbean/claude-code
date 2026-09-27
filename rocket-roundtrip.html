@@ -474,7 +474,7 @@ const TAU = Math.PI * 2;
 const CH = 0.085;         // aero heating coefficient
 const COOL = 0.11;         // hull cooling rate
 const PAD_H = 0.15;        // launch pad height (u)
-const WARPS = [1, 2, 5, 10, 50, 200];
+const WARPS = [1, 2, 5, 10, 25, 50, 200];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const lerp = (a, b, t) => a + (b - a) * t;
 const wrapPi = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
@@ -1085,6 +1085,7 @@ function actWarp(f) {
   if (n >= WARPS.length || WARPS[n] > max) n = 0;
   f.warpReq = WARPS[n];
   f.userWarp = true;
+  if (f.top.chutes.some(c => c.st === 'open')) f.chuteWarpOff = true;
 }
 function canRescue(f) {
   if (f.over || !f.launched || !f.alive) return false;
@@ -1137,11 +1138,11 @@ function flightActions(f) {
   // 6
   if ((f.top.legs || f.top.bags) && !f.top.gearDown && f.launched && !f.landed) A[6] = { label: 'Landing Gear', hot: f.alt < 3 && f.el && f.el.vr < 0 };
   // 7
-  if (f.top.retro && !f.top.retroFired && f.launched && !f.landed) A[7] = { label: 'Retro Rockets', hot: f.alt < 1 && f.el && f.el.vr < -0.05 };
+  if (f.top.retro && !f.top.retroFired && f.launched && !f.landed) A[7] = { label: 'Retro Rockets', hot: f.alt < 0.25 && f.el && f.el.vr < -0.05 };
   // 8
   if (f.stages.length && f.launched && !f.landed) A[8] = { label: 'EJECT', warn: true, hot: f.wobble > 0.35 };
   // 9
-  if (f.launched && !f.over) A[9] = { label: 'Warp ' + f.warp + '×', hot: false };
+  if (f.launched && !f.over) A[9] = { label: 'Warp ' + Math.round(f.warp) + '×', hot: false };
   // 0
   A[0] = { label: 'View' };
   return A;
@@ -1191,10 +1192,18 @@ function maxWarpAllowed(f) {
   let m = f.mods.maxWarp;
   const inAtm = f.rho > 0.00005;
   const burning = f.thrusting;
-  if (inAtm) m = Math.min(m, burning ? 2 : 5);
+  const mainOpen = f.top.chutes.some(c => c.st === 'open' && !c.def.drogue);
+  if (inAtm) m = burning ? Math.min(m, 2) : mainOpen ? 25 : Math.min(m, 5); // chute rides don't need the Time Warp upgrade
   else if (burning) m = Math.min(m, f.ionOnly ? 50 : 5);
   if (f.escapeT > 0 || f.top.retroT > 0 || (f.rho > 0 && f.top.chutes.some(c => c.st === 'deploying')) || f.steerInput) m = 1;
   const el = f.el;
+  // riding a main chute: smooth fast-forward that eases back to real time for the last ~100 m
+  if (mainOpen && inAtm && !burning && m > 1 && el && el.vr < 0 && !f.landed) {
+    const tti = Math.max(0, f.alt) / -el.vr;
+    const retroReady = f.top.retro && !f.top.retroFired;
+    const lead = retroReady ? 1 : 0.8, floor = retroReady ? 1.6 : 1.2; // a little slack while retro rockets still need timing
+    return tti <= floor ? 1 : Math.min(f.chuteWarpOff ? f.warpReq : 50, Math.max(1, tti / lead));
+  }
   if (el && !f.landed) {
     if (el.vr < 0) {
       const tti = Math.max(0, f.alt) / -el.vr; // seconds of sim time to hit the surface (radially)
@@ -1863,10 +1872,12 @@ function runAutomation(f, dt) {
   if (autoLand && f.launched && !f.landed) autoLanding(f, el);
 
   // --- helpful auto-warp during long chute descents (manual play too) ---
-  if (!f.userWarp && f.launched && !f.landed) {
+  if (f.launched && !f.landed) {
     const mainOpen = f.top.chutes.some(c => c.st === 'open' && !c.def.drogue);
-    if (mainOpen && f.alt > 1.2) f.warpReq = Math.max(f.warpReq, 5);
-    else if (!pilotOn && f.warpReq > 1 && !mainOpen && f.rho > 0.00005) f.warpReq = 1;
+    const drogueOnly = !mainOpen && f.top.chutes.some(c => c.st === 'open' && c.def.drogue);
+    if (!f.chuteWarpOff && mainOpen) f.warpReq = Math.max(f.warpReq, 50);
+    else if (!f.chuteWarpOff && drogueOnly && f.alt > 2) f.warpReq = Math.max(f.warpReq, 5);
+    else if (!f.userWarp && !pilotOn && f.warpReq > 1 && !mainOpen && f.rho > 0.00005) f.warpReq = 1;
   }
 }
 function autoLanding(f, el) {
@@ -3711,7 +3722,7 @@ function updateActionBar() {
     b.classList.remove('gone'); b.tabIndex = 0;
     let label = a.label;
     if (n === 0) label = mapWanted() ? 'Rocket View' : 'Map View';
-    if (n === 9) label = f.warp > 1 || f.warpReq > 1 ? `Warp ${f.warp}×` : 'Time Warp';
+    if (n === 9) label = f.warp > 1 || f.warpReq > 1 ? `Warp ${Math.round(f.warp)}×` : 'Time Warp';
     b.querySelector('.lab').textContent = label;
     b.classList.toggle('dis', !!a.disabled);
     b.classList.toggle('hot', !!a.hot && !a.disabled);
@@ -3754,7 +3765,7 @@ function flightHint(f) {
     if (acts[5].safe) return [`Open the parachute now! ${K(5)}`, 'good'];
   }
   if (el2 && el2.vr < 0 && acts[6] && f.alt < 3) return [`Deploy landing gear ${K(6)}`, 'good'];
-  if (el2 && el2.vr < 0 && acts[7] && f.alt < 1.2) return [`Fire retro rockets ${K(7)} just before touchdown`, 'good'];
+  if (el2 && el2.vr < 0 && acts[7] && f.alt < 0.3) return [`Fire retro rockets ${K(7)} just before touchdown`, 'good'];
   if (f.warp === 1 && el2 && el2.vr < 0 && chutesOpen(f) && f.alt > 2) return [`Long way down… ${K(9)} speeds up time`, ''];
   return null;
 }
