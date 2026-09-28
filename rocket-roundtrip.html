@@ -591,14 +591,14 @@ const PARTS = {
   liq_sparrow:{ cat: 'engine', kind: 'liquid', name: 'Sparrow', desc: 'Small liquid engine. Can switch off & relight. Needs tanks.', cost: 900, req: 'clouds', m: 0.25, thrust: 55, ve: 29, veVac: 32, h: 1.2, r: 0.8, col: 0x55607a },
   liq_swift:  { cat: 'engine', kind: 'liquid', name: 'Swift', desc: 'Reliable workhorse liquid engine.', cost: 4500, req: 'strato', m: 0.6, thrust: 160, ve: 31, veVac: 34, h: 1.6, r: 1.1, col: 0x4a5572 },
   liq_vesper:  { cat: 'engine', kind: 'liquid', name: 'Vesper Vacuum', desc: 'Weak in air, superb in space.', cost: 14000, req: 'space', m: 0.4, thrust: 75, ve: 18, veVac: 46, h: 2.0, r: 1.0, col: 0x3d4a66 },
-  liq_mammoth:{ cat: 'engine', kind: 'liquid', name: 'Mammoth', desc: 'Huge first-stage liquid engine.', cost: 45000, req: 'orbit', m: 1.8, thrust: 520, ve: 32, veVac: 35, h: 2.4, r: 1.6, col: 0x39435e },
-  liq_behemoth:{cat: 'engine', kind: 'liquid', name: 'Behemoth', desc: 'The biggest bell in the shop.', cost: 250000, req: 'moon', m: 4.5, thrust: 1500, ve: 33, veVac: 36, h: 3.2, r: 2.4, col: 0x2e3650 },
-  ion_whisper:{ cat: 'engine', kind: 'ion', name: 'Ion Whisper', desc: 'Tiny push, tiny fuel use. Eats battery. Space only.', cost: 60000, req: 'orbit', m: 0.2, thrust: 6, ve: 160, veVac: 160, h: 1.0, r: 0.7, pdraw: 6, col: 0x7fd8ff },
+  liq_mammoth:{ cat: 'engine', kind: 'liquid', name: 'Mammoth', desc: 'Huge liquid engine: strong in air, better than the Vesper in space. Smart throttle never over-G’s the pilot.', cost: 45000, req: 'orbit', m: 0.8, thrust: 1100, ve: 42, veVac: 54, glim: 0.85, h: 2.4, r: 1.6, col: 0x39435e },
+  liq_behemoth:{cat: 'engine', kind: 'liquid', name: 'Behemoth', desc: 'The biggest bell in the shop: the most push and the best efficiency of any big engine. Smart throttle keeps the pilot safe.', cost: 250000, req: 'moon', m: 1.2, thrust: 2400, ve: 48, veVac: 64, glim: 0.85, h: 3.2, r: 2.4, col: 0x2e3650 },
+  ion_whisper:{ cat: 'engine', kind: 'ion', name: 'Ion Whisper', desc: 'Gentle push that barely sips fuel: a small tank goes a very long way. Eats battery (add batteries or solar). Space only.', cost: 60000, req: 'orbit', m: 0.2, thrust: 16, ve: 240, veVac: 240, h: 1.0, r: 0.7, pdraw: 3, col: 0x7fd8ff },
   // Strap-on boosters (added in pairs) ---------------------------------------
   bst_mini:   { cat: 'booster', kind: 'solid', name: 'Mini Strap-on', desc: 'A pair of small side boosters. Fire with [2].', cost: 250, m: 0.1, fuel: 0.5, thrust: 18, ve: 17, h: 3, r: 0.5, col: 0xffffff },
   bst_big:    { cat: 'booster', kind: 'solid', name: 'Big Strap-on', desc: 'Serious side boosters.', cost: 2200, req: 'strato', m: 0.4, fuel: 2.2, thrust: 70, ve: 19, h: 5, r: 0.8, col: 0xffffff },
   bst_liq:    { cat: 'booster', kind: 'solid', name: 'Liquid Strap-on', desc: 'Long, efficient burn. Cannot be stopped once lit.', cost: 16000, req: 'space', m: 0.9, fuel: 5, thrust: 150, ve: 27, h: 7, r: 1.1, col: 0xf0f4ff },
-  bst_titan:  { cat: 'booster', kind: 'solid', name: 'Titan Strap-on', desc: 'Skyscraper-sized side boosters.', cost: 80000, req: 'orbit', m: 2.6, fuel: 16, thrust: 520, ve: 22, h: 11, r: 1.6, col: 0xffffff },
+  bst_titan:  { cat: 'booster', kind: 'solid', name: 'Titan Strap-on', desc: 'Skyscraper-sized side boosters: the strongest and most efficient strap-ons.', cost: 80000, req: 'orbit', m: 1.8, fuel: 16, thrust: 650, ve: 30, h: 11, r: 1.6, col: 0xffffff },
   // Tanks --------------------------------------------------------------------
   tank_can:   { cat: 'tank', name: 'Soda Can', desc: 'Tiny fuel tank for liquid engines.', cost: 200, req: 'clouds', m: 0.07, fuel: 0.55, h: 1.4, r: 1.0, col: 0xffffff },
   tank_barrel:{ cat: 'tank', name: 'Barrel', desc: 'Medium fuel tank.', cost: 700, req: 'clouds', m: 0.18, fuel: 1.6, h: 2.6, r: 1.2, col: 0xffffff },
@@ -841,6 +841,15 @@ function stageMass(st) {
 function topMass(top) { return top.dry - (top.noseOn ? 0 : top.noseMass) + top.satMass; }
 
 // Summary numbers for the builder
+// time above the air for a straight-up flight with this much Δv (radial Kepler fall; ~10 u/s lost to gravity & drag)
+function straightUpSpaceTime(dv) {
+  const h = BODIES.home, v = Math.max(0, dv - 10), r0 = h.r + 20, rs = h.r + h.atm + 2;
+  const inv = 1 / r0 - v * v / (2 * h.gm);
+  if (inv <= 0) return 0;
+  const ra = 1 / inv; if (ra <= rs) return 0;
+  const x = rs / ra;
+  return 2 * Math.sqrt(ra * ra * ra / (2 * h.gm)) * (Math.sqrt(x * (1 - x)) + Math.acos(Math.sqrt(x)));
+}
 function rocketStats(design, mods) {
   const c = buildCraft(design, mods);
   const warnings = [];
@@ -904,9 +913,9 @@ function rocketStats(design, mods) {
   else if (twr < 1) warnings.push({ lvl: 'bad', text: `Too heavy to lift off (liftoff TWR ${twr.toFixed(2)}, needs 1+). Use a stronger engine, add boosters, or remove weight` });
   if (!c.top.chutes.length) warnings.push({ lvl: 'bad', text: 'No parachute: the pilot needs one to land. Add one from Chutes' });
   if (mass > mods.padMax) warnings.push({ lvl: 'bad', text: `Too heavy for the launch pad (${mass.toFixed(1)} t of ${mods.padMax} t max). Remove parts, or buy Bigger Launch Pad in Upgrades` });
-  // flown straight up, how long would the pilot sit in space? (rough fit to test flights)
-  const spaceT = (totalDv * SPD - 3100) / 25, podName = c.top.pod.name;
-  if (spaceT > 20 && spaceT > c.top.power + c.top.regen * spaceT) warnings.push({ lvl: 'warn', text: `Flown straight up this goes very high: about ${Math.round(spaceT)} s in space, but the ${podName}'s life support only lasts ${Math.round(c.top.power)} s. Add a Battery Pack or use a bigger capsule` });
+  // flown straight up, how long would the pilot sit in space? (ignored if it would escape: a rescue can fetch them)
+  const spaceT = straightUpSpaceTime(totalDv), podName = c.top.pod.name;
+  if (spaceT > 20 && spaceT > c.top.power + c.top.regen * spaceT) warnings.push({ lvl: 'warn', text: `Flown straight up this goes very high: ${spaceT > 600 ? `over ${Math.floor(spaceT / 60)} minutes` : `about ${Math.round(spaceT)} s`} in space, but the ${podName}'s life support only lasts ${Math.round(c.top.power)} s. Add a Battery Pack or use a bigger capsule` });
   const tol = Math.max(c.top.pod.impact, c.top.legs ? c.top.legs.impact : 0) + (c.top.bags ? c.top.bags.impact : 0);
   return {
     mass, height, dv: totalDv, twr, perStage, warnings, craft: c,
@@ -1842,12 +1851,13 @@ function predictPath(f, maxSteps = 2600, every = 2) {
 // ---------------------------------------------------------------------------
 //  AUTOMATION: auto-staging, auto-landing and the autopilot
 // ---------------------------------------------------------------------------
-function currentAccel(f) {
+// full-throttle acceleration; raw = before the G-limiter (what a throttle fraction scales)
+function currentAccel(f, raw) {
   const s = bottomStage(f); if (!s || !s.eng) return 0;
   const m = craftMass(f);
   let F = s.eng.thrust * KTH * f.mods.thrust;
   if (s.eng.veVac) F *= lerp(1, s.eng.ve / s.eng.veVac, clamp(f.rho, 0, 1));
-  F = gLimitF(f, s.eng, F, 0);
+  if (!raw) F = gLimitF(f, s.eng, F, 0);
   return s.fuel > 0 ? F / m : 0;
 }
 // weakest acceleration among the stages we'd need to cancel vNeed (conservative braking estimate)
@@ -2053,7 +2063,10 @@ function autopilot(f, dt, el) {
     case 'xfer': {
       f.steer = 'pro'; setWarp(f, 1);
       const dist = Math.hypot(target.x, target.y);
-      if (el.apo + home.r >= dist - target.r * 0.2 || el.eps > 0) { f.engineOn = false; ap.phase = 'cruise'; }
+      // ease off near the end so a huge engine doesn't overshoot the aim point in one step
+      const raT = dist - target.r * 0.2, vNeed = Math.sqrt(2 * home.gm * raT / (el.r * (el.r + raT))), aF = currentAccel(f, true);
+      if (aF > 0 && s && s.eng && s.eng.kind !== 'solid') f.throttle = clamp((vNeed - el.v) / (aF * 0.6), 0.03, 1);
+      if (el.apo + home.r >= raT || el.eps > 0) { f.engineOn = false; ap.phase = 'cruise'; ap.cruiseR = el.r; }
       else if (!stagesHaveFuel(f)) ap.phase = 'reentry';
       break;
     }
@@ -2061,9 +2074,11 @@ function autopilot(f, dt, el) {
       f.engineOn = false;
       if (dom.id === target.id) { ap.phase = 'approach'; break; }
       setWarp(f, 200);
+      ap.cruiseR = Math.max(ap.cruiseR || 0, el.r);
+      const fallingBack = el.vr < 0 && ap.cruiseR > el.r + 200; // climbed out and is coming back (a short burn can leave vr < 0 at the start)
       if (dom.id === 'home' && el.r > Math.hypot(target.x, target.y) + target.soi) ap.phase = 'return';
-      if (el.vr < 0 && dom.id === 'home' && f.visited[target.id]) ap.phase = 'return';
-      else if (el.vr < 0 && dom.id === 'home' && Math.hypot(f.x, f.y) < 3000) ap.phase = 'return';
+      if (fallingBack && dom.id === 'home' && f.visited[target.id]) ap.phase = 'return';
+      else if (fallingBack && dom.id === 'home' && Math.hypot(f.x, f.y) < 3000) ap.phase = 'return';
       break;
     }
     case 'approach': {
@@ -2071,7 +2086,7 @@ function autopilot(f, dt, el) {
       f.steer = 'retro';
       const gB = dom.gm / (el.r * el.r);
       const v = el.v;
-      const a = currentAccel(f);
+      const a = currentAccel(f, true);
       if (a <= 0 && !stagesHaveFuel(f)) { ap.phase = 'descent'; break; }
       const br = brakeAccel(f, v);
       const h = Math.max(0, f.alt - 0.05);
@@ -2089,7 +2104,7 @@ function autopilot(f, dt, el) {
         const vdT = -(Math.sqrt(2 * aNet * 0.55 * Math.max(0, h - 0.12)) + 0.04);
         const need = el.vr < 0 ? (el.vr * el.vr) / (2 * Math.max(0.05, h - 0.08)) * 1.25 : 0; // decel needed to stop at the surface
         const track = (vdT - el.vr) * 4;
-        const corr = el.vr < 0 ? Math.max(track, need) : track; // rising? let gravity pull us back
+        const corr = el.vr < vdT ? Math.max(track, need) : track; // slower than the profile (or rising)? let gravity pull us down
         let ahx = -vhx * 1.6, ahy = -vhy * 1.6;
         const ahm = Math.hypot(ahx, ahy), ahMax = aM * 0.8;
         if (ahm > ahMax) { ahx *= ahMax / ahm; ahy *= ahMax / ahm; }
@@ -2099,7 +2114,7 @@ function autopilot(f, dt, el) {
         f.steer = 'ap'; f.apAngle = dm > 1e-4 && upward > 0 ? Math.atan2(dy, dx) : Math.atan2(upy, upx);
         const onTarget = Math.abs(wrapPi(f.att - f.apAngle)) < 0.35;
         f.engineOn = true; if (s && s.eng && s.fuel > 0) s.lit = true;
-        f.throttle = onTarget && upward > 0 ? clamp(dm / aM, 0, 1) : 0.01;
+        f.throttle = onTarget && upward > 0 ? clamp(dm / aM, 0, 1) : 0; // idle = off: 1% of a huge engine can out-push the Moon's gravity
         setWarp(f, 1);
       } else {
         f.engineOn = false;
