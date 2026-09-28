@@ -578,7 +578,7 @@ const CATS = [
 ];
 const PARTS = {
   // Pods -------------------------------------------------------------------
-  pod_tin:    { cat: 'pod', name: 'Tin Can', desc: 'Snug, cheap and a little dented.', cost: 0, m: 0.5, h: 2.2, r: 1.1, temp: 650, g: 7, impact: 0.12, power: 60, turn: 0, cda: 0.7, esc: 5, col: 0xdfe6ee },
+  pod_tin:    { cat: 'pod', name: 'Tin Can', desc: 'Snug, cheap and a little dented.', cost: 0, m: 0.5, h: 2.2, r: 1.1, temp: 650, g: 7, impact: 0.12, power: 100, turn: 0, cda: 0.7, esc: 5, col: 0xdfe6ee },
   pod_bubble: { cat: 'pod', name: 'Bubble Pod', desc: 'Glass dome, better padding.', cost: 700, req: 'clouds', m: 0.7, h: 2.4, r: 1.2, temp: 900, g: 9, impact: 0.15, power: 150, turn: 0.2, cda: 0.8, esc: 6, col: 0x9fe3ff },
   pod_comet:  { cat: 'pod', name: 'Comet Capsule', desc: 'Built for space. Tough hull.', cost: 5000, req: 'strato', m: 1.0, h: 2.8, r: 1.4, temp: 1250, g: 11, impact: 0.18, power: 400, turn: 0.4, cda: 1.0, esc: 7, col: 0xffffff },
   pod_titan:  { cat: 'pod', name: 'Titan Command Pod', desc: 'Orbital-grade armour & computers.', cost: 40000, req: 'orbit', m: 1.5, h: 3.2, r: 1.7, temp: 1700, g: 14, impact: 0.22, power: 1000, turn: 0.8, cda: 1.3, esc: 8, col: 0xf2f4ff },
@@ -587,7 +587,7 @@ const PARTS = {
   srb_fire:   { cat: 'engine', kind: 'solid', name: 'Firecracker', desc: 'Solid motor. Lights once, burns till empty.', cost: 0, m: 0.2, fuel: 1.1, thrust: 27, ve: 17, h: 3, r: 0.7, col: 0xff5a36 },
   srb_thump:  { cat: 'engine', kind: 'solid', name: 'Thumper', desc: 'Chunky solid motor with a kick.', cost: 350, m: 0.5, fuel: 2.8, thrust: 75, ve: 18.5, h: 4.2, r: 1.0, col: 0xff8a1f },
   srb_hammer: { cat: 'engine', kind: 'solid', name: 'Hammer', desc: 'Big solid motor. Heavy, loud, glorious.', cost: 3000, req: 'strato', m: 1.2, fuel: 7.5, thrust: 210, ve: 20, h: 6.5, r: 1.3, col: 0xffc21a },
-  srb_kraken: { cat: 'engine', kind: 'solid', name: 'Kraken', desc: 'Monster solid core. The most efficient solid, and it eases off as it empties so the pilot isn’t squashed.', cost: 16000, req: 'space', m: 2.4, fuel: 22, thrust: 700, ve: 26, taper: 0.3, h: 10, r: 2.0, col: 0xe8433a },
+  srb_kraken: { cat: 'engine', kind: 'solid', name: 'Kraken', desc: 'Monster solid core. The most powerful, most efficient solid, and its smart grain never pulls more G than your pilot can take.', cost: 16000, req: 'space', m: 2.0, fuel: 19, thrust: 800, ve: 26, glim: 0.85, h: 10, r: 2.0, col: 0xe8433a },
   liq_sparrow:{ cat: 'engine', kind: 'liquid', name: 'Sparrow', desc: 'Small liquid engine. Can switch off & relight. Needs tanks.', cost: 900, req: 'clouds', m: 0.25, thrust: 55, ve: 29, veVac: 32, h: 1.2, r: 0.8, col: 0x55607a },
   liq_swift:  { cat: 'engine', kind: 'liquid', name: 'Swift', desc: 'Reliable workhorse liquid engine.', cost: 4500, req: 'strato', m: 0.6, thrust: 160, ve: 31, veVac: 34, h: 1.6, r: 1.1, col: 0x4a5572 },
   liq_vesper:  { cat: 'engine', kind: 'liquid', name: 'Vesper Vacuum', desc: 'Weak in air, superb in space.', cost: 14000, req: 'space', m: 0.4, thrust: 75, ve: 18, veVac: 46, h: 2.0, r: 1.0, col: 0x3d4a66 },
@@ -875,7 +875,7 @@ function rocketStats(design, mods) {
       dv += ve * Math.log(m0 / mEnd);
       thrust += s.eng.thrust * mods.thrust;
       const F = s.eng.thrust * KTH * mods.thrust;
-      burn += s.fuel / (F / ve) * taperBurnMul(s.eng);
+      burn += s.fuel / (F / ve);
     }
     const mStart = mAbove + stageMass(s);
     const twr = thrust / (9.81 * mStart);
@@ -904,6 +904,9 @@ function rocketStats(design, mods) {
   else if (twr < 1) warnings.push({ lvl: 'bad', text: `Too heavy to lift off (liftoff TWR ${twr.toFixed(2)}, needs 1+). Use a stronger engine, add boosters, or remove weight` });
   if (!c.top.chutes.length) warnings.push({ lvl: 'bad', text: 'No parachute: the pilot needs one to land. Add one from Chutes' });
   if (mass > mods.padMax) warnings.push({ lvl: 'bad', text: `Too heavy for the launch pad (${mass.toFixed(1)} t of ${mods.padMax} t max). Remove parts, or buy Bigger Launch Pad in Upgrades` });
+  // flown straight up, how long would the pilot sit in space? (rough fit to test flights)
+  const spaceT = (totalDv * SPD - 3100) / 25, podName = c.top.pod.name;
+  if (spaceT > 20 && spaceT > c.top.power + c.top.regen * spaceT) warnings.push({ lvl: 'warn', text: `Flown straight up this goes very high: about ${Math.round(spaceT)} s in space, but the ${podName}'s life support only lasts ${Math.round(c.top.power)} s. Add a Battery Pack or use a bigger capsule` });
   const tol = Math.max(c.top.pod.impact, c.top.legs ? c.top.legs.impact : 0) + (c.top.bags ? c.top.bags.impact : 0);
   return {
     mass, height, dv: totalDv, twr, perStage, warnings, craft: c,
@@ -980,10 +983,12 @@ function landTolerance(f, b) {
   if (b && isOcean(b, f.x, f.y)) tol *= 1.6;
   return tol;
 }
-// solids with a taper ease off as they empty: full thrust when lit, taper × thrust at burnout
-function thrustFrac(s) { const a = s.eng && s.eng.taper; return a ? a + (1 - a) * clamp(s.fuel / s.fuelMax, 0, 1) : 1; }
-// how much longer a tapered burn lasts than a flat one with the same fuel
-function taperBurnMul(e) { const a = e && e.taper; return a ? Math.log(1 / a) / (1 - a) : 1; }
+// a G-limited solid (glim) burns at full power until the pilot's G would pass glim × their limit, then holds it there
+function gLimitF(f, e, F, other) {
+  if (!e.glim) return F;
+  const cap = e.glim * f.top.pod.g * f.mods.gtol * G0 * craftMass(f) - other;
+  return clamp(cap, F * 0.2, F);
+}
 function stageThrust(f, s, rho) {
   const out = [];
   if (!s) return out;
@@ -991,8 +996,10 @@ function stageThrust(f, s, rho) {
   if (e && s.lit && s.fuel > 0 && f.engineOn) {
     let thr = e.kind === 'solid' ? 1 : f.throttle;
     if (thr > 0 && !(e.kind === 'ion' && f.power <= 0)) {
-      let ve = e.ve, F = e.thrust * KTH * f.mods.thrust * thr * thrustFrac(s);
+      let ve = e.ve, F = e.thrust * KTH * f.mods.thrust * thr;
       if (e.veVac) { const a = clamp(rho / 1, 0, 1); ve = lerp(e.veVac, e.ve, a); F *= ve / e.veVac; }
+      const bF = s.bst && s.bst.lit && !s.bst.dropped && s.bst.fuel > 0 ? s.bst.def.thrust * KTH * f.mods.thrust * s.bst.n : 0;
+      F = gLimitF(f, e, F, bF);
       out.push({ F, ve, src: 'eng' });
     }
   }
@@ -1518,7 +1525,7 @@ function flightStep(f, dt) {
 
   // --- pilot: G forces ---
   const gTol = top.pod.g * f.mods.gtol;
-  if (f.gSmooth > gTol) { f.health -= (f.gSmooth / gTol - 1) * 70 * dt; f.dizzyT = 1.5; if (f.health <= 0) { killPilot(f, 'Crushed by G-forces', false); return; } }
+  if (f.gSmooth > gTol) { f.health -= (f.gSmooth / gTol - 1) * (f.thrusting ? 70 : 30) * dt; f.dizzyT = 1.5; if (f.health <= 0) { killPilot(f, 'Crushed by G-forces', false); return; } }
 
   tickPower(f, dt, rho, false);
   if (f.over) return;
@@ -1838,8 +1845,9 @@ function predictPath(f, maxSteps = 2600, every = 2) {
 function currentAccel(f) {
   const s = bottomStage(f); if (!s || !s.eng) return 0;
   const m = craftMass(f);
-  let F = s.eng.thrust * KTH * f.mods.thrust * thrustFrac(s);
+  let F = s.eng.thrust * KTH * f.mods.thrust;
   if (s.eng.veVac) F *= lerp(1, s.eng.ve / s.eng.veVac, clamp(f.rho, 0, 1));
+  F = gLimitF(f, s.eng, F, 0);
   return s.fuel > 0 ? F / m : 0;
 }
 // weakest acceleration among the stages we'd need to cancel vNeed (conservative braking estimate)
@@ -1848,7 +1856,8 @@ function brakeAccel(f, vNeed) {
   for (let i = f.stages.length - 1; i >= 0; i--) {
     const s = f.stages[i];
     if (s.eng && s.fuel > 0 && s.eng.kind !== 'ion') {
-      let F = s.eng.thrust * KTH * f.mods.thrust * (s.eng.taper || 1);
+      let F = s.eng.thrust * KTH * f.mods.thrust;
+      if (s.eng.glim) F = Math.min(F, s.eng.glim * f.top.pod.g * f.mods.gtol * G0 * mm);
       if (s.eng.veVac) F *= lerp(1, s.eng.ve / s.eng.veVac, clamp(f.rho, 0, 1));
       aMin = Math.min(aMin, F / mm);
       const ve = s.eng.veVac || s.eng.ve;
@@ -3185,8 +3194,8 @@ function partStats(p) {
   switch (p.cat) {
     case 'pod': out.push(`Heat ${p.temp}°C`, `${p.g} G`, `Lands ≤ ${Math.round(p.impact * SPD)} m/s`, `Power ${p.power}`, t(p.m)); break;
     case 'engine': out.push(`${p.thrust} kN`, `Exhaust ${Math.round((p.veVac || p.ve) * SPD)} m/s`);
-      if (p.kind === 'solid') out.push(`Burn ${(p.fuel / (p.thrust * KTH / p.ve) * taperBurnMul(p)).toFixed(1)} s`, t(p.m + p.fuel)); else out.push(t(p.m));
-      if (p.taper) out.push(`Eases to ${Math.round(p.taper * 100)}% thrust`);
+      if (p.kind === 'solid') out.push(`Burn ${(p.fuel / (p.thrust * KTH / p.ve)).toFixed(1)} s`, t(p.m + p.fuel)); else out.push(t(p.m));
+      if (p.glim) out.push('G-safe');
       if (p.kind === 'ion') out.push(`-${p.pdraw} power/s`); break;
     case 'booster': out.push(`2 × ${p.thrust} kN`, `${t(p.m + p.fuel)} each`, `Burn ${(p.fuel / (p.thrust * KTH / p.ve)).toFixed(1)} s`); break;
     case 'tank': out.push(`${p.fuel} t fuel`, `${t(p.m + p.fuel)} full`); break;
