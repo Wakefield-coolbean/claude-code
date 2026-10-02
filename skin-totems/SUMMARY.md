@@ -1,13 +1,15 @@
 # Skin Totems
 
-**Hold a Totem of Undying and it becomes a tiny version of you.**
+**Your totem of undying, but it's you.**
 
-Skin Totems is a client-side Fabric mod for Minecraft 1.21.11. Whenever a player holds a Totem of Undying, in the main hand or offhand, in first or third person, the totem is drawn as a small figure with arms outstretched, in the style of the popular custom-totem makers. The head, torso, arms and legs are taken straight from that player's own skin, so every player you see holding a totem shows their own face.
+Normally a held Totem of Undying is the same gold figure for everyone. Skin Totems replaces it, only while it's in someone's hand, with a small custom-totem-style figure (arms out, like the totems from custom-totem makers) painted from that player's own Minecraft skin: their face, hair, shirt, arms and pants.
 
-- Uses each holder's own skin, including slim (Alex-style) arms and the hat, jacket, sleeve and pants layers
-- Held with the same hand positions as a normal totem, and about as thick as an item
-- Only the held totem changes. Inventory, hotbar, dropped and item-frame totems stay vanilla
-- Client-only: works on any server, nothing to install server-side, no resource pack needed
+- **Every player gets their own totem.** Steve, Alex, or any custom skin. You see your own in your hands, and you see everyone else's in theirs.
+- **Works with both skin models.** Classic (wide-arm) and slim-arm skins are both handled, including hat, jacket, sleeve and pants layers.
+- **Looks like an item.** The figure is a thick, flat sprite and is held in the same positions as the normal totem, main hand or offhand, first or third person.
+- **Nothing else changes.** Inventory, hotbar, dropped and item-frame totems stay vanilla.
+- **Client-only.** Works on any server. No resource pack and nothing to install server-side.
 
-**Requires:** Minecraft 1.21.11, Fabric Loader 0.18.4+, Fabric API 0.141.0+
-**License:** MIT
+The icon shows three examples: Steve in the middle, Alex on the left, and a custom skin on the right.
+
+**Requires:** Minecraft 1.21.11, Fabric Loader 0.18.4+, Fabric API 0.141.0+ · **License:** MIT
