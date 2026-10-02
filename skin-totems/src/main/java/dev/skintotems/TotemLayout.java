@@ -8,7 +8,7 @@ import java.util.List;
  * (arms out) whose pixels are copied straight from the holder's skin. Every entry is a one-pixel-tall
  * strip of skin texels; there is no texture to generate at runtime, the skin itself is the texture.
  *
- * <p>The figure is one pixel thick like a normal item: {@code front} is the face of the sprite, and
+ * <p>The figure is one pixel thick like a normal item: {@code front} is the face of the sprite (repeated at the back), and
  * {@code edges} are one-texel planes closing every silhouette edge, each coloured with the texel it borders
  * (like the sides of an extruded item). {@code overlay} holds the hat/jacket/sleeve/pants layer as thin
  * planes just in front of the face.
@@ -19,6 +19,7 @@ final class TotemLayout {
     static final int ROWS = 15;
     /** The face sits at the front of a 1-pixel-thick slab spanning z -0.5..+0.5; front is -z. */
     static final float FACE_Z = -0.5f;
+    static final float BACK_Z = 0.5f;
     /** Depth (in pixels) of the overlay planes: just in front of the face. */
     static final float OVERLAY_Z = -0.6f;
 

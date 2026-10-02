@@ -39,6 +39,13 @@ public final class SkinTotemsClient implements ClientModInitializer {
         }
         root.addChild("front", front, ModelTransform.NONE);
 
+        // The same plane again at the back, so the slab is closed when seen from behind.
+        ModelPartBuilder back = ModelPartBuilder.create();
+        for (TotemLayout.Strip s : layout.front()) {
+            back.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.BACK_Z, s.w(), 1F, 0F, north);
+        }
+        root.addChild("back", back, ModelTransform.NONE);
+
         ModelPartBuilder overlay = ModelPartBuilder.create();
         for (TotemLayout.Strip s : layout.overlay()) {
             overlay.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.OVERLAY_Z, s.w(), 1F, 0F, north);
