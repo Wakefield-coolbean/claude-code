@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "skin_totems",
+  "version": "1.1.0",
+  "name": "Skin Totems",
+  "description": "Held totems become flat, custom-totem-style figures built from the holder's Minecraft skin.",
+  "environment": "client",
+  "license": "MIT",
+  "entrypoints": { "client": ["dev.skintotems.SkinTotemsClient"] },
+  "mixins": ["skin_totems.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "1.21.11",
+    "java": ">=21",
+    "fabric-api": ">=0.141.6+1.21.11"
+  }
+}
