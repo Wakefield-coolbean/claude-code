@@ -41,9 +41,9 @@ public final class SkinTotemRenderer implements class_10515<class_8685> {
             int light, int overlay, boolean glint, int outline) {
         if (skin == null) return;
         matrices.method_22903();
-        // The sprite is 15 pixels tall and hangs down from y = 0; size it to ~0.8 blocks, centred in the item cell.
-        matrices.method_46416(0.5f, 0.9f, 0.5f);
-        matrices.method_22905(0.85f, -0.85f, -0.85f);
+        // One sprite pixel = 1/16 block, like a vanilla item; the 15-row figure hangs down from the top of the cell.
+        matrices.method_46416(0.5f, 0.96875f, 0.5f);
+        matrices.method_22905(1f, -1f, -1f);
         queue.method_73494(model(skin.comp_1629() == class_7920.field_41122), matrices,
                 class_12249.method_76000(skin.comp_1626().comp_3627()),
                 light, overlay, null, false, glint, -1, null, outline);

@@ -24,12 +24,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemModelManagerMixin {
     @Unique
     private static final Vector3fc[] SKIN_TOTEMS_BOUNDS;
+    // The vanilla display transforms of the totem (item/generated), so the figure is held like a normal item.
     @Unique
-    private static final Transformation SKIN_TOTEMS_FIRST_PERSON = new Transformation(
-            new Vector3f(0, 0, 0), new Vector3f(0, 0.30F, 0), new Vector3f(0.60F));
+    private static final Transformation FIRST_PERSON_RIGHT = new Transformation(
+            new Vector3f(0, -90, 25), new Vector3f(1.13F, 3.2F, 1.13F), new Vector3f(0.68F));
     @Unique
-    private static final Transformation SKIN_TOTEMS_THIRD_PERSON = new Transformation(
-            new Vector3f(90, 180, 0), new Vector3f(0, 0.12F, 0), new Vector3f(0.65F));
+    private static final Transformation FIRST_PERSON_LEFT = new Transformation(
+            new Vector3f(0, 90, -25), new Vector3f(1.13F, 3.2F, 1.13F), new Vector3f(0.68F));
+    @Unique
+    private static final Transformation THIRD_PERSON = new Transformation(
+            new Vector3f(0, 0, 0), new Vector3f(0, 3, 1), new Vector3f(0.55F));
 
     static {
         List<Vector3fc> bounds = new ArrayList<>();
@@ -54,7 +58,8 @@ public abstract class ItemModelManagerMixin {
         layer.setSpecialModel(SkinTotemRenderer.INSTANCE, skin);
         layer.setUseLight(true);
         layer.setVertices(() -> SKIN_TOTEMS_BOUNDS);
-        layer.setTransform(firstPerson ? SKIN_TOTEMS_FIRST_PERSON : SKIN_TOTEMS_THIRD_PERSON);
+        layer.setTransform(thirdPerson ? THIRD_PERSON
+                : context == ItemDisplayContext.FIRST_PERSON_LEFT_HAND ? FIRST_PERSON_LEFT : FIRST_PERSON_RIGHT);
         layer.setGlint(stack.hasGlint() ? ItemRenderState.Glint.SPECIAL : ItemRenderState.Glint.NONE);
         state.addModelKey(skin);
         ci.cancel();

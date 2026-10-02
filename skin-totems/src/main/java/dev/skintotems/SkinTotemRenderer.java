@@ -39,9 +39,9 @@ public final class SkinTotemRenderer implements SpecialModelRenderer<SkinTexture
                        OrderedRenderCommandQueue queue, int light, int overlay, boolean glint, int outline) {
         if (skin == null) return;
         matrices.push();
-        // The sprite is 15 pixels tall and hangs down from y=0; size it to ~0.8 blocks, centred in the item cell.
-        matrices.translate(0.50F, 0.90F, 0.50F);
-        matrices.scale(0.85F, -0.85F, -0.85F);
+        // One sprite pixel = 1/16 block, like a vanilla item; the 15-row figure hangs down from the top of the cell.
+        matrices.translate(0.50F, 0.96875F, 0.50F);
+        matrices.scale(1F, -1F, -1F);
         queue.submitModelPart(model(skin.model() == PlayerSkinType.SLIM), matrices,
                 RenderLayers.entityTranslucent(skin.body().texturePath()),
                 light, overlay, null, false, glint, -1, null, outline);
