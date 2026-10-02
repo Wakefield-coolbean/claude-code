@@ -24,16 +24,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemModelManagerMixin {
     @Unique
     private static final Vector3fc[] SKIN_TOTEMS_BOUNDS;
-    // The vanilla display transforms of the totem (item/generated), so the figure is held like a normal item.
+    // The vanilla display transforms of the totem (item/generated, JSON translations / 16), so the figure is held like a normal item.
     @Unique
     private static final Transformation FIRST_PERSON_RIGHT = new Transformation(
-            new Vector3f(0, -90, 25), new Vector3f(1.13F, 3.2F, 1.13F), new Vector3f(0.68F));
+            new Vector3f(0, -90, 25), new Vector3f(0.0706F, 0.2F, 0.0706F), new Vector3f(0.68F));
     @Unique
     private static final Transformation FIRST_PERSON_LEFT = new Transformation(
-            new Vector3f(0, 90, -25), new Vector3f(1.13F, 3.2F, 1.13F), new Vector3f(0.68F));
+            new Vector3f(0, 90, -25), new Vector3f(0.0706F, 0.2F, 0.0706F), new Vector3f(0.68F));
     @Unique
     private static final Transformation THIRD_PERSON = new Transformation(
-            new Vector3f(0, 0, 0), new Vector3f(0, 3, 1), new Vector3f(0.55F));
+            new Vector3f(0, 0, 0), new Vector3f(0, 0.1875F, 0.0625F), new Vector3f(0.55F));
 
     static {
         List<Vector3fc> bounds = new ArrayList<>();
