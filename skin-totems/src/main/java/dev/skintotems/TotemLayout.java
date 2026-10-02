@@ -18,16 +18,22 @@ final class TotemLayout {
     /** One strip: draws {@code w}x1 texels starting at skin ({@code u}, {@code v}) at sprite ({@code col}, {@code row}). */
     record Strip(float x, float y, float z, int w, int u, int v) {}
 
+    /** Plane depths (in pixels) making up the 1-pixel-thick body. Front of the model is -z. */
+    private static final float[] DEPTHS = {-0.5f, -0.25f, 0f, 0.25f, 0.5f};
+
     private TotemLayout() {}
 
     static List<Strip> build(boolean slim) {
         List<Strip> out = new ArrayList<>();
-        add(out, slim, false);
-        add(out, slim, true);
+        // The body is a stack of identical planes so the sprite has the 1-pixel thickness of a normal item.
+        for (float z : DEPTHS) {
+            add(out, slim, false, z);
+        }
+        add(out, slim, true, OVERLAY_OFFSET + DEPTHS[0]);
         return out;
     }
 
-    private static void add(List<Strip> out, boolean slim, boolean overlay) {
+    private static void add(List<Strip> out, boolean slim, boolean overlay, float z) {
         int armW = slim ? 3 : 4;
 
         // Head: the 8x8 face (plus hat layer) at 1:1, top corners rounded off.
@@ -35,13 +41,13 @@ final class TotemLayout {
         for (int r = 0; r < 8; r++) {
             int c0 = r == 0 ? 4 : 3;
             int c1 = r == 0 ? 9 : 10;
-            put(out, overlay, c0, r, c1 - c0 + 1, headU + (c0 - 3), 8 + r);
+            put(out, z, c0, r, c1 - c0 + 1, headU + (c0 - 3), 8 + r);
         }
 
         // Torso: 12 skin rows squashed into 4 sprite rows.
         int[] torsoRows = {0, 4, 7, 11};
         for (int i = 0; i < torsoRows.length; i++) {
-            put(out, overlay, 3, 8 + i, 8, 20, (overlay ? 36 : 20) + torsoRows[i]);
+            put(out, z, 3, 8 + i, 8, 20, (overlay ? 36 : 20) + torsoRows[i]);
         }
 
         // Arms: stretched out sideways. Sprite columns run shoulder -> hand, sprite rows run across the arm.
@@ -54,8 +60,8 @@ final class TotemLayout {
             for (int j = 0; j < 3; j++) {
                 // The hand is only two texels tall, like the original sprite.
                 if (i == 0 && j == 2) continue;
-                put(out, overlay, i, 7 + j, 1, rightU + rightAcross[j], rightV + armAlong[i]);
-                put(out, overlay, 13 - i, 7 + j, 1, leftU + leftAcross[j], leftV + armAlong[i]);
+                put(out, z, i, 7 + j, 1, rightU + rightAcross[j], rightV + armAlong[i]);
+                put(out, z, 13 - i, 7 + j, 1, leftU + leftAcross[j], leftV + armAlong[i]);
             }
         }
 
@@ -67,15 +73,15 @@ final class TotemLayout {
         int[] legRows = {2, 7};
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < 3; i++) {
-                put(out, overlay, 4 + i, 12 + j, 1, rLegU + rLegX[i], rLegV + legRows[j]);
-                put(out, overlay, 7 + i, 12 + j, 1, lLegU + lLegX[i], lLegV + legRows[j]);
+                put(out, z, 4 + i, 12 + j, 1, rLegU + rLegX[i], rLegV + legRows[j]);
+                put(out, z, 7 + i, 12 + j, 1, lLegU + lLegX[i], lLegV + legRows[j]);
             }
         }
-        put(out, overlay, 5, 14, 2, rLegU + 1, rLegV + 11);
-        put(out, overlay, 7, 14, 2, lLegU + 1, lLegV + 11);
+        put(out, z, 5, 14, 2, rLegU + 1, rLegV + 11);
+        put(out, z, 7, 14, 2, lLegU + 1, lLegV + 11);
     }
 
-    private static void put(List<Strip> out, boolean overlay, int col, int row, int w, int u, int v) {
-        out.add(new Strip(col - 7, row, overlay ? OVERLAY_OFFSET : 0f, w, u, v));
+    private static void put(List<Strip> out, float z, int col, int row, int w, int u, int v) {
+        out.add(new Strip(col - 7, row, z, w, u, v));
     }
 }
