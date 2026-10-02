@@ -6,6 +6,7 @@
   "description": "Held totems become flat, custom-totem-style figures built from the holder's Minecraft skin.",
   "environment": "client",
   "license": "MIT",
+  "icon": "assets/skin_totems/icon.png",
   "entrypoints": { "client": ["dev.skintotems.SkinTotemsClient"] },
   "mixins": ["skin_totems.mixins.json"],
   "depends": {

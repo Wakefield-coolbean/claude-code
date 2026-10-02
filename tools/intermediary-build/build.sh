@@ -6,6 +6,6 @@ cd "$(dirname "$0")"
 out=$(mktemp -d)
 javac --release 21 -d "$out/stubs" $(find stubs -name '*.java')
 javac --release 21 -cp "$out/stubs" -d "$out/classes" $(find src -name '*.java')
-cp mod-resources/fabric.mod.json mod-resources/skin_totems.mixins.json "$out/classes/"
+cp -r mod-resources/. "$out/classes/"
 jar --create --file skin-totems-1.1.0.jar -C "$out/classes" .
 rm -rf "$out"
