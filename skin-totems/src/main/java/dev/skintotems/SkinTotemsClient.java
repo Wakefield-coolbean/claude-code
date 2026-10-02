@@ -25,15 +25,35 @@ public final class SkinTotemsClient implements ClientModInitializer {
         EntityModelLayerRegistry.registerModelLayer(SLIM, () -> totemModel(true));
     }
 
-    /** A flat, front-facing sprite built from single-texel strips of the 64x64 skin sheet. */
+    /** Half the depth of the (pre-scaled) slab cuboids; the renderer stretches them 100x to one pixel. */
+    static final float SLAB_Z = -0.005F;
+    static final float SLAB_DEPTH = 0.01F;
+
+    /**
+     * The figure, built from single-texel strips of the 64x64 skin sheet. The slab cuboids are almost
+     * depth-less so that every face samples the strip's own texels; see {@link TotemLayout}.
+     */
     private static TexturedModelData totemModel(boolean slim) {
-        ModelData data = new ModelData();
-        ModelPartBuilder builder = ModelPartBuilder.create();
-        Set<Direction> front = Set.of(Direction.NORTH);
-        for (TotemLayout.Strip s : TotemLayout.build(slim)) {
-            builder.uv(s.u(), s.v()).cuboid(s.x(), s.y(), s.z(), s.w(), 1f, 0f, front);
+        TotemLayout.Layout layout = TotemLayout.build(slim);
+        ModelPartBuilder front = ModelPartBuilder.create();
+        for (TotemLayout.Strip s : layout.front()) {
+            front.uv(s.u(), s.v()).cuboid(s.x(), s.y(), SLAB_Z, s.w(), 1F, SLAB_DEPTH,
+                    Set.of(Direction.NORTH, Direction.WEST, Direction.DOWN));
         }
-        data.getRoot().addChild("totem", builder, ModelTransform.NONE);
+        ModelPartBuilder back = ModelPartBuilder.create();
+        for (TotemLayout.Strip s : layout.back()) {
+            back.uv(s.u(), s.v()).cuboid(s.x(), s.y(), SLAB_Z, 1F, 1F, SLAB_DEPTH,
+                    Set.of(Direction.WEST, Direction.DOWN));
+        }
+        ModelPartBuilder overlay = ModelPartBuilder.create();
+        for (TotemLayout.Strip s : layout.overlay()) {
+            overlay.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.OVERLAY_Z, s.w(), 1F, 0F,
+                    Set.of(Direction.NORTH));
+        }
+        ModelData data = new ModelData();
+        data.getRoot().addChild("front", front, ModelTransform.NONE);
+        data.getRoot().addChild("back", back, ModelTransform.NONE);
+        data.getRoot().addChild("overlay", overlay, ModelTransform.NONE);
         return TexturedModelData.of(data, 64, 64);
     }
 }

@@ -27,11 +27,21 @@ public final class SkinTotemRenderer implements SpecialModelRenderer<SkinTexture
         LoadedEntityModels current = MinecraftClient.getInstance().getLoadedEntityModels();
         // A resource reload replaces this set, so stale model parts are discarded.
         if (current != modelSet) {
-            classic = current.getModelPart(SkinTotemsClient.CLASSIC);
-            slim = current.getModelPart(SkinTotemsClient.SLIM);
+            classic = prepare(current.getModelPart(SkinTotemsClient.CLASSIC));
+            slim = prepare(current.getModelPart(SkinTotemsClient.SLIM));
             modelSet = current;
         }
         return thin ? slim : classic;
+    }
+
+    /** Stretches the near-depthless slab cuboids to one pixel and flips the back copy; see TotemLayout. */
+    private static ModelPart prepare(ModelPart root) {
+        ModelPart front = root.getChild("front");
+        front.zScale = 100F;
+        ModelPart back = root.getChild("back");
+        back.zScale = 100F;
+        back.roll = (float) Math.PI;
+        return root;
     }
 
     @Override

@@ -11,7 +11,10 @@ public final class Preview {
         boolean slim = a.length > 2 && a[2].equals("slim");
         int scale = 16;
         BufferedImage out = new BufferedImage(TotemLayout.COLS * scale, TotemLayout.ROWS * scale, BufferedImage.TYPE_INT_ARGB);
-        for (TotemLayout.Strip s : TotemLayout.build(slim)) {
+        TotemLayout.Layout layout = TotemLayout.build(slim);
+        java.util.List<TotemLayout.Strip> all = new java.util.ArrayList<>(layout.front());
+        all.addAll(layout.overlay());
+        for (TotemLayout.Strip s : all) {
             for (int i = 0; i < s.w(); i++) {
                 int argb = skin.getRGB(s.u() + i, s.v());
                 if ((argb >>> 24) == 0) continue;
