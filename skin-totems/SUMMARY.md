@@ -1,15 +1,11 @@
 # Skin Totems
 
-**Your totem of undying, but it's you.**
+Turns the totem you're holding into a little version of yourself.
 
-Normally a held Totem of Undying is the same gold figure for everyone. Skin Totems replaces it, only while it's in someone's hand, with a small custom-totem-style figure (arms out, like the totems from custom-totem makers) painted from that player's own Minecraft skin: their face, hair, shirt, arms and pants.
+When you (or anyone else) hold a Totem of Undying, it shows up as a small totem-style figure made from that player's skin instead of the usual gold guy. So you see your own face in your hand, and other players' totems look like them.
 
-- **Every player gets their own totem.** Steve, Alex, or any custom skin. You see your own in your hands, and you see everyone else's in theirs.
-- **Works with both skin models.** Classic (wide-arm) and slim-arm skins are both handled, including hat, jacket, sleeve and pants layers.
-- **Looks like an item.** The figure is a thick, flat sprite and is held in the same positions as the normal totem, main hand or offhand, first or third person.
-- **Nothing else changes.** Inventory, hotbar, dropped and item-frame totems stay vanilla.
-- **Client-only.** Works on any server. No resource pack and nothing to install server-side.
+Works with Steve/Alex style skins and picks up your hat and jacket layers too. Totems in your inventory, on the ground, or in item frames still look normal, only the ones being held change.
 
-The icon shows three examples: Steve in the middle, Alex on the left, and a custom skin on the right.
+It's client side only, so you can use it on any server.
 
-**Requires:** Minecraft 1.21.11, Fabric Loader 0.18.4+, Fabric API 0.141.0+ · **License:** MIT
+Needs Fabric API. Made for 1.21.11.
