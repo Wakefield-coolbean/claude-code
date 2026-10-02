@@ -5,6 +5,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.EntityModelLayerRegistry;
 import java.util.Set;
 import net.minecraft.client.model.ModelData;
 import net.minecraft.client.model.ModelPartBuilder;
+import net.minecraft.client.model.ModelPartData;
 import net.minecraft.client.model.ModelTransform;
 import net.minecraft.client.model.TexturedModelData;
 import net.minecraft.client.render.entity.model.EntityModelLayer;
@@ -25,35 +26,40 @@ public final class SkinTotemsClient implements ClientModInitializer {
         EntityModelLayerRegistry.registerModelLayer(SLIM, () -> totemModel(true));
     }
 
-    /** Half the depth of the (pre-scaled) slab cuboids; the renderer stretches them 100x to one pixel. */
-    static final float SLAB_Z = -0.005F;
-    static final float SLAB_DEPTH = 0.01F;
-
-    /**
-     * The figure, built from single-texel strips of the 64x64 skin sheet. The slab cuboids are almost
-     * depth-less so that every face samples the strip's own texels; see {@link TotemLayout}.
-     */
+    /** The figure, built from single-texel strips of the 64x64 skin sheet; see {@link TotemLayout}. */
     private static TexturedModelData totemModel(boolean slim) {
         TotemLayout.Layout layout = TotemLayout.build(slim);
+        Set<Direction> north = Set.of(Direction.NORTH);
+        ModelData data = new ModelData();
+        ModelPartData root = data.getRoot();
+
         ModelPartBuilder front = ModelPartBuilder.create();
         for (TotemLayout.Strip s : layout.front()) {
-            front.uv(s.u(), s.v()).cuboid(s.x(), s.y(), SLAB_Z, s.w(), 1F, SLAB_DEPTH,
-                    Set.of(Direction.NORTH, Direction.WEST, Direction.DOWN));
+            front.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.FACE_Z, s.w(), 1F, 0F, north);
         }
-        ModelPartBuilder back = ModelPartBuilder.create();
-        for (TotemLayout.Strip s : layout.back()) {
-            back.uv(s.u(), s.v()).cuboid(s.x(), s.y(), SLAB_Z, 1F, 1F, SLAB_DEPTH,
-                    Set.of(Direction.WEST, Direction.DOWN));
-        }
+        root.addChild("front", front, ModelTransform.NONE);
+
         ModelPartBuilder overlay = ModelPartBuilder.create();
         for (TotemLayout.Strip s : layout.overlay()) {
-            overlay.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.OVERLAY_Z, s.w(), 1F, 0F,
-                    Set.of(Direction.NORTH));
+            overlay.uv(s.u(), s.v()).cuboid(s.x(), s.y(), TotemLayout.OVERLAY_Z, s.w(), 1F, 0F, north);
         }
-        ModelData data = new ModelData();
-        data.getRoot().addChild("front", front, ModelTransform.NONE);
-        data.getRoot().addChild("back", back, ModelTransform.NONE);
-        data.getRoot().addChild("overlay", overlay, ModelTransform.NONE);
+        root.addChild("overlay", overlay, ModelTransform.NONE);
+
+        // Each edge is a 1x1 plane turned to span the thickness of the slab. Planes show from both sides, so
+        // the turn direction does not matter; only the pivot does.
+        float quarter = (float) (Math.PI / 2);
+        int n = 0;
+        for (TotemLayout.Edge e : layout.edges()) {
+            ModelTransform at = switch (e.side()) {
+                case 0 -> ModelTransform.of(e.x(), e.y() + 0.5F, 0F, 0F, quarter, 0F);
+                case 1 -> ModelTransform.of(e.x() + 1F, e.y() + 0.5F, 0F, 0F, quarter, 0F);
+                case 2 -> ModelTransform.of(e.x() + 0.5F, e.y(), 0F, quarter, 0F, 0F);
+                default -> ModelTransform.of(e.x() + 0.5F, e.y() + 1F, 0F, quarter, 0F, 0F);
+            };
+            ModelPartBuilder plane = ModelPartBuilder.create();
+            plane.uv(e.u(), e.v()).cuboid(-0.5F, -0.5F, 0F, 1F, 1F, 0F, north);
+            root.addChild("edge" + n++, plane, at);
+        }
         return TexturedModelData.of(data, 64, 64);
     }
 }

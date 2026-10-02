@@ -29,21 +29,11 @@ public final class SkinTotemRenderer implements class_10515<class_8685> {
     private class_630 model(boolean slimArms) {
         class_5599 set = class_310.method_1551().method_31974();
         if (set != modelSet) {
-            classic = prepare(set.method_32072(SkinTotemsClient.CLASSIC));
-            slim = prepare(set.method_32072(SkinTotemsClient.SLIM));
+            classic = set.method_32072(SkinTotemsClient.CLASSIC);
+            slim = set.method_32072(SkinTotemsClient.SLIM);
             modelSet = set;
         }
         return slimArms ? slim : classic;
-    }
-
-    /** Stretches the near-depthless slab cuboids to one pixel and flips the back copy; see TotemLayout. */
-    private static class_630 prepare(class_630 root) {
-        class_630 front = root.method_32086("front");
-        front.field_37940 = 100f;
-        class_630 back = root.method_32086("back");
-        back.field_37940 = 100f;
-        back.field_3674 = (float) Math.PI;
-        return root;
     }
 
     @Override

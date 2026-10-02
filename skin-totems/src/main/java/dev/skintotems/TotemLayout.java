@@ -8,23 +8,27 @@ import java.util.List;
  * (arms out) whose pixels are copied straight from the holder's skin. Every entry is a one-pixel-tall
  * strip of skin texels; there is no texture to generate at runtime, the skin itself is the texture.
  *
- * <p>The figure is one pixel thick like a normal item. {@code front} strips are solid slabs that show the
- * front, top and left edge. A cuboid can only show a correct texel on those faces, so {@code back} holds a
- * copy of every texel meant to be rotated 180 degrees about the view axis; its left and top faces become
- * the figure's right and bottom edges. {@code overlay} holds the hat/jacket/sleeve/pants layer as thin
- * planes just in front of the slab.
+ * <p>The figure is one pixel thick like a normal item: {@code front} is the face of the sprite, and
+ * {@code edges} are one-texel planes closing every silhouette edge, each coloured with the texel it borders
+ * (like the sides of an extruded item). {@code overlay} holds the hat/jacket/sleeve/pants layer as thin
+ * planes just in front of the face.
  */
 final class TotemLayout {
     /** Sprite columns 0..13 map to model x -7..+6, rows 0..14 map to model y 0..14 (y down). */
     static final int COLS = 14;
     static final int ROWS = 15;
-    /** Depth (in pixels) of the overlay planes: just in front of the 1-pixel-thick slab. */
+    /** The face sits at the front of a 1-pixel-thick slab spanning z -0.5..+0.5; front is -z. */
+    static final float FACE_Z = -0.5f;
+    /** Depth (in pixels) of the overlay planes: just in front of the face. */
     static final float OVERLAY_Z = -0.6f;
 
     /** Draws {@code w}x1 texels starting at skin ({@code u}, {@code v}) at model position ({@code x}, {@code y}). */
     record Strip(float x, float y, int w, int u, int v) {}
 
-    record Layout(List<Strip> front, List<Strip> back, List<Strip> overlay) {}
+    /** A one-texel edge plane. {@code side}: 0 left, 1 right, 2 top, 3 bottom of the texel at ({@code x}, {@code y}). */
+    record Edge(float x, float y, int side, int u, int v) {}
+
+    record Layout(List<Strip> front, List<Edge> edges, List<Strip> overlay) {}
 
     private TotemLayout() {}
 
@@ -34,13 +38,27 @@ final class TotemLayout {
         add(front, slim, false);
         add(overlay, slim, true);
 
-        List<Strip> back = new ArrayList<>();
+        // Expand to texels, then close every side that has no neighbour.
+        java.util.Map<Long, int[]> texels = new java.util.HashMap<>();
         for (Strip s : front) {
             for (int i = 0; i < s.w(); i++) {
-                back.add(new Strip(-(s.x() + i + 1), -(s.y() + 1), 1, s.u() + i, s.v()));
+                texels.put(key((int) s.x() + i, (int) s.y()), new int[] {s.u() + i, s.v()});
             }
         }
-        return new Layout(front, back, overlay);
+        List<Edge> edges = new ArrayList<>();
+        for (var e : texels.entrySet()) {
+            int x = (int) (e.getKey() >> 32), y = (int) (long) e.getKey();
+            int[] t = e.getValue();
+            if (!texels.containsKey(key(x - 1, y))) edges.add(new Edge(x, y, 0, t[0], t[1]));
+            if (!texels.containsKey(key(x + 1, y))) edges.add(new Edge(x, y, 1, t[0], t[1]));
+            if (!texels.containsKey(key(x, y - 1))) edges.add(new Edge(x, y, 2, t[0], t[1]));
+            if (!texels.containsKey(key(x, y + 1))) edges.add(new Edge(x, y, 3, t[0], t[1]));
+        }
+        return new Layout(front, edges, overlay);
+    }
+
+    private static long key(int x, int y) {
+        return ((long) x << 32) | (y & 0xFFFFFFFFL);
     }
 
     private static void add(List<Strip> out, boolean slim, boolean overlay) {
