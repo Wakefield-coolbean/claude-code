@@ -471,7 +471,12 @@ export class Game {
     if (this.inGame && !paused) {
       this.acc += dt;
       let n = 0;
-      while (this.acc >= TICK_MS && n < 10) { this.tick(); this.acc -= TICK_MS; n++; }
+      while (this.acc >= TICK_MS && n < 10) {
+        this.tick();
+        // screens that don't pause the game (death, chat, sleep) still need their own tick
+        if (this.screen && !this.screen.pausesGame) this.screen.tick?.();
+        this.acc -= TICK_MS; n++;
+      }
     } else if (this.screen) {
       this.acc = Math.min(this.acc, TICK_MS);
       this.uiTick = (this.uiTick ?? 0) + dt;
