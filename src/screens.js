@@ -146,7 +146,7 @@ export class Screens {
         wrap.appendChild(name);
         line.appendChild(wrap);
       });
-      sfx('reveal');
+      sfx(imp ? 'roleImp' : 'roleCrew');
       this.later(TIMING.roleReveal * 1000, () => {
         this.clear();
         done();
