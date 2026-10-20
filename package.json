@@ -1,0 +1,15 @@
+{
+  "name": "sus-station",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A social deduction game with the gameplay, look and pacing of Among Us. Offline prototype vs bots.",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

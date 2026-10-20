@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minigame Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Varela+Round&display=swap">
+<link rel="stylesheet" href="../src/style.css">
+<style>
+  body { overflow: auto; }
+  .bench { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; position: relative; z-index: 1; }
+  .bench button { font: 700 16px var(--font-ui); padding: 8px 12px; border-radius: 8px; border: 3px solid #000; background: #d6e0f0; cursor: pointer; }
+  #log { color: #fff; padding: 0 16px; font: 14px monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="bench" id="bench"></div>
+<div id="log"></div>
+<div id="minigame" class="mg-overlay" hidden></div>
+<script type="module">
+  import { MinigameHost } from '../src/tasks/host.js';
+  import { MINIGAMES } from '../src/tasks/minigames/index.js';
+  import { unlock } from '../src/audio.js';
+
+  const host = new MinigameHost(document.getElementById('minigame'));
+  const log = (m) => (document.getElementById('log').textContent = m + '\n' + document.getElementById('log').textContent);
+  // Fake sabotage state so the sabotage panels can be exercised alone.
+  const sab = { switches: [true, false, false, true, false], holders: 0 };
+  const samples = {
+    fuel: { mode: 'fill' }, data: { mode: 'download', room: 'Comms' }, divert: { mode: 'divert', room: 'Weapons' },
+    sample: { phase: 'start' }, o2: { code: '40719' }, comms: { target: 0.62 },
+    scan: { player: { name: 'Nova', color: '#c51111', shadow: '#7a0838' } },
+  };
+  const variants = { fuel: [{ mode: 'empty' }], data: [{ mode: 'upload' }], divert: [{ mode: 'accept', room: 'Weapons' }], sample: [{ phase: 'pick' }] };
+  const bench = document.getElementById('bench');
+  const add = (id, data, label) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.id = 'open-' + label.replace(/\W+/g, '-');
+    b.onclick = () => {
+      unlock();
+      host.open(id, {
+        data,
+        state: () => ({ switches: sab.switches, holders: sab.holders, needed: 2 }),
+        act: (a) => {
+          log(JSON.stringify(a));
+          if (a.type === 'toggle') sab.switches[a.index] = !sab.switches[a.index];
+          if (a.type === 'hold') sab.holders = a.on ? 2 : 0;
+        },
+        onComplete: () => log(id + ' completed'),
+        onClose: () => log(id + ' closed'),
+      });
+    };
+    bench.appendChild(b);
+  };
+  for (const id of Object.keys(MINIGAMES)) {
+    add(id, samples[id] || {}, id);
+    (variants[id] || []).forEach((d, i) => add(id, d, `${id} ${Object.values(d)[0]}`));
+  }
+  let last = performance.now();
+  const frame = (t) => {
+    const dt = Math.min(0.05, (t - last) / 1000);
+    last = t;
+    host.tick(dt, t / 1000);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  window.host = host;
+</script>
+</body>
+</html>

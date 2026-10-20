@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Map Overview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap">
+<style>body{margin:0;background:#000} canvas{display:block}</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script type="module">
+  import { Game } from '../src/game.js';
+  import { Renderer } from '../src/render.js';
+  const ppc = Number(new URLSearchParams(location.search).get('ppc') || 12);
+  const game = new Game({ seed: 1 });
+  const hidden = document.createElement('canvas');
+  const r = new Renderer(hidden, game);
+  r.ppc = ppc;
+  r.chunks.clear();
+  r.sprites.setScale(ppc);
+  const out = document.getElementById('out');
+  out.width = game.map.W * ppc;
+  out.height = game.map.H * ppc;
+  const ctx = out.getContext('2d');
+  for (let cy = 0; cy < game.map.H / 8; cy++) for (let cx = 0; cx < game.map.W / 8; cx++) ctx.drawImage(r.chunk(cx, cy), cx * 8 * ppc, cy * 8 * ppc);
+  // Players at spawn, labels for rooms.
+  ctx.font = `800 ${ppc * 1.1}px "Baloo 2", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  for (const rm of game.map.rooms) {
+    const [x0, y0, x1, y1] = rm.rect;
+    ctx.strokeText(rm.name, (x0 + x1) / 2 * ppc, (y0 + y1) / 2 * ppc);
+    ctx.fillText(rm.name, (x0 + x1) / 2 * ppc, (y0 + y1) / 2 * ppc);
+  }
+  for (const p of game.players) r.sprites.blit(ctx, r.sprites.crewmate(p, -1), p.x * ppc, p.y * ppc, 1, ppc);
+  document.title = 'ready';
+</script>
+</body>
+</html>
