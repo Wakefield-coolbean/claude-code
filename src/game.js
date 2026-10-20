@@ -2,7 +2,7 @@
 // server unchanged. UI, bots and audio react to events and call the action methods.
 
 import { COLORS, BOT_NAMES, DIST, TIMING, defaultSettings } from './config.js';
-import { buildMap, roomAt, ventNeighbors } from './map.js';
+import { getMap, roomAt, ventNeighbors } from './map.js';
 import { World } from './grid.js';
 import { dealTasks } from './tasks/defs.js';
 
@@ -24,22 +24,49 @@ export function maxImpostors(players) {
   return players <= 6 ? 1 : players <= 8 ? 2 : 3;
 }
 
-let sharedMap = null;
+/**
+ * Seat list for a game: the given humans first, then bots with unused names and colors
+ * until there are `total` seats. Entries: { name, color, isBot?, remote?, role? }.
+ */
+export function buildRoster(humans, total, rng) {
+  const roster = humans.map((h) => ({ ...h }));
+  const taken = new Set(roster.map((h) => h.color));
+  const colors = [...COLORS.keys()].filter((c) => !taken.has(c)).sort(() => rng() - 0.5);
+  const usedNames = new Set(roster.map((h) => h.name.toLowerCase()));
+  const names = BOT_NAMES.filter((n) => !usedNames.has(n.toLowerCase())).sort(() => rng() - 0.5);
+  while (roster.length < total && colors.length) roster.push({ name: names.pop() || 'Bot', color: colors.pop(), isBot: true });
+  return roster;
+}
 
 export class Game {
   /**
    * @param {object} opts
    * @param {object} opts.settings  lobby settings (see config.js)
    * @param {number} opts.seed
-   * @param {{name: string, color: number, role?: 'random'|'crew'|'impostor'}|null} opts.local  null = bots only
+   * @param {{name: string, color: number, role?: 'random'|'crew'|'impostor'}|null} opts.local
+   *        shortcut for "me plus bots" (null with no roster = bots only)
+   * @param {Array} [opts.roster]  explicit seats, see buildRoster()
+   * @param {number} [opts.localId]  seat of the player on this device
+   * @param {string} [opts.mapId]  'kestrel' or 'dropship'
+   * @param {boolean} [opts.replica]  mirror of a server game: no roles or tasks are dealt here
+   * @param {string} [opts.phase]  starting phase ('lobby' for the dropship)
    */
-  constructor({ settings = defaultSettings(), seed = Date.now(), local = null } = {}) {
+  constructor({
+    settings = defaultSettings(),
+    seed = Date.now(),
+    local = null,
+    roster = null,
+    localId,
+    mapId = 'kestrel',
+    replica = false,
+    phase,
+  } = {}) {
     this.settings = { ...defaultSettings(), ...settings };
     this.rng = mulberry32(seed);
-    this.map = sharedMap || (sharedMap = buildMap());
+    this.map = getMap(mapId);
     this.world = new World(this.map);
     this.t = 0;
-    this.phase = 'intro';
+    this.phase = phase || 'intro';
     this.phaseEnd = TIMING.shhh + TIMING.roleReveal;
     this.listeners = {};
     this.bodies = [];
@@ -53,7 +80,12 @@ export class Game {
     this.taskBarShown = 0;
     this.buttonReadyAt = this.settings.emergencyCooldown;
     this.sab = { active: null, readyAt: TIMING.firstSabotageCooldown, doors: {} };
-    this.createPlayers(local);
+    if (!roster) {
+      const me = local ? [{ name: local.name || COLORS[local.color][0], color: local.color, role: local.role }] : [];
+      roster = buildRoster(me, this.settings.players, this.rng);
+    }
+    this.createPlayers(roster, replica);
+    this.localId = localId ?? (local ? 0 : -1);
   }
 
   // ---------- events ----------
@@ -68,26 +100,22 @@ export class Game {
   }
 
   // ---------- setup ----------
-  createPlayers(local) {
-    const n = this.settings.players;
+  createPlayers(roster, replica) {
+    const n = roster.length;
     const rng = this.rng;
-    const colors = [...COLORS.keys()];
-    const names = BOT_NAMES.slice().sort(() => rng() - 0.5);
     this.players = [];
-    if (local) colors.splice(colors.indexOf(local.color), 1);
-    colors.sort(() => rng() - 0.5);
     for (let i = 0; i < n; i++) {
-      const isLocal = local && i === 0;
-      const ci = isLocal ? local.color : colors.pop();
-      const [cname, color, shadow] = COLORS[ci];
+      const r = roster[i];
+      const [cname, color, shadow] = COLORS[r.color];
       this.players.push({
         id: i,
-        name: isLocal ? local.name || cname : names[i % names.length],
-        colorIndex: ci,
+        name: r.name || cname,
+        colorIndex: r.color,
         colorName: cname,
         color,
         shadow,
-        isBot: !isLocal,
+        isBot: !!r.isBot,
+        remote: !!r.remote, // position comes from a network client
         role: 'crew',
         alive: true,
         x: 0,
@@ -105,16 +133,15 @@ export class Game {
         vote: null,
       });
     }
-    this.localId = local ? 0 : -1;
+    if (replica) {
+      this.respawn();
+      return;
+    }
 
-    // Roles.
+    // Roles (a seat may ask to be crew or impostor, e.g. in freeplay).
     const impCount = Math.min(this.settings.impostors, maxImpostors(n));
-    const ids = this.players.map((p) => p.id);
-    let pool = ids.slice();
-    const imps = [];
-    if (local && local.role === 'impostor') imps.push(0);
-    if (local && local.role === 'crew') pool = pool.filter((id) => id !== 0);
-    pool = pool.filter((id) => !imps.includes(id));
+    const imps = roster.flatMap((r, i) => (r.role === 'impostor' ? [i] : [])).slice(0, impCount);
+    const pool = roster.flatMap((r, i) => (r.role === 'crew' || imps.includes(i) ? [] : [i]));
     while (imps.length < impCount && pool.length) imps.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
     imps.forEach((id) => (this.players[id].role = 'impostor'));
 
@@ -179,7 +206,7 @@ export class Game {
 
   /** Eye position: roughly the middle of the body. */
   eye(p) {
-    return [p.x, p.y - 0.45];
+    return [p.x, p.y - 0.6];
   }
 
   /** Can `viewer` see point (x, y)? */
@@ -194,7 +221,7 @@ export class Game {
     if (p === viewer) return true;
     if (p.inVent) return false;
     if (!p.alive) return !viewer.alive; // ghosts are only visible to ghosts
-    return this.sees(viewer, p.x, p.y - 0.4);
+    return this.sees(viewer, p.x, p.y - 0.55);
   }
 
   killRange() {
@@ -259,7 +286,7 @@ export class Game {
 
   nearButton(p) {
     const b = this.map.button;
-    return p.alive && Math.hypot(p.x - b.x, p.y - b.y) <= b.useRadius;
+    return !!b && p.alive && Math.hypot(p.x - b.x, p.y - b.y) <= b.useRadius;
   }
 
   /** Task steps `p` can do at a station now: [{ task, index }]. */
@@ -275,6 +302,10 @@ export class Game {
 
   /** The thing `p` would interact with by pressing USE, or null. */
   usable(p) {
+    if (this.phase === 'lobby') {
+      const st = this.map.stations.laptop;
+      return st && Math.hypot(st.x - p.x, st.y - p.y) <= DIST.use + 0.4 ? { kind: 'laptop', station: 'laptop' } : null;
+    }
     if (this.phase !== 'play' || p.inVent) return null;
     let best = null;
     let bd = DIST.use;
@@ -299,7 +330,7 @@ export class Game {
     }
     if (this.nearButton(p)) {
       const b = this.map.button;
-      consider(Math.max(0, Math.hypot(p.x - b.x, p.y - b.y) - 2.4), { kind: 'button' });
+      consider(Math.max(0, Math.hypot(p.x - b.x, p.y - b.y) - 2.1), { kind: 'button' });
     }
     return best;
   }
@@ -694,10 +725,35 @@ export class Game {
   }
 
   // ---------- tick ----------
+  /** Move one player by its input for dt seconds (shared with client-side prediction). */
+  stepPlayer(p, dt) {
+    const { x: ix, y: iy } = p.input;
+    if (!ix && !iy) {
+      p.moving = false;
+      return;
+    }
+    const speed = DIST.speed * this.settings.playerSpeed;
+    const dx = ix * speed * dt;
+    const dy = iy * speed * dt;
+    if (p.alive) [p.x, p.y] = this.world.move(p.x, p.y, dx, dy, DIST.playerRadius);
+    else {
+      p.x = Math.max(1, Math.min(this.map.W - 1, p.x + dx));
+      p.y = Math.max(1, Math.min(this.map.H - 1, p.y + dy));
+    }
+    if (Math.abs(ix) > 0.15) p.facing = ix > 0 ? 1 : -1;
+    p.moving = true;
+    p.walk += dt;
+    if (this.visualFx.has(p.id)) this.visualFx.delete(p.id);
+  }
+
   tick(dt) {
     if (this.phase === 'over') return;
     this.t += dt;
     const t = this.t;
+    if (this.phase === 'lobby') {
+      for (const p of this.players) if (!p.remote) this.stepPlayer(p, dt);
+      return;
+    }
     if (this.phase === 'intro') {
       if (t >= this.phaseEnd) {
         this.phase = 'play';
@@ -711,27 +767,11 @@ export class Game {
       return;
     }
 
-    // Movement.
-    const speed = DIST.speed * this.settings.playerSpeed;
+    // Movement (remote players report their own positions).
     for (const p of this.players) {
       if (p.alive) p.killCooldown = Math.max(0, p.killCooldown - dt);
-      if (p.inVent) continue;
-      const { x: ix, y: iy } = p.input;
-      if (ix || iy) {
-        const dx = ix * speed * dt;
-        const dy = iy * speed * dt;
-        if (p.alive) [p.x, p.y] = this.world.move(p.x, p.y, dx, dy, DIST.playerRadius);
-        else {
-          p.x = Math.max(1, Math.min(this.map.W - 1, p.x + dx));
-          p.y = Math.max(1, Math.min(this.map.H - 1, p.y + dy));
-        }
-        if (Math.abs(ix) > 0.15) p.facing = ix > 0 ? 1 : -1;
-        p.moving = true;
-        p.walk += dt;
-        if (this.visualFx.has(p.id)) this.visualFx.delete(p.id);
-      } else {
-        p.moving = false;
-      }
+      if (p.inVent || p.remote) continue;
+      this.stepPlayer(p, dt);
     }
 
     // Lights fade.

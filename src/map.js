@@ -22,6 +22,7 @@ export const THEMES = {
   weapons: ['#8d95a8', '#757d91', '#535b70', '#ff8a5c'],
   bridge: ['#86a0bb', '#6d87a2', '#4d6580', '#c7ecff'],
   hall: ['#6f7b87', '#5d6873', '#4a5560', '#8c99a6'],
+  dropship: ['#8d98a4', '#76818d', '#4c5866', '#ffb347'],
 };
 
 export const ROOMS = [
@@ -64,11 +65,11 @@ export const HALLS = [
 
 // Obstacles: block movement, not sight. circle: [x, y, r]; rect: [x0, y0, x1, y1]
 export const PROPS = [
-  { kind: 'table', circle: [62.5, 12.5, 2.2], button: true },
-  { kind: 'table', circle: [55, 7.5, 1.5] },
-  { kind: 'table', circle: [70, 7.5, 1.5] },
-  { kind: 'table', circle: [55, 18.5, 1.5] },
-  { kind: 'table', circle: [70, 18.5, 1.5] },
+  { kind: 'table', circle: [62.5, 12.5, 1.9], button: true },
+  { kind: 'table', circle: [55, 7.5, 1.3] },
+  { kind: 'table', circle: [70, 7.5, 1.3] },
+  { kind: 'table', circle: [55, 18.5, 1.3] },
+  { kind: 'table', circle: [70, 18.5, 1.3] },
   { kind: 'bed', rect: [38, 21, 41, 23] },
   { kind: 'bed', rect: [38, 24.5, 41, 26.5] },
   { kind: 'engine', rect: [7, 9, 12.5, 17] },
@@ -179,25 +180,72 @@ export const DOORS = [
 ];
 
 export const EMERGENCY_BUTTON = { x: 62.5, y: 12.5, useRadius: 3.4 };
-export const SPAWN = { x: 62.5, y: 12.5, radius: 4.2 };
+export const SPAWN = { x: 62.5, y: 12.5, radius: 3.9 };
+
+export const KESTREL = {
+  id: 'kestrel',
+  name: 'The Kestrel',
+  W: MAP_W,
+  H: MAP_H,
+  rooms: ROOMS,
+  halls: HALLS,
+  props: PROPS,
+  stations: STATIONS,
+  vents: VENTS,
+  ventNetworks: VENT_NETWORKS,
+  doors: DOORS,
+  button: EMERGENCY_BUTTON,
+  spawn: SPAWN,
+};
+
+// The pre-game lobby: a dropship cabin with a customize laptop.
+export const DROPSHIP = {
+  id: 'dropship',
+  name: 'Dropship',
+  W: 40,
+  H: 28,
+  rooms: [{ id: 'dropship', name: 'Dropship', theme: 'dropship', rect: [6, 7, 33, 21] }],
+  halls: [],
+  props: [
+    { kind: 'crate', rect: [7, 8, 9.6, 10.2] },
+    { kind: 'crate', rect: [7, 10.2, 8.8, 11.8] },
+    { kind: 'crate', rect: [29.8, 17.6, 32, 20] },
+    { kind: 'bench', rect: [12, 19.6, 18, 20.6] },
+    { kind: 'bench', rect: [21, 19.6, 27, 20.6] },
+    { kind: 'laptoptable', rect: [24, 8.2, 27.4, 9.6] },
+  ],
+  stations: { laptop: { room: 'dropship', x: 25.7, y: 10.4, look: 'none', tool: 'laptop' } },
+  vents: {},
+  ventNetworks: [],
+  doors: [],
+  button: null,
+  spawn: { x: 19.5, y: 14, radius: 3.6 },
+};
+
+const built = new Map();
+
+/** Built map by id, cached (maps are immutable once built). */
+export function getMap(id = 'kestrel') {
+  if (!built.has(id)) built.set(id, buildMap(id === 'dropship' ? DROPSHIP : KESTREL));
+  return built.get(id);
+}
 
 /** Build the static grids used by collision, vision, pathfinding and rendering. */
-export function buildMap() {
-  const W = MAP_W;
-  const H = MAP_H;
+export function buildMap(def = KESTREL) {
+  const { W, H } = def;
   const floor = new Uint8Array(W * H);
   const room = new Int8Array(W * H).fill(-1);
   const theme = new Array(W * H).fill(null);
   const fill = (r, f) => {
     for (let y = r[1]; y < r[3]; y++) for (let x = r[0]; x < r[2]; x++) f(y * W + x);
   };
-  HALLS.forEach((r) =>
+  def.halls.forEach((r) =>
     fill(r, (i) => {
       floor[i] = 1;
       theme[i] = 'hall';
     }),
   );
-  ROOMS.forEach((rm, ri) =>
+  def.rooms.forEach((rm, ri) =>
     fill(rm.rect, (i) => {
       floor[i] = 1;
       room[i] = ri;
@@ -224,8 +272,8 @@ export function buildMap() {
   // Props mark blocked cells for pathfinding (with a player-radius margin).
   const blocked = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) blocked[i] = floor[i] ? 0 : 1;
-  const margin = 0.35;
-  for (const p of PROPS) {
+  const margin = 0.42;
+  for (const p of def.props) {
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const cx = x + 0.5;
@@ -243,14 +291,16 @@ export function buildMap() {
     }
   }
 
-  const doors = DOORS.map((d, i) => {
+  const doors = def.doors.map((d, i) => {
     const [x0, , x1] = d.rect;
     return { id: i, room: d.room, rect: d.rect, vertical: x1 - x0 === 1, cells: [] };
   });
   doors.forEach((d) => fill(d.rect, (i) => d.cells.push(i)));
 
-  const roomIndex = Object.fromEntries(ROOMS.map((r, i) => [r.id, i]));
+  const roomIndex = Object.fromEntries(def.rooms.map((r, i) => [r.id, i]));
   return {
+    id: def.id,
+    name: def.name,
     W,
     H,
     floor,
@@ -260,14 +310,15 @@ export function buildMap() {
     faceTheme,
     blocked,
     doors,
-    rooms: ROOMS,
+    rooms: def.rooms,
+    halls: def.halls,
     roomIndex,
-    props: PROPS,
-    stations: STATIONS,
-    vents: VENTS,
-    ventNetworks: VENT_NETWORKS,
-    button: EMERGENCY_BUTTON,
-    spawn: SPAWN,
+    props: def.props,
+    stations: def.stations,
+    vents: def.vents,
+    ventNetworks: def.ventNetworks,
+    button: def.button,
+    spawn: def.spawn,
   };
 }
 

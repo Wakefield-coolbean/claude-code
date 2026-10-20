@@ -110,15 +110,15 @@ These are the numbers that make the game *feel* right. Every one is a constant i
 | Download / Upload | ~8 s each |
 | Submit Scan | 10 s |
 
-### Distances (in map cells; a crewmate is about 0.8 cells wide)
+### Distances (in map cells; a crewmate is about 1.1 cells wide)
 
 | Distance | Value |
 | --- | --- |
 | Player speed at 1× | 4.5 cells/s (crossing the cafeteria takes ~4 s) |
-| Crew vision radius at 1× | 6 cells; screen shows ~14 cells vertically |
-| Kill distance short / normal / long | 1.2 / 1.8 / 2.5 cells |
-| Use (tasks, button, vents) | 1.4 cells |
-| Report | 2.6 cells, needs line of sight |
+| Crew vision radius at 1× | 6.8 cells; screen shows ~16 cells vertically |
+| Kill distance short / normal / long | 1.4 / 2.1 / 2.9 cells |
+| Use (tasks, button, vents) | 1.6 cells |
+| Report | 3 cells, needs line of sight |
 
 ### Pacing targets for tuning
 
@@ -188,16 +188,18 @@ src/
 - The simulation emits events (`kill`, `meetingStart`, `taskDone`, ...) that the renderer, HUD, audio and bots consume.
 - Randomness comes from a seeded RNG so games are reproducible in tests.
 
-### Networking model (Milestone 2)
+### Networking model (Milestone 2, core built)
 
-- **Authoritative server.** Clients send inputs and actions; the server validates every kill (role, cooldown,
-  distance, alive, not in a meeting), task step (near the console, minimum time), vent, report and vote.
-- **Movement.** Clients predict their own movement and reconcile; other players are interpolated ~100 ms behind.
-  Server ticks at 30 Hz, sends snapshots at 20 Hz.
-- **Vision culling.** The server only sends positions of players inside each client's line of sight
-  (plus impostor teammates), which removes the classic "see through walls" cheat.
-- **Rooms.** 6-letter room codes, public lobby browser, host settings, host migration, reconnect within 60 s.
-- **Chat.** Server-side filter, quick-chat-only mode, rate limits, report and mute.
+- **Authoritative server** (`server/`). It runs the same `game.js` and `bots.js` as freeplay. Clients send
+  actions; the server validates every kill (role, cooldown, distance, line of sight), task step (standing at
+  the console), vent, report, sabotage fix and vote with the same rule functions.
+- **Movement.** Each client moves its own crewmate immediately and reports its position 15 times a second;
+  the server rejects moves that are too fast or pass through walls and snaps the player back. Other players
+  are shown ~120 ms behind, interpolated between snapshots. Server ticks at 30 Hz, snapshots at 15 Hz.
+- **Vision culling.** Each snapshot only contains the players and bodies that client can see (ghosts see
+  everyone), and kill news only reaches the victim, the killer, impostors, ghosts and witnesses.
+- **Rooms.** 6-letter codes, public game list, host settings and kick, host migration, a bot takes over a
+  dropped seat, bots fill empty seats. Still to do: rejoin after a disconnect, regions, chat filter.
 
 ---
 
@@ -209,7 +211,7 @@ Durations assume one or two developers plus part-time art and audio.
 | --- | --- | --- | --- | --- |
 | 0 | Pre-production | This plan, feature list, pacing table, map blockout | Team agrees on scope and art direction | 1 wk |
 | 1 | **Offline vertical slice** (this repo) | One full ship, full round loop vs bots in the browser | A full game against bots is fun and finishes in 6–12 min | 2–3 wks |
-| 2 | Online multiplayer core | Room server, room codes, lobby, sync, meetings and votes online, reconnect | 10 players across regions finish games with no desyncs | 4–6 wks |
+| 2 | Online multiplayer core (core built) | Room server, room codes, lobby, sync, meetings and votes online, reconnect | 10 players across regions finish games with no desyncs | 4–6 wks |
 | 3 | Map 1 content complete | Every task and sabotage, admin map, security cameras, door logic, all visual tasks | Every feature in FEATURES.md marked P0/P1 for Map 1 works online | 3–4 wks |
 | 4 | Art and audio pass | Final character, map art, animations, kill animations, music, SFX | Matches the style guide; 60 fps on mid-range phones | 4–6 wks (parallel to 2–3) |
 | 5 | Lobby, cosmetics, safety | Customization, quick chat, chat filter, report/ban, accounts, settings, accessibility | Ready for strangers to play together | 3–4 wks |
@@ -228,6 +230,16 @@ Durations assume one or two developers plus part-time art and audio.
 - Ghosts (walk through walls, keep doing tasks), all four win conditions, victory/defeat screens.
 - Bots for every other seat: do tasks, notice bodies, remember sightings, hunt when impostor, sabotage, fix sabotage, chat, accuse and vote.
 - Lobby settings screen covering the main settings.
+
+### Milestone 2 progress (built in this repo)
+
+- Node.js server (`npm start`) serving the game and running rooms over WebSockets.
+- Title menu laid out like the original (Online / How To Play / Freeplay), online screen with
+  Host / Public / Private, walkable dropship lobby with customize laptop, room code, settings list,
+  host-only Start with countdown.
+- Online games for up to 15 players with bots in empty seats; everything from freeplay works online.
+- Server tests for lobby rules, vision culling, movement checks, kill visibility and bot takeover.
+- Remaining: rejoin after disconnect, regions/matchmaking, chat filter, load testing with 15 real clients.
 
 ---
 
@@ -272,12 +284,15 @@ crew wins come from tasks; smarter crew deduction is the main bot improvement fo
 ## 9. Running the prototype
 
 ```bash
-npm install        # only needed for the build and tests
-npm run dev        # serves the game at http://localhost:8080
-npm test           # simulation tests
-npm run build      # bundles everything into dist/sus-station.html (single file)
+npm install        # ws (server) and esbuild (build)
+npm start          # game + online server at http://localhost:8080
+npm test           # rule, map and server tests
+npm run build      # bundles everything into dist/sus-station.html (single file, freeplay offline)
 node scripts/soak.mjs 100 10 2   # 100 bot-only games: win rates, length, meetings
 ```
+
+Friends on the same network open `http://<your computer's IP>:8080`. To play over the internet, deploy the
+included `Dockerfile` to any host that supports WebSockets (Render, Fly.io, Railway, a VPS) and share that URL.
 
 Controls: **WASD / arrows** move, **E** use, **R** report, **Q** kill, **V** vent, **F** sabotage,
 **Tab** map, **Esc** close. On touch screens, drag anywhere on the left half to move and tap the buttons.

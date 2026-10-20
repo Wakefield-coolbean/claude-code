@@ -70,7 +70,7 @@ export function nearestPassable(world, x, y) {
 export function walkable(world, ax, ay, bx, by) {
   const d = Math.hypot(bx - ax, by - ay);
   const steps = Math.max(1, Math.ceil(d / 0.25));
-  const o = 0.32;
+  const o = 0.4;
   for (let i = 0; i <= steps; i++) {
     const x = ax + ((bx - ax) * i) / steps;
     const y = ay + ((by - ay) * i) / steps;

@@ -1,9 +1,9 @@
 // Full-screen moments: menu, role reveal, meeting splash, kill, ejection, game over, pause.
 
-import { COLORS, SETTINGS, TIMING } from './config.js';
+import { TIMING } from './config.js';
 import { drawCrewmate, drawGhost, drawBody } from './sprites.js';
-import { sfx, isMuted, setMuted, unlock } from './audio.js';
-import { escapeHtml, icon } from './hud.js';
+import { sfx, isMuted, setMuted } from './audio.js';
+import { icon } from './hud.js';
 
 /** Canvas with one character drawn at a CSS height of `size` px. */
 export function bean(p, size = 64, { kind = 'alive', facing = 1, frame = -1 } = {}) {
@@ -26,7 +26,7 @@ export function bean(p, size = 64, { kind = 'alive', facing = 1, frame = -1 } = 
 }
 
 /** Animated starfield behind a screen. dir: drift direction in px/s. */
-class Starfield {
+export class Starfield {
   constructor(host, { speed = 30, dense = 1 } = {}) {
     this.c = document.createElement('canvas');
     this.c.className = 'stars';
@@ -109,127 +109,6 @@ export class Screens {
 
   later(ms, fn) {
     this.timers.push(setTimeout(fn, ms));
-  }
-
-  // ---------- menu ----------
-  menu(prefs, onPlay) {
-    const swatches = COLORS.map(
-      ([name], i) =>
-        `<button type="button" class="swatch" data-color="${i}" aria-label="${name}" aria-pressed="${i === prefs.color}"></button>`,
-    ).join('');
-    this.open(
-      'menu',
-      `<div class="menu-floaters" aria-hidden="true"></div>
-      <div class="menu-inner">
-        <h1 class="logo"><span>Sus</span> Station</h1>
-        <p class="tagline">Do your tasks. Trust no one. Vote them out.</p>
-        <div class="menu-grid">
-          <section class="card who">
-            <label class="field"><span>Name</span><input id="name" maxlength="10" autocomplete="off" spellcheck="false" value="${escapeHtml(prefs.name)}"></label>
-            <div class="field"><span>Color</span><div class="swatches">${swatches}</div></div>
-            <div class="field"><span>Role</span>
-              <div class="seg" role="radiogroup" aria-label="Role">
-                ${['random', 'crew', 'impostor'].map((r) => `<button type="button" role="radio" data-role="${r}" aria-checked="${prefs.role === r}">${{ random: 'Random', crew: 'Crewmate', impostor: 'Impostor' }[r]}</button>`).join('')}
-              </div>
-            </div>
-            <button class="big-btn play" id="play" type="button">Play</button>
-            <p class="hint">Freeplay against bots. WASD or arrows to move, E use, R report, Q kill, V vent, F sabotage, Tab map. On touch screens, drag to move.</p>
-            <details class="howto">
-              <summary>How to play</summary>
-              <ul>
-                <li><b class="crew-t">Crewmates</b> win by finishing every task on the list (top left) or by voting out every Impostor. Yellow outlines show where your tasks are.</li>
-                <li><b class="imp-t">Impostors</b> win by killing until they equal the crew, or when Reactor or O2 isn't fixed in time. They can vent, sabotage and lock doors.</li>
-                <li>Find a body? <b>Report</b> it. Suspicious? Press the <b>emergency button</b> in the Cafeteria. Then discuss, vote, or skip.</li>
-                <li>When someone sabotages, follow the red arrows. Reactor needs two people holding the scanners at once.</li>
-                <li>Dead crewmates become ghosts. Keep doing tasks: the crew can still win.</li>
-              </ul>
-            </details>
-          </section>
-          <section class="card settings">
-            <h2>Game settings</h2>
-            <div class="rows"></div>
-          </section>
-        </div>
-      </div>`,
-      { speed: 14 },
-    );
-    const root = this.root;
-    const preview = () => {
-      root.querySelectorAll('.swatch').forEach((b) => {
-        const [, color, shadow] = COLORS[Number(b.dataset.color)];
-        if (!b.firstChild) b.appendChild(bean({ color, shadow }, 30));
-        b.setAttribute('aria-pressed', String(Number(b.dataset.color) === prefs.color));
-      });
-    };
-    preview();
-    root.querySelector('.swatches').addEventListener('click', (e) => {
-      const b = e.target.closest('.swatch');
-      if (!b) return;
-      prefs.color = Number(b.dataset.color);
-      sfx('click');
-      preview();
-    });
-    root.querySelector('.seg').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-role]');
-      if (!b) return;
-      prefs.role = b.dataset.role;
-      root.querySelectorAll('[data-role]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
-    });
-    root.querySelector('#name').addEventListener('input', (e) => (prefs.name = e.target.value.trim().slice(0, 10)));
-
-    const rows = root.querySelector('.rows');
-    const fmt = (k, v) => {
-      const d = SETTINGS[k];
-      if (typeof v === 'boolean') return v ? 'On' : 'Off';
-      if (d.options) return v[0].toUpperCase() + v.slice(1);
-      return `${v}${d.unit || ''}`;
-    };
-    const render = () => {
-      rows.innerHTML = Object.entries(SETTINGS)
-        .map(([k, d]) => {
-          const v = prefs.settings[k];
-          const btns =
-            typeof d.def === 'boolean'
-              ? `<button type="button" class="step" data-k="${k}" data-d="0" aria-label="Toggle ${d.label}">${fmt(k, v)}</button>`
-              : `<button type="button" class="step" data-k="${k}" data-d="-1" aria-label="Decrease ${d.label}">−</button><output>${fmt(k, v)}</output><button type="button" class="step" data-k="${k}" data-d="1" aria-label="Increase ${d.label}">+</button>`;
-          return `<div class="row"><span>${d.label}</span><div class="ctl">${btns}</div></div>`;
-        })
-        .join('');
-    };
-    render();
-    rows.addEventListener('click', (e) => {
-      const b = e.target.closest('.step');
-      if (!b) return;
-      const k = b.dataset.k;
-      const dir = Number(b.dataset.d);
-      const d = SETTINGS[k];
-      const v = prefs.settings[k];
-      if (typeof d.def === 'boolean') prefs.settings[k] = !v;
-      else if (d.options) {
-        const i = d.options.indexOf(v);
-        prefs.settings[k] = d.options[(i + dir + d.options.length) % d.options.length];
-      } else {
-        prefs.settings[k] = Math.round(Math.max(d.min, Math.min(d.max, v + dir * d.step)) * 100) / 100;
-      }
-      sfx('click');
-      render();
-    });
-
-    // Floating crewmates drifting through space, as on the original title screen.
-    const floaters = root.querySelector('.menu-floaters');
-    COLORS.slice(0, 7).forEach(([, color, shadow], i) => {
-      const c = bean({ color, shadow }, 40 + (i % 3) * 16, { kind: i === 3 ? 'body' : 'alive' });
-      c.style.setProperty('--y', `${8 + ((i * 37) % 80)}%`);
-      c.style.setProperty('--dur', `${18 + i * 4}s`);
-      c.style.setProperty('--delay', `${-i * 5}s`);
-      floaters.appendChild(c);
-    });
-
-    root.querySelector('#play').addEventListener('click', () => {
-      unlock();
-      sfx('click');
-      onPlay();
-    });
   }
 
   // ---------- intro ----------
@@ -352,7 +231,7 @@ export class Screens {
       `over ${won ? 'won' : 'lost'} ${result.winner}`,
       `<h1 class="over-title">${title}</h1><p class="over-sub">${side}. ${REASONS[result.reason] || ''}</p>
        <div class="lineup winners"></div>
-       <div class="over-actions"><button class="big-btn" id="again" type="button">Play again</button><button class="big-btn ghost" id="menu" type="button">Main menu</button></div>`,
+       <div class="over-actions"><button class="big-btn" id="again" type="button">Play again</button><button class="big-btn ghost" id="menu" type="button">Quit</button></div>`,
     );
     const line = this.root.querySelector('.winners');
     winners.forEach((p) => {
@@ -370,19 +249,21 @@ export class Screens {
   }
 
   // ---------- pause ----------
-  pause({ onResume, onQuit }) {
+  pause({ onResume, onQuit, onLobby }) {
     this.open(
       'pause',
       `<div class="card pause-card">
         <h2>Paused</h2>
         <button class="big-btn" id="resume" type="button">Resume</button>
         <button class="big-btn ghost" id="sound" type="button">${icon(isMuted() ? 'mute' : 'sound')}<span>${isMuted() ? 'Sound off' : 'Sound on'}</span></button>
+        ${onLobby ? '<button class="big-btn ghost" id="lobby" type="button">Back to lobby</button>' : ''}
         <button class="big-btn ghost" id="quit" type="button">Quit to menu</button>
         <p class="hint">WASD / arrows move · E use · R report · Q kill · V vent · F sabotage · Tab map · Esc close</p>
       </div>`,
     );
     this.root.querySelector('#resume').addEventListener('click', onResume);
     this.root.querySelector('#quit').addEventListener('click', onQuit);
+    this.root.querySelector('#lobby')?.addEventListener('click', onLobby);
     this.root.querySelector('#sound').addEventListener('click', (e) => {
       setMuted(!isMuted());
       const b = e.currentTarget;

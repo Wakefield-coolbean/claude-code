@@ -148,21 +148,21 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Confirm ejects, anonymous votes, task bar updates, visual tasks | P0 | ✅ |
 | Common / long / short task counts | P0 | ✅ |
 | Choose name and color | P0 | ✅ |
-| Walkable pre-game lobby ship with laptop for cosmetics | P1 | ⬜ |
-| Host controls: kick, ban, start countdown | P1 | ⬜ |
+| Walkable pre-game lobby ship with laptop for cosmetics | P1 | ✅ (colors and name; hats etc. later) |
+| Host controls: kick, ban, start countdown | P1 | 🟡 (kick and countdown; no ban list) |
 | Recommended settings presets per player count | P1 | ⬜ |
 
 ## 9. Online multiplayer
 
 | Feature | Priority | Prototype |
 | --- | --- | --- |
-| Authoritative room server sharing the simulation code | P1 | ⬜ |
-| Create room with 6-letter code, join by code | P1 | ⬜ |
-| Public lobby browser with filters (map, impostors, language) | P1 | ⬜ |
-| Client prediction for own movement, interpolation for others | P1 | ⬜ |
-| Server-side vision culling and action validation (anti-cheat) | P1 | ⬜ |
-| Reconnect within 60 s, host migration | P1 | ⬜ |
-| Bots fill empty seats | P2 | ⬜ |
+| Authoritative room server sharing the simulation code | P1 | ✅ |
+| Create room with 6-letter code, join by code | P1 | ✅ |
+| Public lobby browser with filters (map, impostors, language) | P1 | 🟡 (list of public games, no filters) |
+| Client prediction for own movement, interpolation for others | P1 | ✅ |
+| Server-side vision culling and action validation (anti-cheat) | P1 | ✅ |
+| Reconnect within 60 s, host migration | P1 | 🟡 (host migrates; a bot takes over a dropped seat; no rejoin yet) |
+| Bots fill empty seats ("Fill With Bots" setting) | P2 | ✅ |
 | Regions and matchmaking | P1 | ⬜ |
 
 ## 10. Customization
@@ -182,18 +182,19 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Cooldown numbers on the kill and sabotage buttons | P0 | ✅ |
 | Task bar, task list, map button, settings button | P0 | ✅ |
 | Name tags above players (impostor teammates in red) | P0 | ✅ |
-| Main menu with animated starfield | P0 | ✅ |
-| How-to-play panel | P1 | ✅ |
-| Pause / settings menu (volume, controls, leave game) | P1 | 🟡 |
+| Title menu in the original's layout: logo, drifting crewmates, Online / How To Play / Freeplay | P0 | ✅ |
+| Online screen: enter name, Host / Public / Private with code entry | P1 | ✅ |
+| How To Play pages | P1 | ✅ |
+| Pause / settings menu (volume, controls, leave game) | P1 | ✅ |
 
 ## 12. Audio
 
 | Feature | Priority | Prototype |
 | --- | --- | --- |
-| Kill, report, emergency alarm, vote, eject, task complete, vent, sabotage alarm SFX | P0 | ✅ (synthesized) |
-| Footsteps per floor type | P1 | ⬜ |
-| Menu and meeting music, ambient ship hum | P1 | ⬜ |
-| Volume sliders | P1 | 🟡 (mute toggle) |
+| Kill, report, emergency alarm, vote, eject, task complete, vent, sabotage alarm SFX | P0 | ✅ (synthesized, with reverb) |
+| Footsteps per floor type | P1 | 🟡 (footsteps, same on every floor) |
+| Menu and meeting music, ambient ship hum | P1 | 🟡 (menu and lobby music, ship hum; no meeting music) |
+| Volume sliders | P1 | ✅ (master, music, effects) |
 
 ## 13. Bots and freeplay
 

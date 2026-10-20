@@ -1,7 +1,10 @@
 // Procedural character art: crewmates, ghosts and bodies, cached as bitmaps per scale.
 // Units are map cells with the feet at (0, 0) and the character facing right.
 
+import { DIST } from './config.js';
+
 const INK = '#07090c';
+const K = DIST.char;
 const VISOR = '#93c8db';
 const VISOR_DARK = '#4f8aa2';
 const BONE = '#f3efe2';
@@ -155,15 +158,15 @@ export function drawBody(ctx, color, shadow) {
   }
 }
 
-/** Bitmap cache keyed by look; rebuilt when the zoom changes. */
+/** Bitmap cache keyed by look; rebuilt when the zoom changes. Characters are drawn K times map scale. */
 export class SpriteCache {
   constructor() {
     this.scale = 0;
     this.map = new Map();
   }
 
-  setScale(s) {
-    s = Math.round(s * 4) / 4;
+  setScale(ppc) {
+    const s = Math.round(ppc * K * 4) / 4;
     if (s !== this.scale) {
       this.scale = s;
       this.map.clear();
@@ -187,7 +190,7 @@ export class SpriteCache {
 
   /** Blit at screen position of the feet. facing: 1 right, -1 left. */
   blit(ctx, bmp, sx, sy, facing, ppc, alpha = 1) {
-    const k = ppc / this.scale;
+    const k = (ppc * K) / this.scale;
     ctx.save();
     if (alpha !== 1) ctx.globalAlpha = alpha;
     ctx.translate(sx, sy);

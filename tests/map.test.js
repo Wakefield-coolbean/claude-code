@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildMap, STATIONS, VENTS, VENT_NETWORKS } from '../src/map.js';
 import { World } from '../src/grid.js';
 import { findPath } from '../src/path.js';
+import { DIST } from '../src/config.js';
 
 const map = buildMap();
 const world = new World(map);
@@ -11,7 +12,7 @@ test('every station, vent and spawn point is on open floor', () => {
   const pts = [...Object.entries(STATIONS).map(([id, s]) => [id, s.x, s.y]), ...Object.entries(VENTS).map(([id, v]) => [id, v.x, v.y])];
   for (const [id, x, y] of pts) {
     assert.ok(world.isFloor(Math.floor(x), Math.floor(y)), `${id} at ${x},${y} is not on floor`);
-    const [rx, ry] = world.resolve(x, y, 0.3);
+    const [rx, ry] = world.resolve(x, y, DIST.playerRadius);
     assert.ok(Math.hypot(rx - x, ry - y) < 0.8, `${id} at ${x},${y} is stuck inside geometry`);
   }
 });

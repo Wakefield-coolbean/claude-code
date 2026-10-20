@@ -2,7 +2,7 @@
 // World units are map cells; `ppc` is device pixels per cell.
 
 import { DIST } from './config.js';
-import { THEMES, ROOMS, HALLS } from './map.js';
+import { THEMES } from './map.js';
 import { SpriteCache, drawGhost, WALK_FRAMES } from './sprites.js';
 import { World } from './grid.js';
 
@@ -32,6 +32,7 @@ const PROP_BOXES = {
   chart_br: [116, 33, 2, 8],
   shields_sh: [96.4, 58.4, 3.2, 3.2],
   admin_map: [69, 35, 6, 3],
+  laptop: [24, 7.6, 3.4, 2],
 };
 
 /** Box [x, y, w, h] of a console's art in cells. */
@@ -69,7 +70,7 @@ export class Renderer {
     this.chunks = new Map();
     this.cam = { x: 0, y: 0 };
     this.shake = 0;
-    this.setGame(game);
+    if (game) this.setGame(game);
     this.resize();
   }
 
@@ -96,7 +97,7 @@ export class Renderer {
     this.canvas.height = Math.round(h * dpr);
     this.fog.width = this.canvas.width;
     this.fog.height = this.canvas.height;
-    const cssPPC = w >= h ? h / DIST.viewHeight : w / 13;
+    const cssPPC = w >= h ? h / DIST.viewHeight : w / 14.5;
     const ppc = Math.round(cssPPC * dpr * 4) / 4;
     if (ppc !== this.ppc) {
       this.ppc = ppc;
@@ -159,8 +160,8 @@ export class Renderer {
       }
     }
     const hit = (r) => r[2] > x0 && r[0] < x1 && r[3] > y0 && r[1] < y1;
-    HALLS.forEach((r) => hit(r) && this.drawFloor(ctx, r, 'hall'));
-    ROOMS.forEach((rm) => hit(rm.rect) && this.drawFloor(ctx, rm.rect, rm.theme));
+    m.halls.forEach((r) => hit(r) && this.drawFloor(ctx, r, 'hall'));
+    m.rooms.forEach((rm) => hit(rm.rect) && this.drawFloor(ctx, rm.rect, rm.theme));
     // Wall faces.
     for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
       for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) {
@@ -184,6 +185,7 @@ export class Renderer {
         }
       }
     }
+    if (m.id === 'dropship') this.drawPortholes(ctx, x0, y0, x1, y1);
     this.drawDoorFrames(ctx);
     this.drawVents(ctx, x0, y0, x1, y1);
     for (const p of m.props) this.drawProp(ctx, p);
@@ -263,6 +265,37 @@ export class Renderer {
         ctx.fill();
       }
       ctx.restore();
+    }
+  }
+
+  /** Round windows along the dropship's north wall, with stars outside. */
+  drawPortholes(ctx, x0, y0, x1, y1) {
+    const { W, H, face } = this.map;
+    for (let y = Math.max(0, y0 - 1); y < Math.min(H, y1 + 1); y++) {
+      for (let x = Math.max(0, x0 - 1); x < Math.min(W, x1 + 1); x++) {
+        if (face[y * W + x] !== 2 || x % 4 !== 1) continue;
+        const cx = x + 0.5;
+        const cy = y + 0.95;
+        ctx.fillStyle = '#2b333d';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.66, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#0a1426';
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        for (let i = 0; i < 3; i++) ctx.fillRect(cx - 0.3 + hash(x, i) * 0.55, cy - 0.3 + hash(i, x) * 0.55, 0.06, 0.06);
+        ctx.fillStyle = 'rgba(160,210,255,0.25)';
+        ctx.beginPath();
+        ctx.arc(cx - 0.15, cy - 0.15, 0.22, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 0.08;
+        ctx.strokeStyle = INK;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 0.66, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
   }
 
@@ -489,6 +522,18 @@ export class Renderer {
         box(x0, y0, w, h, '#3c4b5c');
         for (let i = 0; i < 3; i++) box(x0 + 0.3, y0 + 0.6 + i * 2.5, w - 0.6, 1.8, '#61c6ff', 0.1);
         break;
+      case 'bench':
+        box(x0, y0, w, h, '#5b6672', 0.2);
+        ctx.fillStyle = '#ff9f43';
+        for (let x = x0 + 0.4; x < x1 - 0.6; x += 1.5) ctx.fillRect(x, y0 + 0.2, 1.1, h - 0.4);
+        break;
+      case 'laptoptable': {
+        box(x0, y0, w, h, '#4b5563', 0.1);
+        box(x0 + 0.8, y0 - 0.55, 1.8, 0.75, '#2a3440', 0.06);
+        box(x0 + 0.92, y0 - 0.46, 1.56, 0.52, '#61c6ff', 0.04);
+        box(x0 + 0.7, y0 + 0.15, 2, 0.35, '#8f9aa6', 0.05);
+        break;
+      }
       default:
         box(x0, y0, w, h, '#666');
     }
@@ -684,7 +729,7 @@ export class Renderer {
 
     // Y-sorted drawables.
     const items = [];
-    const seeAll = !g.local;
+    const seeAll = !g.local || g.phase === 'lobby';
     for (const b of g.bodies) {
       if (seeAll || g.sees(me, b.x, b.y - 0.3)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
     }
@@ -705,7 +750,7 @@ export class Renderer {
 
     // Fog of war.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (me.alive && g.local) {
+    if (me.alive && g.local && g.phase !== 'lobby') {
       const [ex, ey] = g.eye(me);
       const r = g.visionOf(me);
       const poly = g.world.visibility(ex, ey, r);
@@ -733,7 +778,7 @@ export class Renderer {
     }
 
     // Name tags (above fog so they read like the original).
-    ctx.font = `800 ${Math.round(ppc * 0.34)}px "Baloo 2", "Arial Rounded MT Bold", sans-serif`;
+    ctx.font = `800 ${Math.round(ppc * 0.42)}px "Baloo 2", "Arial Rounded MT Bold", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.lineJoin = 'round';
@@ -742,7 +787,7 @@ export class Renderer {
       if (p.inVent) continue;
       if (!p.alive && me.alive && !seeAll) continue;
       if (p.alive && !seeAll && !g.seesPlayer(me, p)) continue;
-      const [sx, sy] = toS(p.x, p.y - 1.32);
+      const [sx, sy] = toS(p.x, p.y - 1.32 * DIST.char);
       const teammate = me.role === 'impostor' && p.role === 'impostor';
       ctx.globalAlpha = p.alive ? 1 : 0.6;
       ctx.strokeStyle = INK;
@@ -772,8 +817,8 @@ export class Renderer {
     if (!p.alive) {
       const f = Math.floor(time * 6) % 6;
       const bmp = this.sprites.get(`g${p.colorIndex}:${f}`, p.color, p.shadow, (c, a, b) => drawGhost(c, a, b, f / 6));
-      const bob = Math.sin(time * 3 + p.id) * 0.08 * this.ppc;
-      this.sprites.blit(ctx, bmp, sx, sy - 0.15 * this.ppc + bob, p.facing, this.ppc, 0.55);
+      const bob = Math.sin(time * 3 + p.id) * 0.1 * this.ppc;
+      this.sprites.blit(ctx, bmp, sx, sy - 0.2 * this.ppc + bob, p.facing, this.ppc, 0.55);
       ctx.restore();
       return;
     }
@@ -781,7 +826,7 @@ export class Renderer {
     // Soft floor shadow.
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
-    ctx.ellipse(sx, sy, 0.36 * this.ppc, 0.12 * this.ppc, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, 0.48 * this.ppc, 0.16 * this.ppc, 0, 0, Math.PI * 2);
     ctx.fill();
     this.sprites.blit(ctx, this.sprites.crewmate(p, frame), sx, sy, p.facing, this.ppc);
     ctx.restore();
@@ -832,7 +877,7 @@ export class Renderer {
 
   drawHighlights(ctx, me, time) {
     const g = this.game;
-    if (!g.local || me.inVent || g.phase !== 'play') return;
+    if (!g.local || me.inVent || (g.phase !== 'play' && g.phase !== 'lobby')) return;
     const glow = 0.65 + Math.sin(time * 5) * 0.25;
     const outline = (box, color, near) => {
       const [x, y, w, h] = box;
@@ -877,13 +922,13 @@ export class Renderer {
           const ph = (time * 0.8 + i / 3) % 1;
           ctx.globalAlpha = 1 - ph;
           ctx.beginPath();
-          ctx.ellipse(p.x, p.y - 0.05, 0.5 + ph * 0.4, 0.18 + ph * 0.14, 0, 0, Math.PI * 2);
+          ctx.ellipse(p.x, p.y - 0.05, 0.65 + ph * 0.5, 0.24 + ph * 0.18, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
-        const sy = p.y - 0.1 - ((Math.sin(time * 3) + 1) / 2) * 1.15;
+        const sy = p.y - 0.1 - ((Math.sin(time * 3) + 1) / 2) * 1.55;
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#5dff9a';
-        ctx.fillRect(p.x - 0.5, sy - 0.04, 1, 0.08);
+        ctx.fillRect(p.x - 0.65, sy - 0.05, 1.3, 0.1);
         ctx.restore();
       } else if (fx.kind === 'asteroids') {
         const [gx, gy] = [94.6, 7.9];

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound Bench</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap">
+<style>
+  :root { color-scheme: dark; --bg: #0b0f18; --card: #182131; --ink: #07090c; --text: #eef3f7; --muted: #93a4b5; --on: #f5d90a; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 "Baloo 2", system-ui, sans-serif; padding: 16px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left)); }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  p { margin: 0 0 16px; color: var(--muted); }
+  section { background: var(--card); border: 3px solid var(--ink); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+  h2 { margin: 0 0 8px; font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .grid { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font: 700 15px/1 "Baloo 2", system-ui, sans-serif; padding: 9px 12px; border-radius: 9px; border: 3px solid var(--ink); background: #d6e0f0; color: var(--ink); cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--on); }
+  label { display: grid; grid-template-columns: 70px minmax(0, 1fr) 40px; align-items: center; gap: 8px; max-width: 420px; }
+  input[type="range"] { width: 100%; }
+  output { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>Sound bench</h1>
+<p>Every effect, the music tracks and the continuous layers from <code>src/audio.js</code>. The first click turns audio on.</p>
+<section><h2>Effects</h2><div class="grid" id="sfx"></div></section>
+<section>
+  <h2>Layers</h2>
+  <div class="grid">
+    <button type="button" id="m-menu" aria-pressed="false">Music: menu</button>
+    <button type="button" id="m-lobby" aria-pressed="false">Music: lobby</button>
+    <button type="button" id="amb" aria-pressed="false">Ship ambience</button>
+    <button type="button" id="alarm" aria-pressed="false">Reactor alarm</button>
+    <button type="button" id="steps" aria-pressed="false">Footsteps</button>
+    <button type="button" id="mute" aria-pressed="false">Mute</button>
+  </div>
+</section>
+<section><h2>Volume</h2><div id="vol" style="display:grid;gap:8px"></div></section>
+<script type="module">
+  import * as audio from '../src/audio.js';
+  window.audio = audio;
+  const on = (el, v) => el.setAttribute('aria-pressed', String(v));
+  const grid = document.getElementById('sfx');
+  for (const name of audio.SOUND_NAMES) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = name;
+    b.addEventListener('click', () => {
+      audio.unlock();
+      audio.sfx(name);
+    });
+    grid.appendChild(b);
+  }
+  let track = null;
+  for (const name of ['menu', 'lobby']) {
+    document.getElementById(`m-${name}`).addEventListener('click', () => {
+      audio.unlock();
+      track = track === name ? null : name;
+      audio.music(track);
+      for (const n of ['menu', 'lobby']) on(document.getElementById(`m-${n}`), track === n);
+    });
+  }
+  const toggle = (id, fn) => {
+    let state = false;
+    const el = document.getElementById(id);
+    el.addEventListener('click', () => {
+      audio.unlock();
+      state = !state;
+      on(el, state);
+      fn(state);
+    });
+  };
+  toggle('amb', (v) => audio.ambience(v));
+  toggle('alarm', (v) => audio.setAlarm(v));
+  let stepTimer = null;
+  toggle('steps', (v) => {
+    clearInterval(stepTimer);
+    if (v) stepTimer = setInterval(() => audio.footstep(), 170);
+  });
+  const mute = document.getElementById('mute');
+  on(mute, audio.isMuted());
+  mute.addEventListener('click', () => {
+    audio.setMuted(!audio.isMuted());
+    on(mute, audio.isMuted());
+  });
+  const vol = document.getElementById('vol');
+  for (const ch of ['master', 'music', 'sfx']) {
+    const row = document.createElement('label');
+    row.innerHTML = `<span>${ch}</span><input type="range" id="v-${ch}" min="0" max="1" step="0.05" value="${audio.getVolume(ch)}"><output>${audio.getVolume(ch)}</output>`;
+    row.querySelector('input').addEventListener('input', (e) => {
+      audio.setVolume(ch, Number(e.target.value));
+      row.querySelector('output').textContent = e.target.value;
+    });
+    vol.appendChild(row);
+  }
+</script>
+</body>
+</html>

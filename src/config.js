@@ -17,12 +17,25 @@ export const SETTINGS = {
   impostorVision: { label: 'Impostor Vision', def: 1.5, min: 0.25, max: 5, step: 0.25, unit: 'x' },
   killCooldown: { label: 'Kill Cooldown', def: 30, min: 10, max: 60, step: 2.5, unit: 's' },
   killDistance: { label: 'Kill Distance', def: 'normal', options: ['short', 'normal', 'long'] },
+  fillBots: { label: 'Fill With Bots', def: true },
   visualTasks: { label: 'Visual Tasks', def: true },
   taskBarUpdates: { label: 'Task Bar Updates', def: 'always', options: ['always', 'meetings', 'never'] },
   commonTasks: { label: 'Common Tasks', def: 1, min: 0, max: 2, step: 1 },
   longTasks: { label: 'Long Tasks', def: 1, min: 0, max: 3, step: 1 },
   shortTasks: { label: 'Short Tasks', def: 2, min: 0, max: 5, step: 1 },
 };
+
+/** Clamp untrusted settings (e.g. from the network) to the allowed values. */
+export function cleanSettings(input = {}) {
+  const out = defaultSettings();
+  for (const [k, d] of Object.entries(SETTINGS)) {
+    const v = input[k];
+    if (typeof d.def === 'boolean') out[k] = typeof v === 'boolean' ? v : d.def;
+    else if (d.options) out[k] = d.options.includes(v) ? v : d.def;
+    else if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.max(d.min, Math.min(d.max, Math.round(v / d.step) * d.step));
+  }
+  return out;
+}
 
 export function defaultSettings() {
   const s = {};
@@ -56,13 +69,14 @@ export const TIMING = {
 // Distances in map cells.
 export const DIST = {
   speed: 4.5, // cells per second at 1x
-  vision: 6, // crew vision radius at 1x
+  vision: 6.8, // crew vision radius at 1x
   lightsOutFactor: 0.25,
-  kill: { short: 1.2, normal: 1.8, long: 2.5 },
-  use: 1.4,
-  report: 2.6,
-  playerRadius: 0.3,
-  viewHeight: 14, // cells visible vertically (landscape)
+  kill: { short: 1.4, normal: 2.1, long: 2.9 },
+  use: 1.6,
+  report: 3,
+  char: 1.35, // character size relative to map cells (a crewmate is ~1.1 cells wide)
+  playerRadius: 0.38,
+  viewHeight: 16, // cells visible vertically (landscape)
 };
 
 // Character colors: [name, body, shadow]

@@ -1,21 +1,24 @@
-// Wires the simulation, bots, renderer, HUD, minigames and screens together.
+// Wires menus, lobby, game screens, input and audio to a session: LocalSession for
+// freeplay against bots, NetSession for online games.
 
-import { Game } from './game.js';
-import { Bots } from './bots.js';
 import { Renderer } from './render.js';
 import { Hud } from './hud.js';
 import { Input } from './input.js';
 import { MinigameHost } from './tasks/host.js';
 import { MeetingUI } from './meeting.js';
 import { Screens } from './screens.js';
+import { Menu } from './menu.js';
+import { LobbyUI } from './lobby.js';
+import { LocalSession } from './session.js';
+import { NetSession, defaultServerUrl } from './net.js';
 import { defaultSettings, COLORS } from './config.js';
-import { sfx, setAlarm, unlock } from './audio.js';
+import { sfx, setAlarm, unlock, music, ambience, footstep } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 const PREFS_KEY = 'sus-station-prefs';
 
 function loadPrefs() {
-  const base = { name: '', color: 0, role: 'random', settings: defaultSettings() };
+  const base = { name: '', color: 0, role: 'random', pub: false, server: '', settings: defaultSettings() };
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
     if (saved) return { ...base, ...saved, settings: { ...base.settings, ...saved.settings } };
@@ -25,9 +28,9 @@ function loadPrefs() {
   return base;
 }
 
-function savePrefs(p) {
+function savePrefs() {
   try {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+    localStorage.setItem(PREFS_KEY, JSON.stringify(app.prefs));
   } catch {
     /* storage unavailable */
   }
@@ -35,9 +38,11 @@ function savePrefs(p) {
 
 const app = {
   prefs: loadPrefs(),
+  scene: 'menu', // menu | lobby | game
+  session: null,
   game: null,
-  bots: null,
   paused: false,
+  menuOpen: false,
   speed: 1,
   offs: [],
 };
@@ -47,55 +52,197 @@ const canvas = $('view');
 const screens = new Screens($('screen'));
 const host = new MinigameHost($('minigame'));
 const input = new Input(canvas, $('joy'));
-const meetingUI = new MeetingUI($('meeting'), {
-  onVote: (target) => {
-    if (app.game.vote(app.game.localId, target)) sfx('vote');
-  },
-  onChat: (text) => app.game.chat(app.game.localId, text),
-});
-let renderer = null;
+const renderer = new Renderer(canvas, null);
 let hud = null;
 
-function menu() {
-  teardown();
-  $('app').classList.add('in-menu');
-  screens.menu(app.prefs, start);
+const serverUrl = () => app.prefs.server || defaultServerUrl();
+const api = () => app.session?.api;
+
+const meetingUI = new MeetingUI($('meeting'), {
+  onVote: (target) => {
+    if (api()?.vote(app.game.localId, target)) sfx('vote');
+  },
+  onChat: (text) => api()?.chat(app.game.localId, text),
+});
+
+const menu = new Menu(screens, {
+  prefs: app.prefs,
+  savePrefs,
+  serverUrl,
+  setServerUrl: (url) => {
+    app.prefs.server = url === defaultServerUrl() ? '' : url;
+    savePrefs();
+  },
+  onFreeplay: () => {
+    if (!app.prefs.name) app.prefs.name = COLORS[app.prefs.color][0];
+    savePrefs();
+    app.session = new LocalSession(app.prefs, sessionHandlers);
+    enterLobby();
+  },
+  onHost: () => goOnline((s) => s.host(app.prefs.settings, app.prefs.pub)),
+  onJoin: (code) => goOnline((s) => s.join(code)),
+  onFind: async () => {
+    const s = await connect();
+    return s.list();
+  },
+});
+
+const lobbyUI = new LobbyUI($('lobby'), {
+  onStart: () => app.session?.start(),
+  onLeave: () => quit(),
+  onSettingsScreen: () => {
+    app.menuOpen = true;
+    menu.settings(() => {
+      app.menuOpen = false;
+      screens.clear();
+    });
+  },
+  onCustomize: (change) => {
+    if (change.role) {
+      app.prefs.role = change.role;
+      savePrefs();
+      lobbyUI.renderCustomize();
+      return;
+    }
+    if (change.name) app.prefs.name = change.name;
+    if (change.color != null) app.prefs.color = change.color;
+    savePrefs();
+    app.session.setMe(change);
+    if (!app.session.online) lobbyUI.refresh();
+  },
+  onSettings: (settings, pub) => {
+    const s = app.session;
+    if (!s.isHost) return;
+    if (s.online) s.setSettings(settings || s.room.settings, pub ?? s.room.pub);
+    else s.setSettings(settings);
+    if (settings) {
+      app.prefs.settings = { ...app.prefs.settings, ...settings };
+      savePrefs();
+    }
+    if (pub != null) app.prefs.pub = pub;
+    lobbyUI.refresh();
+  },
+  onKick: (id) => app.session?.kick?.(id),
+});
+
+// ---------- sessions ----------
+let pending = null; // NetSession while connecting
+
+async function connect() {
+  if (app.session?.online && app.session.ws) return app.session;
+  if (pending) return pending;
+  const s = new NetSession(app.prefs, sessionHandlers);
+  pending = s
+    .connect(serverUrl())
+    .then(() => s)
+    .finally(() => (pending = null));
+  const ok = await pending;
+  app.session = ok;
+  return ok;
 }
 
-function teardown() {
+async function goOnline(fn) {
+  try {
+    const s = await connect();
+    fn(s);
+  } catch (err) {
+    menu.onlineMessage(err.message);
+  }
+}
+
+const sessionHandlers = {
+  onSavePrefs: savePrefs,
+  onLobby: (g) => {
+    if (app.scene === 'lobby') renderer.setGame(g);
+  },
+  onRoom: (room, info) => {
+    if (info.first) {
+      app.prefs.name = room.players.find((p) => p.id === app.session.you)?.name || app.prefs.name;
+      enterLobby();
+      return;
+    }
+    if (info.joined) sfx('join');
+    if (info.left) sfx('leave');
+    lobbyUI.refresh();
+  },
+  onCountdown: (n) => app.scene === 'lobby' && lobbyUI.countdown(n),
+  onStart: (game) => enterGame(game),
+  onError: (msg) => {
+    if (app.scene === 'lobby') lobbyUI.toast(msg);
+    else menu.onlineMessage(msg);
+  },
+  onClosed: () => quit('Lost connection to the server.'),
+  onKicked: () => quit('The host removed you from the lobby.'),
+};
+
+// ---------- scenes ----------
+function showMenu(message) {
+  app.scene = 'menu';
+  $('app').className = 'in-menu';
+  lobbyUI.hide();
+  meetingUI.close();
+  host.close();
+  hud?.closeMap();
+  setAlarm(false);
+  ambience(false);
+  music('menu');
+  menu.main(message);
+}
+
+function enterLobby() {
+  teardownGame();
+  app.scene = 'lobby';
+  $('app').className = 'in-lobby';
+  screens.clear();
+  renderer.setGame(app.session.lobbyGame);
+  lobbyUI.show(app.session);
+  ambience(false);
+  music('lobby');
+}
+
+function enterGame(game) {
+  teardownGame();
+  app.game = game;
+  app.scene = 'game';
+  $('app').className = 'in-game';
+  lobbyUI.hide();
+  screens.clear();
+  renderer.setGame(game);
+  if (!hud) hud = new Hud($('hud'), game, renderer, hudHandlers);
+  else hud.setGame(game, renderer);
+  wire(game);
+  music(null);
+  ambience(true);
+  screens.intro(game, () => {});
+}
+
+function teardownGame() {
   app.offs.forEach((f) => f());
   app.offs = [];
-  app.bots?.destroy();
-  app.bots = null;
   app.game = null;
   app.paused = false;
+  app.menuOpen = false;
   host.close();
   meetingUI.close();
   hud?.closeMap();
   setAlarm(false);
 }
 
-function start() {
-  teardown();
-  const prefs = app.prefs;
-  if (!prefs.name) prefs.name = COLORS[prefs.color][0];
-  savePrefs(prefs);
-  const game = new Game({
-    settings: prefs.settings,
-    seed: (Math.random() * 2 ** 32) >>> 0,
-    local: { name: prefs.name, color: prefs.color, role: prefs.role },
-  });
-  app.game = game;
-  app.bots = new Bots(game);
-  if (!renderer) renderer = new Renderer(canvas, game);
-  else renderer.setGame(game);
-  if (!hud) hud = new Hud($('hud'), game, renderer, hudHandlers);
-  else hud.setGame(game, renderer);
-  $('app').classList.remove('in-menu');
-  wire(game);
-  screens.intro(game, () => {});
+function backToLobby() {
+  teardownGame();
+  app.session.backToLobby();
+  enterLobby();
 }
 
+function quit(message) {
+  teardownGame();
+  const s = app.session;
+  app.session = null;
+  s?.leave();
+  showMenu(message);
+}
+
+// ---------- game events ----------
 function wire(game) {
   const me = game.local;
   const on = (type, fn) => app.offs.push(game.on(type, fn));
@@ -131,6 +278,7 @@ function wire(game) {
   });
   on('sabotageFixed', ({ type }) => {
     if (type === 'reactor' || type === 'o2') setAlarm(false);
+    sfx('fixed');
     const cur = host.current;
     if (cur && cur.opts.sabotage === type) setTimeout(() => host.current === cur && host.close(), 700);
   });
@@ -139,6 +287,7 @@ function wire(game) {
     host.close();
     hud.closeMap();
     setAlarm(false);
+    ambience(false);
     screens.meetingSplash(game, e);
   });
   on('meetingStage', ({ stage }) => {
@@ -148,7 +297,7 @@ function wire(game) {
     }
   });
   on('chat', (m) => meetingUI.addChat(m));
-  on('vote', ({ player }) => player !== me && sfx('click'));
+  on('vote', ({ player }) => player !== me && sfx('vote'));
   on('eject', (ej) => {
     meetingUI.close();
     screens.ejection(game, ej);
@@ -156,32 +305,34 @@ function wire(game) {
   on('resume', () => {
     screens.clear();
     renderer.setGame(game);
+    ambience(true);
   });
   on('gameOver', (result) => {
     setAlarm(false);
+    ambience(false);
     host.close();
     hud.closeMap();
-    const delay = game.phase === 'over' && result.reason === 'kills' ? 1800 : 900;
+    const delay = result.reason === 'kills' ? 1800 : 900;
     setTimeout(() => {
       if (app.game !== game) return;
       meetingUI.close();
-      screens.gameOver(game, result, { onAgain: start, onMenu: menu });
+      screens.gameOver(game, result, { onAgain: backToLobby, onMenu: () => quit() });
     }, delay);
   });
 }
 
 const hudHandlers = {
   onAction: (name) => action(name),
-  onVent: (ventId) => app.game?.ventTo(app.game.localId, ventId),
+  onVent: (ventId) => app.game && api().ventTo(app.game.localId, ventId),
   onSabotage: (type) => {
     const g = app.game;
-    if (g.sabotage(g.localId, type)) hud.closeMap();
+    if (api().sabotage(g.localId, type)) hud.closeMap();
     else if (g.sab.active) hud.toast('Another sabotage is already active');
     else hud.toast(`Sabotage ready in ${Math.ceil(g.sabotageCooldown())}s`);
   },
   onDoors: (room) => {
     const g = app.game;
-    if (!g.closeDoors(g.localId, room)) hud.toast('Those doors are on cooldown');
+    if (!api().closeDoors(g.localId, room)) hud.toast('Those doors are on cooldown');
   },
 };
 
@@ -196,20 +347,20 @@ function openStep(g, me, use) {
     title,
     rng: g.rng,
     act: (a) => {
-      if (a.type === 'visual') g.setVisual(me.id, task.id, a.on);
+      if (a.type === 'visual') api().setVisual(me.id, task.id, a.on);
     },
     onComplete: () => {
-      g.setVisual(me.id, null, false);
-      g.completeStep(me.id, use.taskIndex);
+      api().setVisual(me.id, null, false);
+      api().completeStep(me.id, use.taskIndex);
     },
-    onClose: () => g.setVisual(me.id, null, false),
+    onClose: () => api().setVisual(me.id, null, false),
   });
 }
 
 function openFix(g, me, use) {
   const s = g.sab.active;
   const station = use.station;
-  const act = (a) => g.fixAction(me.id, station, a);
+  const act = (a) => api().fixAction(me.id, station, a);
   const opts = { sabotage: s.type, doneText: 'Fixed!', act, rng: g.rng };
   if (s.type === 'lights') opts.state = () => ({ switches: g.sab.active?.switches || [true, true, true, true, true] });
   if (s.type === 'reactor') {
@@ -221,11 +372,18 @@ function openFix(g, me, use) {
   }
   if (s.type === 'o2') opts.data = { code: s.code };
   if (s.type === 'comms') opts.data = { target: s.target };
-  const id = { lights: 'lights', reactor: 'reactor', o2: 'o2', comms: 'comms' }[s.type];
-  host.open(id, opts);
+  host.open(s.type, opts);
+}
+
+function lobbyAction(name) {
+  if (name === 'use') lobbyUI.use();
+  else if (name === 'close') {
+    if (lobbyUI.panelOpen) lobbyUI.closePanels();
+  }
 }
 
 function action(name) {
+  if (app.scene === 'lobby') return lobbyAction(name);
   const g = app.game;
   if (!g || !g.local) return;
   const me = g.local;
@@ -236,11 +394,12 @@ function action(name) {
     return;
   }
   if (name === 'settings') return g.phase === 'play' && togglePause();
-  if (app.paused || g.phase !== 'play' || host.isOpen) {
+  if (app.paused || app.menuOpen || g.phase !== 'play' || host.isOpen) {
     if (name === 'map' && hud.mapOpen) hud.closeMap();
     return;
   }
   unlock();
+  const a = api();
   switch (name) {
     case 'use': {
       const use = g.usable(me);
@@ -251,21 +410,21 @@ function action(name) {
       else if (use.kind === 'button') {
         const why = g.emergencyBlock(me);
         if (why) hud.toast(why);
-        else g.callEmergency(me.id);
+        else a.callEmergency(me.id);
       }
       break;
     }
     case 'report':
-      g.report(me.id);
+      if (g.reportable(me)) a.report(me.id);
       break;
     case 'kill': {
       const t = g.killTarget(me);
-      if (t && me.killCooldown <= 0) g.kill(me.id, t.id);
+      if (t && me.killCooldown <= 0) a.kill(me.id, t.id);
       break;
     }
     case 'vent':
-      if (me.inVent) g.exitVent(me.id);
-      else g.enterVent(me.id);
+      if (me.inVent) a.exitVent(me.id);
+      else if (g.canVent(me)) a.enterVent(me.id);
       break;
     case 'sabotage':
       if (!g.canSabotage(me)) return;
@@ -279,50 +438,76 @@ function action(name) {
   }
 }
 
+/** Freeplay pauses the game; online games keep running behind the menu. */
 function togglePause() {
-  if (app.paused) {
+  if (app.paused || app.menuOpen) {
     app.paused = false;
+    app.menuOpen = false;
     screens.clear();
     return;
   }
-  app.paused = true;
+  if (app.session?.online) app.menuOpen = true;
+  else app.paused = true;
   host.close();
   hud.closeMap();
   input.release();
-  screens.pause({ onResume: () => togglePause(), onQuit: menu });
+  screens.pause({
+    onResume: () => togglePause(),
+    onQuit: () => quit(),
+    onLobby: app.session?.online ? null : () => backToLobby(),
+  });
 }
 
 // ---------- frame loop ----------
 let last = performance.now();
+let lastStep = 0;
+
+function footsteps(p) {
+  if (!p || !p.alive || !p.moving) return;
+  const step = Math.floor(p.walk * 4);
+  if (step !== lastStep) {
+    lastStep = step;
+    footstep();
+  }
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  const t = now / 1000;
+  const s = app.session;
+  if (app.scene === 'lobby' && s?.lobbyGame) {
+    for (const a of input.drain()) action(a);
+    const blocked = lobbyUI.panelOpen || app.menuOpen;
+    s.tickLobby(dt, blocked ? [0, 0] : input.vector());
+    footsteps(s.lobbyGame.local);
+    renderer.draw(dt, t);
+    lobbyUI.update();
+    return;
+  }
   const g = app.game;
-  if (g && renderer) {
+  if (app.scene === 'game' && g) {
     const me = g.local;
     for (const a of input.drain()) action(a);
     if (!app.paused) {
-      const steps = app.speed > 1 ? Math.round(app.speed) : 1;
-      for (let i = 0; i < steps; i++) {
-        const canMove = g.phase === 'play' && !host.isOpen && !hud.mapOpen && !me.inVent;
-        const [mx, my] = canMove ? input.vector() : [0, 0];
-        g.setInput(me.id, mx, my);
-        app.bots.tick(dt);
-        g.tick(dt);
-      }
+      const canMove = g.phase === 'play' && !host.isOpen && !hud.mapOpen && !me.inVent && !app.menuOpen;
+      s.tickGame(dt, canMove ? input.vector() : [0, 0], canMove, app.speed);
+      footsteps(me);
     }
-    host.tick(dt, now / 1000);
-    renderer.draw(dt, now / 1000);
-    hud.update(now / 1000);
+    host.tick(dt, t);
+    renderer.draw(dt, t);
+    hud.update(t);
     meetingUI.update();
   }
 }
 
-window.addEventListener('resize', () => renderer?.resize());
+window.addEventListener('resize', () => renderer.resize());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden && app.game?.phase === 'play' && !app.paused) togglePause();
+  if (document.hidden && app.scene === 'game' && !app.session?.online && app.game?.phase === 'play' && !app.paused) togglePause();
 });
+window.addEventListener('pointerdown', () => unlock(), { once: true });
+window.addEventListener('keydown', () => unlock(), { once: true });
 
-menu();
+showMenu();
 requestAnimationFrame(frame);

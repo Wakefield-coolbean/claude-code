@@ -36,6 +36,14 @@ export class Bots {
     this.offs.forEach((f) => f());
   }
 
+  /** Take over a seat, e.g. when its human disconnects mid-game. */
+  addBrain(p) {
+    p.isBot = true;
+    p.remote = false;
+    p.input.x = p.input.y = 0;
+    this.brains.set(p.id, this.newBrain(p));
+  }
+
   newBrain(p) {
     return {
       id: p.id,

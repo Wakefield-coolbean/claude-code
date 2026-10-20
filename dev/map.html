@@ -12,7 +12,8 @@
   import { Game } from '../src/game.js';
   import { Renderer } from '../src/render.js';
   const ppc = Number(new URLSearchParams(location.search).get('ppc') || 12);
-  const game = new Game({ seed: 1 });
+  const mapId = new URLSearchParams(location.search).get('map') || 'kestrel';
+  const game = new Game({ seed: 1, mapId });
   const hidden = document.createElement('canvas');
   const r = new Renderer(hidden, game);
   r.ppc = ppc;

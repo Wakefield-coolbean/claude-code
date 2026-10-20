@@ -1,7 +1,7 @@
 // HUD: task list, task bar, action buttons, vent arrows, toasts and the map overlay
 // (plain map, admin table counts, impostor sabotage map).
 
-import { ventNeighbors, ROOMS, HALLS } from './map.js';
+import { ventNeighbors } from './map.js';
 import { drawCrewmate } from './sprites.js';
 
 const ICONS = {
@@ -270,7 +270,7 @@ export class Hud {
     if (this.mapMode !== 'sabotage') return;
     const g = this.game;
     const me = g.local;
-    const rectOf = (id) => ROOMS.find((r) => r.id === id).rect;
+    const rectOf = (id) => g.map.rooms.find((r) => r.id === id).rect;
     for (const sab of SAB_TARGETS) {
       const [x0, y0, x1, y1] = rectOf(sab.room);
       const b = document.createElement('button');
@@ -294,7 +294,7 @@ export class Hud {
         b.dataset.x = room === 'electrical' ? x0 + 2.4 : (x0 + x1) / 2;
         b.dataset.y = room === 'electrical' ? y1 - 2.2 : (y0 + y1) / 2 + 2.6;
         b.innerHTML = `${icon('doors')}<span></span>`;
-        b.setAttribute('aria-label', `Close doors: ${ROOMS.find((r) => r.id === room).name}`);
+        b.setAttribute('aria-label', `Close doors: ${g.map.rooms.find((r) => r.id === room).name}`);
         b.addEventListener('click', () => this.h.onDoors(room));
         box.appendChild(b);
       }
@@ -322,7 +322,7 @@ export class Hud {
     ctx.setTransform(dpr * s, 0, 0, dpr * s, 0, -1 * dpr * s);
     ctx.clearRect(0, 0, m.W, m.H);
     ctx.lineJoin = 'round';
-    const areas = [...HALLS, ...ROOMS.map((r) => r.rect)];
+    const areas = [...m.halls, ...m.rooms.map((r) => r.rect)];
     ctx.fillStyle = '#ffffff';
     for (const [x0, y0, x1, y1] of areas) ctx.fillRect(x0 - 0.7, y0 - 0.7, x1 - x0 + 1.4, y1 - y0 + 1.4);
     ctx.fillStyle = this.mapMode === 'sabotage' ? '#b8322e' : '#2f6fb5';
@@ -331,7 +331,7 @@ export class Hud {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
-    for (const r of ROOMS) {
+    for (const r of m.rooms) {
       const [x0, y0, x1] = r.rect;
       ctx.fillText(r.name, (x0 + x1) / 2, y0 + 2);
     }
