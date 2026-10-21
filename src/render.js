@@ -5,7 +5,7 @@ import { DIST } from './config.js';
 import { THEMES } from './map.js';
 import { SpriteCache, drawGhost, WALK_FRAMES } from './sprites.js';
 import { World } from './grid.js';
-import { drawDecor, drawDecorProp, drawDecorLive } from './decor.js';
+import { drawDecor, drawDecorProp, drawDecorLive, securityCam } from './decor.js';
 
 const INK = '#07090c';
 const SPACE = '#05070d';
@@ -33,6 +33,7 @@ const PROP_BOXES = {
   chart_br: [116, 33, 2, 8],
   shields_sh: [96.4, 58.4, 3.2, 3.2],
   admin_map: [69, 35, 6, 3],
+  cams_se: [24, 34.45, 5.5, 1.75],
   laptop: [24, 7.6, 3.4, 2],
 };
 
@@ -735,28 +736,13 @@ export class Renderer {
       }
     }
     drawDecorLive(ctx, g.map, time, vx0, vy0, vx1, vy1);
+    this.drawCameras(ctx, time, vx0, vy0, vx1, vy1);
     this.drawHighlights(ctx, me, time);
 
-    // Y-sorted drawables.
-    const items = [];
     const seeAll = !g.local || g.phase === 'lobby';
-    for (const b of g.bodies) {
-      if (seeAll || g.sees(me, b.x, b.y - 0.3)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
-    }
-    for (const p of g.players) {
-      if (p.inVent && p !== me) continue;
-      if (p.inVent) continue;
-      if (!p.alive && me.alive && !seeAll) continue;
-      if (p.alive && !seeAll && !g.seesPlayer(me, p)) continue;
-      items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
-    }
-    for (const d of g.map.doors) {
-      if (!g.world.doorClosed[d.id]) continue;
-      items.push({ y: d.vertical ? d.rect[3] : d.rect[3], draw: () => this.drawDoor(ctx, d) });
-    }
-    items.sort((a, b) => a.y - b.y);
-    for (const it of items) it.draw();
-    this.drawVisualFx(ctx, me, time);
+    const shown = (p) => !p.inVent && (seeAll || (p.alive ? g.seesPlayer(me, p) : !me.alive));
+    this.drawActors(ctx, time, (b) => seeAll || g.sees(me, b.x, b.y - 0.3), shown);
+    this.drawVisualFx(ctx, (p) => !g.local || g.seesPlayer(me, p), time);
 
     // Fog of war.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -788,24 +774,7 @@ export class Renderer {
     }
 
     // Name tags (above fog so they read like the original).
-    ctx.font = `800 ${Math.round(ppc * 0.42)}px "Baloo 2", "Arial Rounded MT Bold", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(2, ppc * 0.07);
-    for (const p of g.players) {
-      if (p.inVent) continue;
-      if (!p.alive && me.alive && !seeAll) continue;
-      if (p.alive && !seeAll && !g.seesPlayer(me, p)) continue;
-      const [sx, sy] = toS(p.x, p.y - 1.32 * DIST.char);
-      const teammate = me.role === 'impostor' && p.role === 'impostor';
-      ctx.globalAlpha = p.alive ? 1 : 0.6;
-      ctx.strokeStyle = INK;
-      ctx.strokeText(p.name, sx, sy);
-      ctx.fillStyle = teammate ? '#ff2a2a' : '#ffffff';
-      ctx.fillText(p.name, sx, sy);
-    }
-    ctx.globalAlpha = 1;
+    this.drawNames(ctx, toS, shown, me);
 
     // Critical sabotage flash.
     const sab = g.sab.active;
@@ -820,8 +789,94 @@ export class Renderer {
     this.drawArrows(ctx, me, toS, time);
   }
 
+  /** Bodies, crewmates and closed doors, back to front. */
+  drawActors(ctx, time, showBody, showPlayer) {
+    const g = this.game;
+    const items = [];
+    for (const b of g.bodies) if (showBody(b)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
+    for (const p of g.players) if (showPlayer(p)) items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
+    for (const d of g.map.doors) {
+      if (g.world.doorClosed[d.id]) items.push({ y: d.rect[3], draw: () => this.drawDoor(ctx, d) });
+    }
+    items.sort((a, b) => a.y - b.y);
+    for (const it of items) it.draw();
+  }
+
+  /** Name tags in screen space; impostors see their teammates' names in red. */
+  drawNames(ctx, toS, show, me, size = 1) {
+    const ppc = this.ppc * size;
+    ctx.font = `800 ${Math.round(ppc * 0.42)}px "Baloo 2", "Arial Rounded MT Bold", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(2, ppc * 0.07);
+    for (const p of this.game.players) {
+      if (!show(p)) continue;
+      const [sx, sy] = toS(p.x, p.y - 1.32 * DIST.char);
+      const teammate = me.role === 'impostor' && p.role === 'impostor';
+      ctx.globalAlpha = p.alive ? 1 : 0.6;
+      ctx.strokeStyle = INK;
+      ctx.strokeText(p.name, sx, sy);
+      ctx.fillStyle = teammate ? '#ff2a2a' : '#ffffff';
+      ctx.fillText(p.name, sx, sy);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /** Wall cameras in view; their red lights blink while someone watches. */
+  drawCameras(ctx, time, x0, y0, x1, y1) {
+    const g = this.game;
+    const rec = g.phase === 'play' && g.camsInUse();
+    for (const c of g.map.cameras) {
+      if (c.x > x0 - 1 && c.x < x1 + 1 && c.top > y0 - 1 && c.top - 2 < y1) securityCam(ctx, c.x, c.top, rec, time);
+    }
+  }
+
+  /**
+   * One security camera feed: the world inside view [x0, y0, x1, y1] with no fog, drawn at
+   * the main view's scale into a reused canvas, which is returned.
+   */
+  renderFeed(view, time) {
+    const g = this.game;
+    const [x0, y0, x1, y1] = view;
+    const ppc = this.ppc;
+    const fc = (this.feed ||= document.createElement('canvas'));
+    const fw = Math.ceil((x1 - x0) * ppc);
+    const fh = Math.ceil((y1 - y0) * ppc);
+    if (fc.width !== fw || fc.height !== fh) {
+      fc.width = fw;
+      fc.height = fh;
+    }
+    const ctx = fc.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = SPACE;
+    ctx.fillRect(0, 0, fw, fh);
+    for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
+      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+        ctx.drawImage(this.chunk(cx, cy), Math.round((cx * CHUNK - x0) * ppc), Math.round((cy * CHUNK - y0) * ppc));
+      }
+    }
+    ctx.setTransform(ppc, 0, 0, ppc, -x0 * ppc, -y0 * ppc);
+    for (const [id, used] of Object.entries(g.ventUsed)) {
+      const age = g.t - used;
+      if (age < 0.6) this.ventGrate(ctx, g.map.vents[id].x, g.map.vents[id].y, Math.sin((age / 0.6) * Math.PI));
+    }
+    drawDecorLive(ctx, g.map, time, x0, y0, x1, y1);
+    this.drawCameras(ctx, time, x0, y0, x1, y1);
+    // Cameras see the living, wherever they stand in frame; ghosts don't show up on them.
+    const inView = (x, y) => x > x0 - 1 && x < x1 + 1 && y > y0 - 0.5 && y < y1 + 2;
+    const onFeed = (p) => p.alive && !p.inVent && inView(p.x, p.y);
+    this.feeding = true;
+    this.drawActors(ctx, time, (b) => inView(b.x, b.y), onFeed);
+    this.feeding = false;
+    this.drawVisualFx(ctx, onFeed, time);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.drawNames(ctx, (x, y) => [(x - x0) * ppc, (y - y0) * ppc], onFeed, g.local || g.players[0], 0.85);
+    return fc;
+  }
+
   drawPlayer(ctx, p, time) {
-    const [sx, sy] = this.worldToScreenWith(p.x, p.y);
+    const [sx, sy] = this.screenPos(ctx, p.x, p.y);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (!p.alive) {
@@ -841,9 +896,11 @@ export class Renderer {
     this.sprites.blit(ctx, this.sprites.crewmate(p, frame, false), sx, sy, p.facing, this.ppc);
     // The visor eases toward where this crewmate is looking (p.look: world direction, length = strength).
     const ls = (p.lookS ||= { x: 0, y: 0 });
-    const k = Math.min(1, (this.dt || 0.016) * 9);
-    ls.x += ((p.look?.x || 0) - ls.x) * k;
-    ls.y += ((p.look?.y || 0) - ls.y) * k;
+    if (!this.feeding) {
+      const k = Math.min(1, (this.dt || 0.016) * 9);
+      ls.x += ((p.look?.x || 0) - ls.x) * k;
+      ls.y += ((p.look?.y || 0) - ls.y) * k;
+    }
     const mag = Math.min(1, Math.hypot(ls.x, ls.y));
     const toward = mag > 1e-3 ? (ls.x / mag) * p.facing : 1;
     const fwd = 1 + (Math.max(0, toward) - 1) * mag;
@@ -853,7 +910,7 @@ export class Renderer {
   }
 
   drawBody(ctx, b) {
-    const [sx, sy] = this.worldToScreenWith(b.x, b.y);
+    const [sx, sy] = this.screenPos(ctx, b.x, b.y);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const p = this.game.players[b.id];
@@ -861,9 +918,9 @@ export class Renderer {
     ctx.restore();
   }
 
-  worldToScreenWith(x, y) {
-    // Matches the current world transform (camera incl. shake).
-    const m = this.ctx.getTransform();
+  /** Device-pixel position of a world point under ctx's current world transform (camera incl. shake). */
+  screenPos(ctx, x, y) {
+    const m = ctx.getTransform();
     return [x * m.a + m.e, y * m.d + m.f];
   }
 
@@ -928,12 +985,11 @@ export class Renderer {
     }
   }
 
-  drawVisualFx(ctx, me, time) {
+  drawVisualFx(ctx, show, time) {
     const g = this.game;
     for (const [id, fx] of g.visualFx) {
       const p = g.players[id];
-      const vis = !g.local || g.seesPlayer(me, p);
-      if (!vis) continue;
+      if (!show(p)) continue;
       if (fx.kind === 'scan') {
         ctx.save();
         ctx.strokeStyle = 'rgba(80,255,140,0.9)';

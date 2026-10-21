@@ -136,7 +136,7 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Doors on Cafeteria, MedBay, Security, Electrical, Storage and both engines | P0 | ✅ |
 | Map overlay (Tab) with your position, task markers and sabotage markers | P0 | ✅ |
 | Admin table: live player counts per room | P1 | ✅ |
-| Security cameras (4 feeds) with blinking light when in use | P1 | ⬜ |
+| Security cameras (4 feeds) with blinking light when in use | P1 | ✅ |
 | Door logs / vitals style info tools on later maps | P2 | ⬜ |
 | Second map (larger, outdoor, vitals, seismic sabotage) | P2 | ⬜ |
 | Third map (multi-floor with ladders, choose spawn) | P2 | ⬜ |

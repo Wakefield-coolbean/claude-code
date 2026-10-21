@@ -225,7 +225,13 @@ export class Room {
     const x = Number(m.x);
     const y = Number(m.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    c.lobby = { x: r2(Math.max(x0, Math.min(x1, x))), y: r2(Math.max(y0, Math.min(y1, y))), f: m.f < 0 ? -1 : 1, m: m.m ? 1 : 0, l: packLook(unpackLook(m.l)) };
+    c.lobby = {
+      x: r2(Math.max(x0, Math.min(x1, x))),
+      y: r2(Math.max(y0, Math.min(y1, y))),
+      f: m.f < 0 ? -1 : 1,
+      m: m.m ? 1 : 0,
+      l: packLook(unpackLook(m.l)),
+    };
   }
 
   // ---------- game ----------
@@ -292,7 +298,10 @@ export class Room {
         if (left <= 0) this.startGame();
       }
       if (this.tickN % LOBBY_EVERY === 0) {
-        this.broadcast({ t: 'ls', ps: [...this.clients.values()].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m, c.lobby.l || 0]) });
+        this.broadcast({
+          t: 'ls',
+          ps: [...this.clients.values()].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m, c.lobby.l || 0]),
+        });
       }
       return;
     }
@@ -311,7 +320,9 @@ export class Room {
     const ghost = !me.alive;
     const [ex, ey] = g.eye(me);
     const R = g.visionOf(me) + 1.5; // a margin so the client's own fog edge has data
-    const vis = (x, y) => ghost || (Math.hypot(x - ex, y - ey) <= R && !g.world.blocked(ex, ey, x, y));
+    // Watching the cameras also shows whatever is on a feed.
+    const cams = me.watching === 'cams';
+    const vis = (x, y) => ghost || (Math.hypot(x - ex, y - ey) <= R && !g.world.blocked(ex, ey, x, y)) || (cams && !!g.onCamera(x, y));
     const ps = [];
     for (const p of g.players) {
       if (p === me || p.inVent || (!p.alive && !ghost)) continue;
@@ -335,7 +346,9 @@ export class Room {
       v: me.inVent,
       al: me.alive ? 1 : 0,
       fx: [...g.visualFx].filter(([id]) => id === me.id || shown.has(id)).map(([id, f]) => [id, f.kind]),
+      cam: g.camsInUse() ? 1 : 0,
     };
+    if (me.watching === 'admin' && !g.camsDown()) out.ad = [...g.adminCounts()];
     if (me.role === 'impostor') {
       out.sr = g.sab.readyAt;
       out.dc = Object.fromEntries(Object.entries(g.sab.doors).map(([k, v]) => [k, [v.closedUntil, v.readyAt]]));
@@ -527,6 +540,9 @@ export class Room {
       }
       case 'visual':
         g.setVisual(id, String(m.kind), !!m.on);
+        break;
+      case 'watch':
+        g.setWatching(id, m.kind === 'cams' || m.kind === 'admin' ? m.kind : null);
         break;
       case 'fix': {
         const a = m.action || {};

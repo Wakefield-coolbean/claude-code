@@ -14,12 +14,14 @@
   --crew: #8cf1ff;
   --imp: #ff2a2a;
   --alarm: rgba(255, 30, 30, 0.38);
-  --font-ui: "Baloo 2", "Arial Rounded MT Bold", system-ui, sans-serif;
-  --font-body: "Varela Round", "Arial Rounded MT Bold", system-ui, sans-serif;
-  --outline: 0 0 0 transparent, -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
-    0 -2px 0 var(--ink), 0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink);
-  --outline-thick: -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
-    0 -3px 0 var(--ink), 0 3px 0 var(--ink), -3px 0 0 var(--ink), 3px 0 0 var(--ink), 0 5px 0 var(--ink);
+  --font-ui: 'Baloo 2', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --font-body: 'Varela Round', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --outline:
+    0 0 0 transparent, -2px -2px 0 var(--ink), 2px -2px 0 var(--ink), -2px 2px 0 var(--ink), 2px 2px 0 var(--ink), 0 -2px 0 var(--ink),
+    0 2px 0 var(--ink), -2px 0 0 var(--ink), 2px 0 0 var(--ink);
+  --outline-thick:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink), 0 -3px 0 var(--ink), 0 3px 0 var(--ink),
+    -3px 0 0 var(--ink), 3px 0 0 var(--ink), 0 5px 0 var(--ink);
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-r: env(safe-area-inset-right, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -178,7 +180,6 @@ select:focus-visible {
   touch-action: none;
   cursor: crosshair;
 }
-
 
 /* ---------- HUD ---------- */
 .hud {
@@ -343,8 +344,8 @@ select:focus-visible {
   grid-template-columns: repeat(3, var(--size));
   grid-template-rows: repeat(2, var(--size));
   grid-template-areas:
-    ". vent report"
-    "sabotage kill use";
+    '. vent report'
+    'sabotage kill use';
   gap: 10px;
   pointer-events: none;
 }
@@ -363,14 +364,29 @@ select:focus-visible {
   padding: 0 0 14px;
   cursor: pointer;
   box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5);
-  transition: transform 0.08s, opacity 0.15s;
+  transition:
+    transform 0.08s,
+    opacity 0.15s;
 }
 
-.act[data-act="use"] { grid-area: use; }
-.act[data-act="report"] { grid-area: report; background: radial-gradient(circle at 50% 35%, #d0574a, #7a1f1a 70%); }
-.act[data-act="kill"] { grid-area: kill; background: radial-gradient(circle at 50% 35%, #9b2d2d, #3d1010 70%); }
-.act[data-act="vent"] { grid-area: vent; }
-.act[data-act="sabotage"] { grid-area: sabotage; background: radial-gradient(circle at 50% 35%, #b5452a, #4a1608 70%); }
+.act[data-act='use'] {
+  grid-area: use;
+}
+.act[data-act='report'] {
+  grid-area: report;
+  background: radial-gradient(circle at 50% 35%, #d0574a, #7a1f1a 70%);
+}
+.act[data-act='kill'] {
+  grid-area: kill;
+  background: radial-gradient(circle at 50% 35%, #9b2d2d, #3d1010 70%);
+}
+.act[data-act='vent'] {
+  grid-area: vent;
+}
+.act[data-act='sabotage'] {
+  grid-area: sabotage;
+  background: radial-gradient(circle at 50% 35%, #b5452a, #4a1608 70%);
+}
 
 .act:active:not(:disabled) {
   transform: translateY(3px);
@@ -486,8 +502,12 @@ select:focus-visible {
   box-shadow: 0 8px 0 rgba(0, 0, 0, 0.5);
 }
 
-.mapview[data-mode="sabotage"] .map-frame {
+.mapview[data-mode='sabotage'] .map-frame {
   background: #4d1715;
+}
+
+.mapview[data-mode='cams'] .map-frame {
+  background: #2b333c;
 }
 
 .map-title {
@@ -520,8 +540,14 @@ select:focus-visible {
   overflow: hidden;
 }
 
-.map-canvas {
+.map-canvas,
+.cams-canvas {
   display: block;
+}
+
+.map-canvas[hidden],
+.cams-canvas[hidden] {
+  display: none;
 }
 
 .map-buttons {
@@ -739,7 +765,9 @@ select:focus-visible {
   letter-spacing: 0.01em;
   text-transform: uppercase;
   color: var(--text);
-  text-shadow: var(--outline-thick), 0 10px 0 rgba(0, 0, 0, 0.45);
+  text-shadow:
+    var(--outline-thick),
+    0 10px 0 rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -795,7 +823,10 @@ select:focus-visible {
   font: 800 clamp(22px, 3.4vw, 30px) / 1 var(--font-ui);
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: transform 0.08s, border-color 0.12s, color 0.12s;
+  transition:
+    transform 0.08s,
+    border-color 0.12s,
+    color 0.12s;
 }
 
 .menu-btn:hover,
@@ -1202,7 +1233,7 @@ kbd {
   height: auto !important;
 }
 
-.swatch[aria-pressed="true"] {
+.swatch[aria-pressed='true'] {
   border-color: var(--task);
   background: rgba(245, 217, 10, 0.18);
 }
@@ -1232,12 +1263,12 @@ kbd {
   border-left: 3px solid var(--ink);
 }
 
-.seg [aria-checked="true"] {
+.seg [aria-checked='true'] {
   background: var(--text);
   color: var(--ink);
 }
 
-.seg [data-role="impostor"][aria-checked="true"] {
+.seg [data-role='impostor'][aria-checked='true'] {
   background: var(--imp);
   color: var(--text);
 }
@@ -1686,7 +1717,9 @@ kbd {
   margin: 0;
   font: 800 clamp(36px, 8vw, 92px) / 1 var(--font-ui);
   text-transform: uppercase;
-  text-shadow: var(--outline-thick), 0 8px 0 rgba(0, 0, 0, 0.5);
+  text-shadow:
+    var(--outline-thick),
+    0 8px 0 rgba(0, 0, 0, 0.5);
   animation: pop 0.3s ease-out;
 }
 
@@ -1862,7 +1895,9 @@ kbd {
   border: 5px solid var(--ink);
   border-radius: 20px;
   padding: 8px 12px;
-  box-shadow: inset 0 0 0 6px #c9d5df, 0 8px 0 rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 0 0 6px #c9d5df,
+    0 8px 0 rgba(0, 0, 0, 0.5);
 }
 
 .tablet header {
@@ -1975,7 +2010,7 @@ kbd {
 }
 
 .plate.dead::after {
-  content: "";
+  content: '';
   position: absolute;
   left: 6px;
   top: 6px;
@@ -2257,7 +2292,7 @@ kbd {
   }
 
   .meeting.chat-open::before {
-    content: "";
+    content: '';
   }
 }
 

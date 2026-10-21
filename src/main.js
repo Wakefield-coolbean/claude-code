@@ -363,6 +363,7 @@ const hudHandlers = {
     const g = app.game;
     if (!api().closeDoors(g.localId, room)) hud.toast('Those doors are on cooldown');
   },
+  onWatch: (kind) => app.game && api()?.setWatching(app.game.localId, kind),
 };
 
 function openStep(g, me, use) {
@@ -435,8 +436,10 @@ function action(name) {
       if (!use) return;
       if (use.kind === 'task') openStep(g, me, use);
       else if (use.kind === 'fix') openFix(g, me, use);
-      else if (use.kind === 'admin') hud.openMap('admin');
-      else if (use.kind === 'button') {
+      else if (use.kind === 'admin' || use.kind === 'cams') {
+        hud.openMap(use.kind);
+        sfx('open');
+      } else if (use.kind === 'button') {
         const why = g.emergencyBlock(me);
         if (why) hud.toast(why);
         else a.callEmergency(me.id);

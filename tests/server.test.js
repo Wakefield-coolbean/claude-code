@@ -170,3 +170,27 @@ test('end to end over a real WebSocket: host, list, join', async () => {
   await new Promise((r) => setTimeout(r, 100));
   server.close();
 });
+
+test('watching cams adds what the feeds show to the snapshot, and everyone sees the red lights', () => {
+  const { room, host, guest, g } = startedRoom();
+  const me = g.players[host.pid];
+  const st = g.map.stations.cams_se;
+  me.x = st.x;
+  me.y = st.y;
+  const other = g.players[guest.pid];
+  other.x = 6;
+  other.y = 38;
+  const onCam = g.players[2];
+  onCam.x = 98;
+  onCam.y = 38; // Bridge Hall
+  assert.ok(!room.snapshot(host).ps.some((p) => p[0] === onCam.id));
+  assert.equal(room.snapshot(guest).cam, 0);
+  room.onMessage(host, { t: 'a', a: 'watch', kind: 'cams' });
+  assert.ok(
+    room.snapshot(host).ps.some((p) => p[0] === onCam.id),
+    'seen on the Bridge Hall feed',
+  );
+  assert.equal(room.snapshot(guest).cam, 1);
+  room.onMessage(host, { t: 'a', a: 'watch', kind: null });
+  assert.ok(!room.snapshot(host).ps.some((p) => p[0] === onCam.id));
+});

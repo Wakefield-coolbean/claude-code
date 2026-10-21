@@ -1,5 +1,5 @@
 // HUD: task list, task bar, action buttons, vent arrows, toasts and the map overlay
-// (plain map, admin table counts, impostor sabotage map).
+// (plain map, admin table counts, impostor sabotage map, security camera feeds).
 
 import { ventNeighbors } from './map.js';
 import { drawCrewmate } from './sprites.js';
@@ -13,6 +13,7 @@ const ICONS = {
   sabotage: '<path d="M48 16l36 62H12z"/><path d="M48 38v20M48 66v2"/>',
   button: '<ellipse cx="48" cy="60" rx="30" ry="12"/><path d="M26 58c0-16 10-24 22-24s22 8 22 24"/>',
   admin: '<path d="M14 26l22-8 24 8 22-8v52l-22 8-24-8-22 8z"/><path d="M36 18v52M60 26v52"/>',
+  cams: '<rect x="12" y="30" width="50" height="36" rx="7"/><path d="M62 43l22-11v32L62 53z"/><circle cx="31" cy="48" r="8"/>',
   map: '<path d="M14 26l22-8 24 8 22-8v52l-22 8-24-8-22 8z"/><path d="M36 18v52M60 26v52"/>',
   gear: '<path d="M81.3 41.4 L82.0 48.7 L71.5 52.7 L70.0 57.6 L76.3 66.9 L71.6 72.5 L61.3 68.0 L56.7 70.3 L54.6 81.3 L47.3 82.0 L43.3 71.5 L38.4 70.0 L29.1 76.3 L23.5 71.6 L28.0 61.3 L25.7 56.7 L14.7 54.6 L14.0 47.3 L24.5 43.3 L26.0 38.4 L19.7 29.1 L24.4 23.5 L34.7 28.0 L39.3 25.7 L41.4 14.7 L48.7 14.0 L52.7 24.5 L57.6 26.0 L66.9 19.7 L72.5 24.4 L68.0 34.7 L70.3 39.3Z"/><circle cx="48" cy="48" r="10"/>',
   sound: '<path d="M18 38h14l18-14v48L32 58H18z"/><path d="M62 36c6 6 6 18 0 24M70 28c12 10 12 30 0 40"/>',
@@ -64,7 +65,7 @@ export class Hud {
         <div class="map-frame">
           <button class="map-close" type="button" aria-label="Close map">✕</button>
           <div class="map-title"></div>
-          <div class="map-wrap"><canvas class="map-canvas"></canvas><div class="map-buttons"></div></div>
+          <div class="map-wrap"><canvas class="map-canvas"></canvas><canvas class="cams-canvas" hidden></canvas><div class="map-buttons"></div></div>
         </div>
       </div>`;
     this.el = {
@@ -78,6 +79,7 @@ export class Hud {
       mapview: root.querySelector('.mapview'),
       mapTitle: root.querySelector('.map-title'),
       mapCanvas: root.querySelector('.map-canvas'),
+      camsCanvas: root.querySelector('.cams-canvas'),
       mapButtons: root.querySelector('.map-buttons'),
     };
     this.btn = {};
@@ -149,12 +151,12 @@ export class Hud {
   }
 
   setUseLook(use) {
-    const kind = use?.kind === 'button' ? 'button' : use?.kind === 'admin' ? 'admin' : 'use';
+    const kind = ['button', 'admin', 'cams'].includes(use?.kind) ? use.kind : 'use';
     if (this.useKind === kind) return;
     this.useKind = kind;
     const b = this.btn.use;
     b.querySelector('svg').outerHTML = icon(kind);
-    b.querySelector('b').textContent = kind === 'admin' ? 'Admin' : 'Use';
+    b.querySelector('b').textContent = { admin: 'Admin', cams: 'Security' }[kind] || 'Use';
   }
 
   stepLabel(task) {
@@ -244,17 +246,22 @@ export class Hud {
     this.mapMode = mode;
     this.el.mapview.hidden = false;
     this.el.mapview.dataset.mode = mode;
-    this.el.mapTitle.textContent = mode === 'sabotage' ? 'Sabotage' : mode === 'admin' ? 'Admin' : 'Map';
+    this.el.mapTitle.textContent = { sabotage: 'Sabotage', admin: 'Admin', cams: 'Security' }[mode] || 'Map';
+    this.el.mapCanvas.hidden = mode === 'cams';
+    this.el.camsCanvas.hidden = mode !== 'cams';
+    if (mode === 'cams' || mode === 'admin') this.h.onWatch?.(mode);
     this.buildMapButtons();
     this.drawMap(0);
   }
 
   closeMap() {
+    const was = this.mapMode;
     this.mapMode = null;
     if (this.el) {
       this.el.mapview.hidden = true;
       this.el.mapButtons.innerHTML = '';
     }
+    if (was === 'cams' || was === 'admin') this.h.onWatch?.(null);
   }
 
   mapScale() {
@@ -302,6 +309,7 @@ export class Hud {
   }
 
   drawMap(time) {
+    if (this.mapMode === 'cams') return this.drawCams(time);
     const g = this.game;
     const me = g.local;
     const m = g.map;
@@ -361,13 +369,7 @@ export class Hud {
         ctx.fillStyle = '#ff3b30';
         ctx.fillText('Comms Sabotaged', m.W / 2, m.H / 2);
       } else {
-        const counts = new Map();
-        for (const p of g.players) {
-          if (!p.alive || p.inVent) continue;
-          const r = m.room[Math.floor(p.y) * m.W + Math.floor(p.x)];
-          if (r >= 0) counts.set(r, (counts.get(r) || 0) + 1);
-        }
-        for (const [ri, n] of counts) {
+        for (const [ri, n] of g.adminCounts()) {
           const [x0, y0, x1, y1] = m.rooms[ri].rect;
           for (let i = 0; i < n; i++) {
             const cx = (x0 + x1) / 2 - ((n - 1) * 1.3) / 2 + i * 1.3;
@@ -406,6 +408,117 @@ export class Hud {
       }
     }
   }
+
+  /** The Security desk: four live camera feeds in a 2x2 grid; static while comms are down. */
+  drawCams(time) {
+    const g = this.game;
+    const cv = this.el.camsCanvas;
+    const wrap = cv.parentElement.getBoundingClientRect();
+    const gap = 10;
+    const fw = Math.max(80, Math.floor(Math.min((wrap.width - gap) / 2, (((wrap.height - gap) / 2) * 16) / 9)));
+    const fh = Math.floor((fw * 9) / 16);
+    const w = fw * 2 + gap;
+    const h = fh * 2 + gap;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(h * dpr);
+      cv.style.width = `${w}px`;
+      cv.style.height = `${h}px`;
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    const down = g.camsDown();
+    const rec = Math.floor(time * 1.5) % 2 === 0;
+    g.map.cameras.slice(0, 4).forEach((cam, i) => {
+      const x = (i % 2) * (fw + gap);
+      const y = Math.floor(i / 2) * (fh + gap);
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(x, y, fw, fh, 8);
+      ctx.clip();
+      if (down) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(noise(), x, y, fw, fh);
+      } else {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'medium';
+        ctx.drawImage(this.renderer.renderFeed(cam.view, time), x, y, fw, fh);
+      }
+      // Screen look: scanlines, a dark rim and a faint green cast.
+      ctx.fillStyle = scanlines(ctx);
+      ctx.fillRect(x, y, fw, fh);
+      const vg = ctx.createRadialGradient(x + fw / 2, y + fh / 2, fh * 0.45, x + fw / 2, y + fh / 2, fw * 0.62);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.45)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(x, y, fw, fh);
+      ctx.fillStyle = 'rgba(120,255,170,0.05)';
+      ctx.fillRect(x, y, fw, fh);
+      const fs = Math.max(11, Math.round(fh / 14));
+      ctx.font = `800 ${fs}px "Baloo 2", sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#07090c';
+      ctx.fillStyle = '#ffffff';
+      if (down) {
+        ctx.textAlign = 'center';
+        ctx.strokeText('NO SIGNAL', x + fw / 2, y + fh / 2);
+        ctx.fillText('NO SIGNAL', x + fw / 2, y + fh / 2);
+      } else if (rec) {
+        ctx.textAlign = 'left';
+        ctx.beginPath();
+        ctx.arc(x + 10 + fs * 0.35, y + 8 + fs * 0.55, fs * 0.32, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff3b30';
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeText('REC', x + 14 + fs * 0.7, y + 8 + fs * 0.6);
+        ctx.fillText('REC', x + 14 + fs * 0.7, y + 8 + fs * 0.6);
+      }
+      ctx.textAlign = 'left';
+      const label = cam.name.toUpperCase();
+      ctx.strokeText(label, x + 10, y + fh - 8 - fs * 0.5);
+      ctx.fillText(label, x + 10, y + fh - 8 - fs * 0.5);
+      ctx.restore();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#07090c';
+      ctx.beginPath();
+      ctx.roundRect(x + 2, y + 2, fw - 4, fh - 4, 7);
+      ctx.stroke();
+    });
+  }
+}
+
+let noiseCanvas = null;
+/** A fresh frame of TV static (small; drawn scaled up). */
+function noise() {
+  const c = (noiseCanvas ||= Object.assign(document.createElement('canvas'), { width: 160, height: 90 }));
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(c.width, c.height);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = 40 + Math.random() * 170;
+    d[i] = v;
+    d[i + 1] = v;
+    d[i + 2] = v + 8;
+    d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+let scanPattern = null;
+function scanlines(ctx) {
+  if (!scanPattern) {
+    const c = Object.assign(document.createElement('canvas'), { width: 1, height: 3 });
+    const p = c.getContext('2d');
+    p.fillStyle = 'rgba(0,0,0,0.16)';
+    p.fillRect(0, 2, 1, 1);
+    scanPattern = ctx.createPattern(c, 'repeat');
+  }
+  return scanPattern;
 }
 
 export function escapeHtml(s) {

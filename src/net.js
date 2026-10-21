@@ -262,7 +262,14 @@ export class NetSession {
     }
     if (me && now() >= this.sendAt) {
       this.sendAt = now() + 1 / 10;
-      this.send({ t: 'lp', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0, l: packLook(me.look) });
+      this.send({
+        t: 'lp',
+        x: Math.round(me.x * 100) / 100,
+        y: Math.round(me.y * 100) / 100,
+        f: me.facing,
+        m: me.moving ? 1 : 0,
+        l: packLook(me.look),
+      });
     }
   }
 
@@ -396,6 +403,8 @@ export class NetSession {
     g.buttonReadyAt = s.btn;
     this.bar = s.bar;
     g.visualFx = new Map(s.fx.map(([id, kind]) => [id, { kind, t: g.t }]));
+    g.camsNet = !!s.cam;
+    g.adminNet = s.ad || null;
   }
 
   applyEvent(ev, d) {
@@ -566,7 +575,14 @@ export class NetSession {
       const key = `${me.x.toFixed(2)},${me.y.toFixed(2)},${me.facing},${me.moving},${look}`;
       if (key !== this.lastSent) {
         this.lastSent = key;
-        this.send({ t: 'p', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0, l: look });
+        this.send({
+          t: 'p',
+          x: Math.round(me.x * 100) / 100,
+          y: Math.round(me.y * 100) / 100,
+          f: me.facing,
+          m: me.moving ? 1 : 0,
+          l: look,
+        });
       }
     }
   }
@@ -602,6 +618,10 @@ export class NetSession {
         return act('step', { task });
       },
       setVisual: (id, kind, on) => act('visual', { kind, on }),
+      setWatching: (id, kind) => {
+        this.game.local.watching = kind || null;
+        return act('watch', { kind });
+      },
       fixAction: (id, station, action) => {
         const s = this.game.sab.active;
         if (s?.type === 'lights' && action.type === 'toggle') s.switches[action.index] = !s.switches[action.index];

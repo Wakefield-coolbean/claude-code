@@ -62,6 +62,7 @@ export class Game {
     phase,
   } = {}) {
     this.settings = { ...defaultSettings(), ...settings };
+    this.replica = replica;
     this.rng = mulberry32(seed);
     this.map = getMap(mapId);
     this.world = new World(this.map);
@@ -77,6 +78,8 @@ export class Game {
     this.visualFx = new Map(); // playerId -> visual task kind
     this.ventUsed = {}; // ventId -> last time it opened
     this.chatLog = [];
+    this.camsNet = false; // replica: someone is watching the cameras (from the host)
+    this.adminNet = null; // replica: admin table counts (from the host)
     this.taskBarShown = 0;
     this.buttonReadyAt = this.settings.emergencyCooldown;
     this.sab = { active: null, readyAt: TIMING.firstSabotageCooldown, doors: {} };
@@ -125,6 +128,7 @@ export class Game {
         moving: false,
         walk: 0,
         inVent: null,
+        watching: null, // 'cams' or 'admin' while using that room tool
         killCooldown: TIMING.firstKillCooldown,
         emergencyLeft: this.settings.emergencyMeetings,
         tasks: [],
@@ -321,8 +325,8 @@ export class Game {
       if (st.sabotage) {
         if (p.alive && this.sab.active?.type === st.sabotage && !this.fixPointDone(id))
           consider(d, { kind: 'fix', station: id, type: st.sabotage });
-      } else if (st.tool === 'admin') {
-        if (p.alive) consider(d + 0.3, { kind: 'admin', station: id });
+      } else if (st.tool) {
+        if (p.alive) consider(d + 0.3, { kind: st.tool, station: id });
       } else {
         const steps = this.stepsAt(p, id);
         if (steps.length) consider(d, { kind: 'task', station: id, taskIndex: steps[0].index });
@@ -333,6 +337,49 @@ export class Game {
       consider(Math.max(0, Math.hypot(p.x - b.x, p.y - b.y) - 2.1), { kind: 'button' });
     }
     return best;
+  }
+
+  /** Is `p` close enough to use a room tool ('cams' or 'admin')? */
+  nearTool(p, tool) {
+    return Object.values(this.map.stations).some((st) => st.tool === tool && Math.hypot(st.x - p.x, st.y - p.y) <= DIST.use + 0.8);
+  }
+
+  /** Start (kind 'cams' or 'admin') or stop (null) watching a room tool. */
+  setWatching(id, kind) {
+    const p = this.players[id];
+    if (!p) return false;
+    if (kind && (this.phase !== 'play' || !p.alive || p.inVent || !this.nearTool(p, kind))) return false;
+    p.watching = kind || null;
+    return true;
+  }
+
+  /** Comms sabotage cuts the camera feeds and the admin table. */
+  camsDown() {
+    return this.sab.active?.type === 'comms';
+  }
+
+  /** Is anyone watching the cameras? (Their red lights blink.) */
+  camsInUse() {
+    if (this.replica) return this.camsNet;
+    return !this.camsDown() && this.players.some((p) => p.alive && p.watching === 'cams');
+  }
+
+  /** The camera whose feed shows point (x, y), or null. */
+  onCamera(x, y) {
+    if (this.camsDown()) return null;
+    return this.map.cameras.find(({ view: [x0, y0, x1, y1] }) => x >= x0 && x < x1 && y >= y0 && y < y1) || null;
+  }
+
+  /** Living crewmates per room index, as the admin table shows them. */
+  adminCounts() {
+    if (this.replica) return new Map(this.adminNet || []);
+    const counts = new Map();
+    for (const p of this.players) {
+      if (!p.alive || p.inVent) continue;
+      const r = this.map.room[Math.floor(p.y) * this.map.W + Math.floor(p.x)];
+      if (r >= 0) counts.set(r, (counts.get(r) || 0) + 1);
+    }
+    return counts;
   }
 
   /** Total task progress 0..1 (actual, not the displayed bar). */
@@ -378,6 +425,7 @@ export class Game {
     victim.alive = false;
     victim.deathT = this.t;
     victim.holding = null;
+    victim.watching = null;
     this.visualFx.delete(victim.id);
     const body = { id: victim.id, x: victim.x, y: victim.y, color: victim.color, shadow: victim.shadow, t: this.t };
     this.bodies.push(body);
@@ -575,6 +623,7 @@ export class Game {
       p.moving = false;
       p.vote = null;
       p.holding = null;
+      p.watching = null;
     }
     this.visualFx.clear();
     if (this.sab.active && CRITICAL.includes(this.sab.active.type)) {
@@ -770,6 +819,7 @@ export class Game {
     // Movement (remote players report their own positions).
     for (const p of this.players) {
       if (p.alive) p.killCooldown = Math.max(0, p.killCooldown - dt);
+      if (p.watching && (!p.alive || p.inVent || p.moving)) p.watching = null;
       if (p.inVent || p.remote) continue;
       this.stepPlayer(p, dt);
     }

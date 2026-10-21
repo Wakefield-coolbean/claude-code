@@ -166,7 +166,19 @@ export const STATIONS = {
   comms_co: { room: 'comms', x: 83, y: 73.5, look: 'dish', sabotage: 'comms' },
   // Room tools
   admin_map: { room: 'admin', x: 72, y: 34.4, look: 'none', tool: 'admin' },
+  cams_se: { room: 'security', x: 26.75, y: 38.3, look: 'none', tool: 'cams' },
 };
+
+// Security cameras: mounted on the wall above floor row `top` at x; the Security desk shows
+// what each one sees, a 16:9 view of the map (view: [x0, y0, x1, y1]).
+export const CAM_VIEW = [14, 7.875];
+const camView = (cx, cy) => [cx - CAM_VIEW[0] / 2, cy - CAM_VIEW[1] / 2, cx + CAM_VIEW[0] / 2, cy + CAM_VIEW[1] / 2];
+export const CAMERAS = [
+  { id: 'reactorHall', name: 'Reactor Hall', x: 20, top: 36, view: camView(16.5, 38) },
+  { id: 'medbayHall', name: 'MedBay Hall', x: 36, top: 12, view: camView(35, 15.5) },
+  { id: 'adminHall', name: 'Admin Hall', x: 64, top: 35, view: camView(63, 37) },
+  { id: 'bridgeHall', name: 'Bridge Hall', x: 98.5, top: 36, view: camView(99, 36) },
+];
 
 // Vents: id -> position; networks list which vents connect.
 export const VENTS = {
@@ -226,6 +238,7 @@ export const KESTREL = {
   doors: DOORS,
   button: EMERGENCY_BUTTON,
   spawn: SPAWN,
+  cameras: CAMERAS,
 };
 
 // The pre-game lobby: a dropship cabin with a customize laptop.
@@ -350,6 +363,7 @@ export function buildMap(def = KESTREL) {
     ventNetworks: def.ventNetworks,
     button: def.button,
     spawn: def.spawn,
+    cameras: def.cameras || [],
   };
 }
 

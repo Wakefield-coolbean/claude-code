@@ -61,6 +61,7 @@ a public game list. Choose **Dedicated server** under Settings → Online. Deplo
 - Your visor turns to follow the mouse; bots glance at whatever they are looking at
 - **Dropship lobby**: walk around before the game, customize at the laptop, room code, settings list, host Start with countdown
 - Line-of-sight vision with hard shadows; lights sabotage shrinks crew vision
+- Security cameras: four live hallway feeds at the Security desk; the cameras' red lights blink while anyone watches, and comms sabotage turns the feeds to static
 - 17 task minigames, 4 sabotage panels (Lights, Comms, O2, Reactor) and door locks
 - Kills, bodies, reports, emergency meetings, discussion and voting timers, chat with quick chat,
   vote reveal, ejection cutscene, confirm ejects, ghosts, all four win conditions
@@ -105,7 +106,7 @@ dev/              minigame bench, sound bench, map overview pages
 ## Checks
 
 ```bash
-npm test                          # 25 rule, map and server tests
+npm test                          # 27 rule, map and server tests
 node scripts/soak.mjs 100 10 2    # 100 bot-only games: win rates, game length, meetings
 ```
 

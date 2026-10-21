@@ -520,6 +520,28 @@ function camScreen(ctx, x, top) {
   disc(ctx, x + 0.38, top - 1.68, 0.035, '#ff4b4b', 0);
 }
 
+/** A wall-mounted security camera above floor row `top`; its light blinks red while someone watches. */
+export function securityCam(ctx, x, top, rec, t) {
+  ctx.save();
+  // Mount plate and arm.
+  rr(ctx, x - 0.2, top - 1.94, 0.4, 0.26, 0.06, '#6b7682', 0.05);
+  line(ctx, [x, top - 1.8, x, top - 1.42], INK, 0.17);
+  line(ctx, [x, top - 1.8, x, top - 1.42], '#8d98a4', 0.08);
+  // Housing tilted down at the corridor, with a sun hood and a dark lens.
+  const y = top - 1.22;
+  rr(ctx, x - 0.42, y - 0.24, 0.84, 0.46, 0.15, '#e3e8ed');
+  rr(ctx, x - 0.36, y + 0.06, 0.72, 0.12, 0.05, '#c2cbd4', 0);
+  rr(ctx, x - 0.48, y - 0.3, 0.96, 0.13, 0.06, '#9aa5b1', 0.05);
+  disc(ctx, x, y + 0.02, 0.16, '#18212b');
+  disc(ctx, x, y + 0.02, 0.09, '#2f5574', 0);
+  disc(ctx, x - 0.035, y - 0.015, 0.032, 'rgba(210,240,255,0.95)', 0);
+  // Status light.
+  const on = rec && (t * 1.6) % 1 < 0.6;
+  if (on) glow(ctx, x + 0.29, y - 0.08, 0.42, '255,59,48', 0.6);
+  disc(ctx, x + 0.29, y - 0.08, 0.055, on ? '#ff3b30' : '#5a2626', 0.03);
+  ctx.restore();
+}
+
 function breaker(ctx, x, top, hw, seed) {
   rr(ctx, x - hw, top - 1.84, hw * 2, 1.48, 0.06, '#8c9088', 0.06);
   rr(ctx, x - hw + 0.08, top - 1.76, hw * 2 - 0.16, 1.1, 0.04, '#6c7069', 0.035);

@@ -212,3 +212,32 @@ test('ghosts float through walls', () => {
   run(g, 3);
   assert.ok(p.y > 30, 'ghost passed the cafeteria wall');
 });
+
+test('cameras: watch only at the Security desk, lights on while watched, comms cuts them, moving stops watching', () => {
+  const g = newGame();
+  const c = crew(g)[0];
+  const st = g.map.stations.cams_se;
+  c.x = 62.5;
+  c.y = 18;
+  assert.equal(g.setWatching(c.id, 'cams'), false, 'too far from the desk');
+  c.x = st.x;
+  c.y = st.y;
+  assert.equal(g.usable(c).kind, 'cams');
+  assert.equal(g.setWatching(c.id, 'cams'), true);
+  assert.equal(g.camsInUse(), true);
+  const hall = g.map.cameras.find((cam) => cam.id === 'adminHall');
+  assert.equal(g.onCamera(61, 37), hall);
+  assert.equal(g.onCamera(62.5, 12.5), null, 'the cafeteria has no camera');
+
+  const k = imp(g);
+  run(g, TIMING.firstSabotageCooldown);
+  g.sabotage(k.id, 'comms');
+  assert.equal(g.camsInUse(), false);
+  assert.equal(g.onCamera(61, 37), null);
+  g.sab.active = null;
+
+  g.setInput(c.id, 1, 0);
+  run(g, 0.2);
+  assert.equal(c.watching, null, 'walking away stops watching');
+  assert.equal(g.camsInUse(), false);
+});

@@ -133,10 +133,20 @@ export class Bots {
     return this.game.roomName(p.x, p.y) || 'the hallway';
   }
 
+  /** Can bot `p` see point (x, y), with its own eyes or on a camera feed it is watching? */
+  canSee(p, x, y) {
+    const g = this.game;
+    return g.sees(p, x, y) || (p.watching === 'cams' && !!g.onCamera(x, y));
+  }
+
+  canSeePlayer(p, q) {
+    if (!q.alive || q.inVent) return this.game.seesPlayer(p, q);
+    return this.canSee(p, q.x, q.y - 0.55);
+  }
+
   /** Crewmates (alive, not `except`) that could see a point right now. */
   watchers(x, y, except = []) {
-    const g = this.game;
-    return g.players.filter((q) => q.alive && q.role !== 'impostor' && !except.includes(q.id) && !q.inVent && g.sees(q, x, y));
+    return this.game.players.filter((q) => q.alive && q.role !== 'impostor' && !except.includes(q.id) && !q.inVent && this.canSee(q, x, y));
   }
 
   // ---------- main loop ----------
@@ -160,7 +170,7 @@ export class Bots {
 
   perceive(b, p) {
     const g = this.game;
-    const visible = g.players.filter((q) => q !== p && q.alive && g.seesPlayer(p, q));
+    const visible = g.players.filter((q) => q !== p && q.alive && this.canSeePlayer(p, q));
     for (const q of visible) {
       const near = visible.filter((o) => o !== q && Math.hypot(o.x - q.x, o.y - q.y) < 4.5).map((o) => o.id);
       if (Math.hypot(p.x - q.x, p.y - q.y) < 4.5) near.push(p.id);
@@ -175,11 +185,11 @@ export class Bots {
     this.glance(b, p, visible);
     if (p.role === 'impostor' || b.goal?.kind === 'report') return;
     for (const body of g.bodies) {
-      if (b.reported.has(body.id) || !g.sees(p, body.x, body.y - 0.3)) continue;
+      if (b.reported.has(body.id) || !this.canSee(p, body.x, body.y - 0.3)) continue;
       b.reported.add(body.id);
       if (g.t - body.t < 3) {
         for (const q of g.players) {
-          if (q === p || !q.alive || q.inVent || Math.hypot(q.x - body.x, q.y - body.y) > 2 || !g.seesPlayer(p, q)) continue;
+          if (q === p || !q.alive || q.inVent || Math.hypot(q.x - body.x, q.y - body.y) > 2 || !this.canSeePlayer(p, q)) continue;
           this.addSus(b, q.id, 8);
           b.evidence.push({ kind: 'over', who: q.id, victim: body.id, room: g.roomName(body.x, body.y) || 'the hallway', t: g.t });
         }
@@ -209,7 +219,8 @@ export class Bots {
       p.look = { x: (dx / d) * strength, y: (dy / d) * strength };
       if (!p.moving && Math.abs(dx / d) > 0.3) p.facing = dx > 0 ? 1 : -1;
     };
-    const st = b.goal?.station && g.t < b.busyUntil ? g.map.stations[b.goal.station] : null;
+    const busy = g.t < b.busyUntil || (b.goal?.kind === 'cams' && b.goal.until);
+    const st = b.goal?.station && busy ? g.map.stations[b.goal.station] : null;
     if (st) return look(st.x, st.y - (st.wall ? 1 : 0.3), 0.8);
     const target = b.goal?.target != null ? this.P(b.goal.target) : null;
     if (target && visible.includes(target)) return look(target.x, target.y - 0.4, 1);
@@ -231,6 +242,7 @@ export class Bots {
     const g = this.game;
     if (!p.alive) return this.thinkGhost(b, p);
     const goal = b.goal;
+    if (p.watching && goal?.kind !== 'cams') g.setWatching(b.id, null);
     if (goal?.kind === 'report') {
       const body = g.bodies.find((x) => x.id === goal.body);
       if (!body) b.goal = null;
@@ -249,6 +261,7 @@ export class Bots {
       return;
     }
     if (goal?.kind === 'fix') return this.doFix(b, p, goal);
+    if (goal?.kind === 'cams') return this.watchCams(b, p, goal);
     if (g.t < b.busyUntil) return;
     if (goal?.kind === 'task') {
       const st = g.map.stations[goal.station];
@@ -292,7 +305,39 @@ export class Bots {
       return;
     }
     if (this.rng() < 0.22 && this.buddyUp(b, p)) return;
+    if (this.rng() < 0.08 && this.goWatch(b, p)) return;
     this.pickTask(b, p) || this.wander(b);
+  }
+
+  /** Head for the Security desk if it's close and free. */
+  goWatch(b, p) {
+    const g = this.game;
+    const [id, st] = Object.entries(g.map.stations).find(([, s]) => s.tool === 'cams') || [];
+    if (!st || g.camsDown() || Math.hypot(st.x - p.x, st.y - p.y) > 22) return false;
+    if (g.players.some((q) => q.alive && q.watching === 'cams')) return false;
+    b.goal = { kind: 'cams', station: id };
+    this.go(b, st.x, st.y);
+    return true;
+  }
+
+  /** Sit on cams for a while; perceive() sees through the feeds meanwhile. */
+  watchCams(b, p, goal) {
+    const g = this.game;
+    if (goal.until) {
+      if (g.t >= goal.until || g.camsDown() || p.watching !== 'cams') {
+        g.setWatching(b.id, null);
+        b.goal = null;
+      }
+      return;
+    }
+    const st = g.map.stations[goal.station];
+    if (this.arrived(b, st.x, st.y, 0.9)) {
+      this.stand(b);
+      if (g.setWatching(b.id, 'cams')) goal.until = g.t + 8 + this.rng() * 12;
+      else b.goal = null;
+      return;
+    }
+    if (!b.path) this.go(b, st.x, st.y);
   }
 
   /** Stick with someone for a while, like careful players do. */
@@ -500,6 +545,8 @@ export class Bots {
       if (!q.alive || q.role === 'impostor' || q.inVent || !g.seesPlayer(p, q)) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
       if (d > 9) continue;
+      // The cameras' red lights are on: someone could be watching this spot.
+      if (g.camsInUse() && (g.onCamera(q.x, q.y) || g.onCamera(p.x, p.y))) continue;
       // Only crewmates the impostor can actually see count, and a far one is sometimes misjudged.
       let others = this.watchers(q.x, q.y - 0.4, [q.id])
         .concat(this.watchers(p.x, p.y - 0.4, [q.id]))
@@ -573,7 +620,7 @@ export class Bots {
     for (const b of this.brains.values()) {
       const p = this.P(b.id);
       if (!p.alive || p === killer || p.role === 'impostor') continue;
-      const saw = g.sees(p, from.x, from.y - 0.4) || g.sees(p, victim.x, victim.y - 0.4);
+      const saw = this.canSee(p, from.x, from.y - 0.4) || this.canSee(p, victim.x, victim.y - 0.4);
       if (!saw) continue;
       const room = g.roomName(victim.x, victim.y) || 'the hallway';
       b.evidence.push({ kind: 'kill', who: killer.id, victim: victim.id, room, t: g.t });
@@ -590,7 +637,7 @@ export class Bots {
     for (const b of this.brains.values()) {
       const p = this.P(b.id);
       if (!p.alive || p === player || p.role === 'impostor') continue;
-      if (!g.sees(p, v.x, v.y - 0.3)) continue;
+      if (!this.canSee(p, v.x, v.y - 0.3)) continue;
       b.evidence.push({ kind: 'vent', who: player.id, room: g.roomName(v.x, v.y) || 'the hallway', t: g.t });
       this.addSus(b, player.id, 60);
       if (p.emergencyLeft > 0 && this.rng() < 0.6 && b.goal?.kind !== 'report') {
