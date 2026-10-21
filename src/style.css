@@ -678,6 +678,27 @@ select:focus-visible {
   margin: 0 auto;
 }
 
+.screen.boot {
+  background: radial-gradient(ellipse at 50% 115%, #172a48, #04060c 62%);
+}
+
+.boot-msg {
+  max-width: 42ch;
+  padding: 0 16px;
+  font: 400 16px/1.5 var(--font-body);
+  color: var(--text);
+}
+
+.boot-title {
+  margin: 0 0 6px;
+  font: 800 40px/1 var(--font-ui);
+}
+
+.boot-help {
+  color: var(--muted);
+  font-size: 14px;
+}
+
 /* ---------- Title menu (classic layout) ---------- */
 .screen.menu {
   place-items: center;
