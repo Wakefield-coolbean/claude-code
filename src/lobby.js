@@ -280,7 +280,7 @@ export class LobbyUI {
       s.online
         ? s
             .roomPlayers()
-            .filter((p) => !p.you)
+            .filter((p) => !p.you && !p.bot)
             .map((p) => p.color)
         : [],
     );
@@ -357,7 +357,9 @@ export class LobbyUI {
       .map((p) => {
         const [, col] = COLORS[p.color];
         const kick =
-          s.online && editable && !p.you ? `<button type="button" class="pill" data-kick="${escapeHtml(p.id)}">Kick</button>` : '';
+          s.online && editable && !p.you && !p.bot
+            ? `<button type="button" class="pill" data-kick="${escapeHtml(p.id)}">Kick</button>`
+            : '';
         return `<li><i style="background:${col}"></i><span>${escapeHtml(p.name)}${p.you ? ' (you)' : ''}${p.bot ? ' · bot' : ''}</span>${kick}</li>`;
       })
       .join('');
@@ -384,9 +386,11 @@ export class LobbyUI {
   update() {
     const s = this.session;
     if (!s || this.root.hidden) return;
-    const n = s.online ? s.roomPlayers().length : s.prefs.settings.players;
+    const all = s.roomPlayers();
+    const bots = s.online ? all.filter((p) => p.bot).length : 0;
+    const n = s.online ? all.length - bots : s.prefs.settings.players;
     const max = s.online ? s.room?.settings.players : s.prefs.settings.players;
-    this.$('#l-count').textContent = `${n}/${max}`;
+    this.$('#l-count').textContent = bots ? `${n}/${max} + ${bots} bot${bots > 1 ? 's' : ''}` : `${n}/${max}`;
     this.$('#l-start').hidden = !s.isHost;
     this.$('#l-start').disabled = s.countdown > 0;
     this.$('#l-wait').hidden = s.isHost;

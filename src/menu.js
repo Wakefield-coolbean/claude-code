@@ -153,6 +153,7 @@ export class Menu {
             <div class="host-opts">
               <div class="opt"><span>Max players</span><div class="ctl"><button type="button" class="step" data-o="players" data-d="-1" aria-label="Fewer players">−</button><output id="o-players">${p.settings.players}</output><button type="button" class="step" data-o="players" data-d="1" aria-label="More players">+</button></div></div>
               <div class="opt"><span>Impostors</span><div class="ctl"><button type="button" class="step" data-o="impostors" data-d="-1" aria-label="Fewer impostors">−</button><output id="o-imps">${p.settings.impostors}</output><button type="button" class="step" data-o="impostors" data-d="1" aria-label="More impostors">+</button></div></div>
+              <div class="opt"><span>Fill with bots</span><div class="ctl"><button type="button" class="step wide" id="o-bots" aria-pressed="${!!p.settings.fillBots}">${p.settings.fillBots ? 'On' : 'Off'}</button></div></div>
               ${p2p ? '' : `<div class="opt"><span>Lobby</span><div class="seg small" role="radiogroup" aria-label="Lobby visibility"><button type="button" role="radio" data-pub="1" aria-checked="${!!p.pub}">Public</button><button type="button" role="radio" data-pub="0" aria-checked="${!p.pub}">Private</button></div></div>`}
             </div>
             <button class="menu-btn small" id="o-host" type="button">Create Game</button>
@@ -182,6 +183,13 @@ export class Menu {
       this.h.savePrefs();
     });
     const msg = (t) => (r.querySelector('#o-msg').textContent = t);
+    r.querySelector('#o-bots').addEventListener('click', (e) => {
+      p.settings.fillBots = !p.settings.fillBots;
+      e.currentTarget.textContent = p.settings.fillBots ? 'On' : 'Off';
+      e.currentTarget.setAttribute('aria-pressed', String(p.settings.fillBots));
+      this.h.savePrefs();
+      sfx('click');
+    });
     const needName = () => {
       if (p.name) return true;
       msg('Enter a name first.');

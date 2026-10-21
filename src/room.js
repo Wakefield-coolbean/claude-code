@@ -6,9 +6,10 @@
 
 import { Game, buildRoster, mulberry32 } from './game.js';
 import { Bots } from './bots.js';
-import { DIST, COLORS, cleanSettings } from './config.js';
+import { DIST, COLORS, BOT_NAMES, cleanSettings } from './config.js';
 import { getMap } from './map.js';
-import { cleanLook } from './cosmetics.js';
+import { World } from './grid.js';
+import { cleanLook, randomLook } from './cosmetics.js';
 
 const TICK_HZ = 30;
 const SNAP_EVERY = 2; // 15 snapshots per second
@@ -69,6 +70,9 @@ export class Room {
     this.phase = 'lobby';
     this.onEmpty = onEmpty;
     this.lobbyMap = getMap('dropship');
+    this.lobbyWorld = new World(this.lobbyMap);
+    this.lobbyBots = []; // bots holding empty seats while Fill With Bots is on
+    this.botN = 0;
     this.tickN = 0;
     this.countdownAt = 0;
     this.clock = Date.now() / 1000;
@@ -158,12 +162,79 @@ export class Room {
     c.lobby = { x: r2(spawn.x + Math.cos(a) * spawn.radius), y: r2(spawn.y + Math.sin(a) * spawn.radius * 0.7), f: 1, m: 0 };
   }
 
+  /**
+   * With Fill With Bots on, bots hold every empty seat in the lobby (as in freeplay) and
+   * start the game with everyone else; each player who joins takes a bot's seat. Bots give
+   * way when a player picks their color.
+   */
+  syncBots() {
+    const want = this.settings.fillBots ? Math.max(0, Math.max(this.settings.players, MIN_PLAYERS) - this.clients.size) : 0;
+    this.lobbyBots.length = Math.min(this.lobbyBots.length, want);
+    const used = new Set([...this.clients.values()].map((c) => c.color));
+    const names = new Set([...this.clients.values()].map((c) => c.name.toLowerCase()));
+    const freeColor = () => [...COLORS.keys()].find((i) => !used.has(i));
+    const clash = this.lobbyBots.filter((b) => used.has(b.color));
+    for (const b of this.lobbyBots) {
+      if (!used.has(b.color)) used.add(b.color);
+      names.add(b.name.toLowerCase());
+    }
+    for (const b of clash) {
+      b.color = freeColor() ?? b.color;
+      used.add(b.color);
+    }
+    while (this.lobbyBots.length < want) {
+      const color = freeColor();
+      if (color == null) break;
+      used.add(color);
+      const pool = BOT_NAMES.filter((n) => !names.has(n.toLowerCase()));
+      const name = pool[Math.floor(Math.random() * pool.length)] || 'Bot';
+      names.add(name.toLowerCase());
+      const b = { id: `bot${++this.botN}`, name, color, outfit: randomLook(Math.random), bot: true, wander: { until: 0 } };
+      this.placeInLobby(b);
+      this.lobbyBots.push(b);
+    }
+  }
+
+  /** Lobby bots mill about the cabin. */
+  moveBots(dt) {
+    const [x0, y0, x1, y1] = this.lobbyMap.rooms[0].rect;
+    const now = Date.now() / 1000;
+    for (const b of this.lobbyBots) {
+      const w = b.wander;
+      const L = b.lobby;
+      if (now > w.until) {
+        w.until = now + 2 + Math.random() * 5;
+        w.tx = x0 + 1.5 + Math.random() * (x1 - x0 - 3);
+        w.ty = y0 + 2 + Math.random() * (y1 - y0 - 3.5);
+      }
+      w.x ??= L.x;
+      w.y ??= L.y;
+      const dx = w.tx - w.x;
+      const dy = w.ty - w.y;
+      const d = Math.hypot(dx, dy);
+      if (d < 0.4) {
+        L.m = 0;
+        continue;
+      }
+      const step = DIST.speed * 0.6 * dt;
+      const [nx, ny] = this.lobbyWorld.move(w.x, w.y, (dx / d) * step, (dy / d) * step, DIST.playerRadius);
+      L.m = Math.hypot(nx - w.x, ny - w.y) > step * 0.2 ? 1 : 0;
+      if (!L.m) w.until = 0; // stuck on a crate: pick somewhere else
+      if (Math.abs(dx) > 0.05) L.f = dx > 0 ? 1 : -1;
+      w.x = nx;
+      w.y = ny;
+      L.x = r2(nx);
+      L.y = r2(ny);
+    }
+  }
+
   broadcast(msg) {
     const data = JSON.stringify(msg);
     for (const c of this.clients.values()) c.sendRaw(data);
   }
 
   sendRoom() {
+    if (this.phase === 'lobby') this.syncBots();
     this.broadcast({
       t: 'room',
       code: this.code,
@@ -171,13 +242,14 @@ export class Room {
       pub: this.pub,
       phase: this.phase,
       settings: this.settings,
-      players: [...this.clients.values()].map((c) => ({
+      players: [...this.clients.values(), ...(this.phase === 'lobby' ? this.lobbyBots : [])].map((c) => ({
         id: c.id,
         name: c.name,
         color: c.color,
         outfit: c.outfit,
         x: c.lobby.x,
         y: c.lobby.y,
+        ...(c.bot ? { bot: true } : {}),
       })),
     });
   }
@@ -250,8 +322,15 @@ export class Room {
     const humans = [...this.clients.values()];
     const seed = (Math.random() * 2 ** 32) >>> 0;
     const total = this.settings.fillBots ? Math.max(this.settings.players, humans.length, MIN_PLAYERS) : humans.length;
+    // The bots from the lobby keep their names, colors and outfits; buildRoster tops up the rest.
+    const seated = this.settings.fillBots
+      ? this.lobbyBots.map((b) => ({ name: b.name, color: b.color, outfit: b.outfit, isBot: true }))
+      : [];
     const roster = buildRoster(
-      humans.map((c) => ({ name: c.name, color: c.color, outfit: c.outfit, remote: true })),
+      [...humans.map((c) => ({ name: c.name, color: c.color, outfit: c.outfit, remote: true })), ...seated].slice(
+        0,
+        Math.max(total, humans.length),
+      ),
       total,
       mulberry32(seed),
     );
@@ -285,9 +364,10 @@ export class Room {
     this.bots = null;
     this.game = null;
     this.phase = 'lobby';
-    for (const c of this.clients.values()) {
+    for (const c of [...this.clients.values(), ...this.lobbyBots]) {
       c.pid = null;
       this.placeInLobby(c);
+      if (c.wander) c.wander = { until: 0 };
     }
     this.sendRoom();
   }
@@ -307,10 +387,11 @@ export class Room {
         }
         if (left <= 0) this.startGame();
       }
+      this.moveBots(1 / TICK_HZ);
       if (this.tickN % LOBBY_EVERY === 0) {
         this.broadcast({
           t: 'ls',
-          ps: [...this.clients.values()].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m, c.lobby.l || 0]),
+          ps: [...this.clients.values(), ...this.lobbyBots].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m, c.lobby.l || 0]),
         });
       }
       return;

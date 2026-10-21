@@ -165,7 +165,7 @@ test('end to end over a real WebSocket: host, list, join', async () => {
   b.ws.send(JSON.stringify({ t: 'join', code, name: 'Bob', color: 1 }));
   await wait(b, 'joined');
   const room = await wait(b, 'room');
-  assert.equal(room.players.length, 2);
+  assert.equal(room.players.filter((p) => !p.bot).length, 2);
   a.ws.close();
   b.ws.close();
   await new Promise((r) => setTimeout(r, 100));
@@ -211,4 +211,31 @@ test('outfits are cleaned, shared in the lobby and carried into the game', () =>
   assert.equal(start.roster[guest.pid].outfit.hat, hat);
   assert.equal(room.game.players[host.pid].outfit.skin, skin);
   assert.ok(room.game.players.every((p) => p.outfit && typeof p.outfit.hat === 'string'));
+});
+
+test('fill with bots: bots hold the empty lobby seats, give way to joiners, and play the game', () => {
+  const { room, host } = newRoom({ players: 6, fillBots: true });
+  assert.equal(room.lobbyBots.length, 5);
+  const botColor = room.lobbyBots[0].color;
+  const guest = fakeClient('Guest', botColor);
+  room.add(guest);
+  assert.equal(room.lobbyBots.length, 4, 'a joiner takes a seat');
+  assert.equal(guest.color, botColor, 'players get their color; bots give way');
+  assert.equal(new Set(room.lobbyBots.map((b) => b.color)).size, 4, 'bot colors stay unique');
+  assert.ok(room.lobbyBots.every((b) => b.color !== guest.color && b.color !== host.color));
+  const ps = host.last('room').players;
+  assert.equal(ps.filter((p) => p.bot).length, 4);
+  const names = room.lobbyBots.map((b) => b.name);
+  room.startGame();
+  assert.equal(room.game.players.length, 6);
+  assert.deepEqual(
+    room.game.players.slice(2).map((p) => p.name),
+    names,
+  );
+  assert.ok(room.game.players.slice(2).every((p) => p.isBot));
+
+  const off = newRoom({ players: 6, fillBots: false }).room;
+  assert.equal(off.lobbyBots.length, 0);
+  off.onMessage(off.host, { t: 'settings', settings: { players: 4, fillBots: true } });
+  assert.equal(off.lobbyBots.length, 3, 'four players at least');
 });

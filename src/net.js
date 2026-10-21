@@ -215,7 +215,14 @@ export class NetSession {
   }
 
   roomPlayers() {
-    return (this.room?.players || []).map((p) => ({ id: p.id, name: p.name, color: p.color, outfit: p.outfit, you: p.id === this.you }));
+    return (this.room?.players || []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      outfit: p.outfit,
+      bot: !!p.bot,
+      you: p.id === this.you,
+    }));
   }
 
   syncLobby() {
