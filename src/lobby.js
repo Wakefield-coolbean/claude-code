@@ -193,7 +193,7 @@ export class LobbyUI {
     if (!settings) return;
     const editable = s.isHost;
     const vis = this.$('#o-vis');
-    vis.hidden = !s.online || !editable;
+    vis.hidden = !s.online || !editable || s.mode === 'p2p';
     vis.querySelectorAll('[data-pub]').forEach((b) => b.setAttribute('aria-checked', String((b.dataset.pub === '1') === !!s.room?.pub)));
     if (full || !this.rows) {
       this.rows = settingsRows(this.$('#o-rows'), settings, {

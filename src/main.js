@@ -11,6 +11,7 @@ import { Menu } from './menu.js';
 import { LobbyUI } from './lobby.js';
 import { LocalSession } from './session.js';
 import { NetSession, defaultServerUrl } from './net.js';
+import { hostRoom, joinRoom } from './p2p.js';
 import { defaultSettings, COLORS } from './config.js';
 import { sfx, setAlarm, unlock, music, ambience, footstep } from './audio.js';
 
@@ -18,7 +19,9 @@ const $ = (id) => document.getElementById(id);
 const PREFS_KEY = 'sus-station-prefs';
 
 function loadPrefs() {
-  const base = { name: '', color: 0, role: 'random', pub: false, server: '', settings: defaultSettings() };
+  // net: 'p2p' (players connect browser to browser) or 'server' (dedicated server at `server`).
+  // signal: PeerJS signaling server for p2p ('' = the free public one).
+  const base = { name: '', color: 0, role: 'random', pub: false, net: 'p2p', server: '', signal: '', settings: defaultSettings() };
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
     if (saved) return { ...base, ...saved, settings: { ...base.settings, ...saved.settings } };
@@ -73,15 +76,22 @@ const menu = new Menu(screens, {
     app.prefs.server = url === defaultServerUrl() ? '' : url;
     savePrefs();
   },
+  setNet: (net, signal) => {
+    app.prefs.net = net;
+    app.prefs.signal = signal;
+    savePrefs();
+  },
   onFreeplay: () => {
     if (!app.prefs.name) app.prefs.name = COLORS[app.prefs.color][0];
     savePrefs();
     app.session = new LocalSession(app.prefs, sessionHandlers);
     enterLobby();
   },
-  onHost: () => goOnline((s) => s.host(app.prefs.settings, app.prefs.pub)),
-  onJoin: (code) => goOnline((s) => s.join(code)),
+  onHost: () => goOnline('host'),
+  onJoin: (code) => goOnline('join', code),
   onFind: async () => {
+    if (app.prefs.net === 'p2p')
+      throw new Error('Public games are listed by a dedicated server. In peer-to-peer mode, share your code with friends.');
     const s = await connect();
     return s.list();
   },
@@ -129,7 +139,7 @@ const lobbyUI = new LobbyUI($('lobby'), {
 let pending = null; // NetSession while connecting
 
 async function connect() {
-  if (app.session?.online && app.session.ws) return app.session;
+  if (app.session?.online && app.session.connected) return app.session;
   if (pending) return pending;
   const s = new NetSession(app.prefs, sessionHandlers);
   pending = s
@@ -141,12 +151,31 @@ async function connect() {
   return ok;
 }
 
-async function goOnline(fn) {
+let joining = false;
+
+async function goOnline(kind, code) {
+  if (joining) return;
+  joining = true;
+  const p = app.prefs;
   try {
-    const s = await connect();
-    fn(s);
+    if (p.net === 'p2p') {
+      app.session?.leave?.();
+      const link =
+        kind === 'host'
+          ? await hostRoom({ name: p.name, color: p.color, settings: p.settings, signal: p.signal })
+          : await joinRoom(code, { name: p.name, color: p.color, signal: p.signal });
+      const s = new NetSession(p, sessionHandlers);
+      app.session = s;
+      s.useLink(link, 'p2p');
+    } else {
+      const s = await connect();
+      if (kind === 'host') s.host(p.settings, p.pub);
+      else s.join(code);
+    }
   } catch (err) {
     menu.onlineMessage(err.message);
+  } finally {
+    joining = false;
   }
 }
 
@@ -171,7 +200,7 @@ const sessionHandlers = {
     if (app.scene === 'lobby') lobbyUI.toast(msg);
     else menu.onlineMessage(msg);
   },
-  onClosed: () => quit('Lost connection to the server.'),
+  onClosed: (s) => quit(s.mode === 'p2p' ? 'The host left, so the game ended.' : 'Lost connection to the server.'),
   onKicked: () => quit('The host removed you from the lobby.'),
 };
 

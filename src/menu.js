@@ -79,7 +79,7 @@ function floaters(root) {
 export class Menu {
   /**
    * @param {import('./screens.js').Screens} screens
-   * @param {object} h { prefs, savePrefs, onFreeplay, onHost, onJoin, onFind, serverUrl, setServerUrl }
+   * @param {object} h { prefs, savePrefs, onFreeplay, onHost, onJoin, onFind, serverUrl, setServerUrl, setNet }
    */
   constructor(screens, h) {
     this.s = screens;
@@ -141,6 +141,7 @@ export class Menu {
   // ---------- online ----------
   online(message) {
     const p = this.h.prefs;
+    const p2p = p.net !== 'server';
     this.frame(
       'online',
       `<div class="online-wrap">
@@ -152,14 +153,14 @@ export class Menu {
             <div class="host-opts">
               <div class="opt"><span>Max players</span><div class="ctl"><button type="button" class="step" data-o="players" data-d="-1" aria-label="Fewer players">−</button><output id="o-players">${p.settings.players}</output><button type="button" class="step" data-o="players" data-d="1" aria-label="More players">+</button></div></div>
               <div class="opt"><span>Impostors</span><div class="ctl"><button type="button" class="step" data-o="impostors" data-d="-1" aria-label="Fewer impostors">−</button><output id="o-imps">${p.settings.impostors}</output><button type="button" class="step" data-o="impostors" data-d="1" aria-label="More impostors">+</button></div></div>
-              <div class="opt"><span>Lobby</span><div class="seg small" role="radiogroup" aria-label="Lobby visibility"><button type="button" role="radio" data-pub="1" aria-checked="${!!p.pub}">Public</button><button type="button" role="radio" data-pub="0" aria-checked="${!p.pub}">Private</button></div></div>
+              ${p2p ? '' : `<div class="opt"><span>Lobby</span><div class="seg small" role="radiogroup" aria-label="Lobby visibility"><button type="button" role="radio" data-pub="1" aria-checked="${!!p.pub}">Public</button><button type="button" role="radio" data-pub="0" aria-checked="${!p.pub}">Private</button></div></div>`}
             </div>
             <button class="menu-btn small" id="o-host" type="button">Create Game</button>
           </section>
           <section class="online-card">
             <h2>Public</h2>
-            <div class="games" id="o-games"><p class="muted">Find a game other players are hosting.</p></div>
-            <button class="menu-btn small" id="o-find" type="button">Find Game</button>
+            <div class="games" id="o-games"><p class="muted">${p2p ? 'Peer-to-peer games are private: the host shares the 6-letter code with friends. A dedicated server (Settings) adds public listings.' : 'Find a game other players are hosting.'}</p></div>
+            <button class="menu-btn small" id="o-find" type="button" ${p2p ? 'hidden' : ''}>Find Game</button>
           </section>
           <section class="online-card">
             <h2>Private</h2>
@@ -168,7 +169,7 @@ export class Menu {
           </section>
         </div>
         <p class="menu-msg" role="status" id="o-msg">${message ? escapeHtml(message) : ''}</p>
-        <p class="server-note">Server: <code>${escapeHtml(this.h.serverUrl())}</code> · <button type="button" class="link" id="o-server">change</button></p>
+        <p class="server-note">${p2p ? 'Peer-to-peer: the host’s browser runs the game, no server needed' : `Dedicated server: <code>${escapeHtml(this.h.serverUrl())}</code>`} · <button type="button" class="link" id="o-server">change</button></p>
       </div>
       <div class="corner-left"><button class="round-btn" id="o-back" type="button" aria-label="Back">←</button></div>`,
     );
@@ -197,7 +198,7 @@ export class Menu {
         sfx('click');
       }),
     );
-    r.querySelector('.seg').addEventListener('click', (e) => {
+    r.querySelector('.seg')?.addEventListener('click', (e) => {
       const b = e.target.closest('[data-pub]');
       if (!b) return;
       p.pub = b.dataset.pub === '1';
@@ -326,6 +327,7 @@ export class Menu {
 
   // ---------- settings ----------
   settings(onBack) {
+    const p = this.h.prefs;
     const vol = (ch, label) =>
       `<label class="slider"><span>${label}</span><input type="range" min="0" max="100" step="1" id="v-${ch}" value="${Math.round(getVolume(ch) * 100)}"><output id="vo-${ch}">${Math.round(getVolume(ch) * 100)}</output></label>`;
     this.frame(
@@ -335,9 +337,18 @@ export class Menu {
         <h3>Sound</h3>
         ${vol('master', 'Master')}${vol('music', 'Music')}${vol('sfx', 'Sound effects')}
         <button class="menu-btn small" id="s-mute" type="button">${isMuted() ? 'Sound: Off' : 'Sound: On'}</button>
-        <h3>Online server</h3>
-        <label class="field"><input id="s-server" spellcheck="false" autocomplete="off" value="${escapeHtml(this.h.serverUrl())}"></label>
-        <p class="muted">Where online games are hosted. When you open the game from a running server, this is filled in for you.</p>
+        <h3>Online</h3>
+        <div class="seg small" id="s-net" role="radiogroup" aria-label="Connection">
+          <button type="button" role="radio" data-net="p2p" aria-checked="${p.net !== 'server'}">Peer-to-peer</button><button type="button" role="radio" data-net="server" aria-checked="${p.net === 'server'}">Dedicated server</button>
+        </div>
+        <div id="s-p2p" ${p.net === 'server' ? 'hidden' : ''}>
+          <p class="muted">The host’s browser runs the game and friends connect straight to it. A free public PeerJS service introduces players by code; leave the box empty to use it, or enter your own PeerJS server.</p>
+          <label class="field"><span>Matchmaking service</span><input id="s-signal" spellcheck="false" autocomplete="off" placeholder="free public PeerJS service" value="${escapeHtml(p.signal || '')}"></label>
+        </div>
+        <div id="s-srv" ${p.net === 'server' ? '' : 'hidden'}>
+          <p class="muted">Games run on a Sus Station server (npm start). It also lists public games.</p>
+          <label class="field"><span>Server address</span><input id="s-server" spellcheck="false" autocomplete="off" value="${escapeHtml(this.h.serverUrl())}"></label>
+        </div>
         <button class="menu-btn small" id="s-done" type="button">Done</button>
       </div>`,
     );
@@ -355,8 +366,18 @@ export class Menu {
       setMuted(!isMuted());
       e.currentTarget.textContent = isMuted() ? 'Sound: Off' : 'Sound: On';
     });
+    let net = p.net === 'server' ? 'server' : 'p2p';
+    r.querySelector('#s-net').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-net]');
+      if (!b) return;
+      net = b.dataset.net;
+      r.querySelectorAll('[data-net]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      r.querySelector('#s-p2p').hidden = net !== 'p2p';
+      r.querySelector('#s-srv').hidden = net !== 'server';
+    });
     r.querySelector('#s-done').addEventListener('click', () => {
       this.h.setServerUrl(r.querySelector('#s-server').value.trim());
+      this.h.setNet(net, r.querySelector('#s-signal').value.trim());
       sfx('click');
       onBack();
     });

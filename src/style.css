@@ -1112,6 +1112,12 @@ kbd {
   color: var(--muted);
 }
 
+#s-p2p,
+#s-srv {
+  display: grid;
+  gap: 8px;
+}
+
 .slider {
   display: grid;
   grid-template-columns: 8em minmax(0, 1fr) 3em;

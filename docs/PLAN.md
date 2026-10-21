@@ -190,7 +190,12 @@ src/
 
 ### Networking model (Milestone 2, core built)
 
-- **Authoritative server** (`server/`). It runs the same `game.js` and `bots.js` as freeplay. Clients send
+- **Peer-to-peer by default.** The host's browser runs the room (`src/room.js`) and other players connect
+  to it over WebRTC data channels (PeerJS). A public PeerJS signaling service only matches room codes to
+  peers; it can be swapped for a self-hosted one. The room ticks from a Web Worker timer so a background
+  host tab keeps the game running. If the host leaves, the game ends.
+- **Optional dedicated server** (`server/`) runs the same room code for public listings and host-independent games.
+- **Authoritative host.** The room runs the same `game.js` and `bots.js` as freeplay. Clients send
   actions; the server validates every kill (role, cooldown, distance, line of sight), task step (standing at
   the console), vent, report, sabotage fix and vote with the same rule functions.
 - **Movement.** Each client moves its own crewmate immediately and reports its position 15 times a second;
@@ -233,7 +238,8 @@ Durations assume one or two developers plus part-time art and audio.
 
 ### Milestone 2 progress (built in this repo)
 
-- Node.js server (`npm start`) serving the game and running rooms over WebSockets.
+- Peer-to-peer online play: the host's browser runs the room, friends join by code over WebRTC.
+- Optional Node.js server (`npm start`) serving the game and running rooms over WebSockets.
 - Title menu laid out like the original (Online / How To Play / Freeplay), online screen with
   Host / Public / Private, walkable dropship lobby with customize laptop, room code, settings list,
   host-only Start with countdown.
@@ -284,15 +290,16 @@ crew wins come from tasks; smarter crew deduction is the main bot improvement fo
 ## 9. Running the prototype
 
 ```bash
-npm install        # ws (server) and esbuild (build)
-npm start          # game + online server at http://localhost:8080
+npm install        # peerjs (p2p), ws (server), esbuild (build)
+npm run dev        # http://localhost:8080 (online play is peer-to-peer)
+npm start          # same, plus the optional dedicated server
 npm test           # rule, map and server tests
 npm run build      # bundles everything into dist/sus-station.html (single file, freeplay offline)
 node scripts/soak.mjs 100 10 2   # 100 bot-only games: win rates, length, meetings
 ```
 
-Friends on the same network open `http://<your computer's IP>:8080`. To play over the internet, deploy the
-included `Dockerfile` to any host that supports WebSockets (Render, Fly.io, Railway, a VPS) and share that URL.
+For online play, share `dist/sus-station.html` (or host it on any static site): the host clicks Host and
+reads out the code. The dedicated server is only needed for public game listings.
 
 Controls: **WASD / arrows** move, **E** use, **R** report, **Q** kill, **V** vent, **F** sabotage,
 **Tab** map, **Esc** close. On touch screens, drag anywhere on the left half to move and tap the buttons.

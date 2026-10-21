@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { Room } from '../server/room.mjs';
+import { Room } from '../src/room.js';
 import { startServer } from '../server/server.mjs';
 import { TIMING } from '../src/config.js';
 
@@ -18,11 +18,11 @@ const rooms = [];
 function newRoom(settings = {}) {
   const host = fakeClient('Host', 2);
   const room = new Room('TEST', host, { settings: { players: 6, impostors: 1, ...settings } }, () => {});
-  clearInterval(room.timer); // tests drive ticks by hand
+  room.stop(); // tests drive ticks by hand
   rooms.push(room);
   return { room, host };
 }
-after(() => rooms.forEach((r) => clearInterval(r.timer)));
+after(() => rooms.forEach((r) => r.stop()));
 
 function startedRoom() {
   const { room, host } = newRoom();

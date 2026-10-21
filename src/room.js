@@ -1,12 +1,13 @@
 // A room: lobby, host controls, and the authoritative game loop for up to 15 players.
-// Clients send their own position and actions; the server runs the same rules as
-// freeplay (src/game.js), fills empty seats with bots, and sends each client only what
-// that player can see.
+// Runs on the dedicated server (server/) or in the host's browser for peer-to-peer games.
+// Clients send their own position and actions; the room runs the same rules as freeplay
+// (src/game.js), fills empty seats with bots, and sends each client only what that
+// player can see.
 
-import { Game, buildRoster, mulberry32 } from '../src/game.js';
-import { Bots } from '../src/bots.js';
-import { DIST, COLORS, cleanSettings } from '../src/config.js';
-import { getMap } from '../src/map.js';
+import { Game, buildRoster, mulberry32 } from './game.js';
+import { Bots } from './bots.js';
+import { DIST, COLORS, cleanSettings } from './config.js';
+import { getMap } from './map.js';
 
 const TICK_HZ = 30;
 const SNAP_EVERY = 2; // 15 snapshots per second
@@ -40,7 +41,11 @@ function publicSabotage(g) {
 }
 
 export class Room {
-  constructor(code, host, { settings, pub }, onEmpty) {
+  /**
+   * @param {object} opts { settings, pub, ticker } where ticker(fn, hz) starts a repeating
+   *        callback and returns a stop function (defaults to setInterval)
+   */
+  constructor(code, host, { settings, pub, ticker }, onEmpty) {
     this.code = code;
     this.pub = !!pub;
     this.settings = cleanSettings(settings);
@@ -51,12 +56,26 @@ export class Room {
     this.lobbyMap = getMap('dropship');
     this.tickN = 0;
     this.countdownAt = 0;
-    this.timer = setInterval(() => this.tick(), 1000 / TICK_HZ);
+    this.clock = Date.now() / 1000;
+    const start = ticker || ((fn, hz) => clearInterval.bind(null, setInterval(fn, 1000 / hz)));
+    this.stop = start(() => this.pump(), TICK_HZ);
     this.add(host);
   }
 
+  /** Run as many fixed ticks as real time calls for (catches up after timer hiccups). */
+  pump() {
+    const now = Date.now() / 1000;
+    let n = Math.floor((now - this.clock) * TICK_HZ);
+    if (n > 15) {
+      this.clock = now - 15 / TICK_HZ;
+      n = 15;
+    }
+    for (let i = 0; i < n; i++) this.tick();
+    this.clock += n / TICK_HZ;
+  }
+
   destroy() {
-    clearInterval(this.timer);
+    this.stop();
     this.bots?.destroy();
     this.game = null;
     this.onEmpty(this);

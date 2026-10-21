@@ -21,6 +21,74 @@ export function defaultServerUrl() {
 
 const now = () => performance.now() / 1000;
 
+/**
+ * A message pipe to a room: send(string) and close(); set onmessage(fn) and onclose(fn).
+ * Messages that arrive before onmessage is set are kept until it is.
+ */
+export class Link {
+  constructor() {
+    this.queue = [];
+    this.handler = null;
+    this.onclose = null;
+    this.open = true;
+  }
+
+  set onmessage(fn) {
+    this.handler = fn;
+    const q = this.queue;
+    this.queue = [];
+    q.forEach((d) => fn(d));
+  }
+
+  receive(data) {
+    if (this.handler) this.handler(data);
+    else this.queue.push(data);
+  }
+
+  closed() {
+    if (!this.open) return;
+    this.open = false;
+    this.onclose?.();
+  }
+
+  send() {}
+
+  close() {}
+}
+
+/** Link to a dedicated server over a WebSocket. */
+export function wsLink(url) {
+  return new Promise((resolve, reject) => {
+    let ws;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      reject(new Error(`"${url}" is not a valid server address.`));
+      return;
+    }
+    const link = new Link();
+    let opened = false;
+    const fail = () => reject(new Error(`Can't reach a game server at ${url}. Check the address in Settings, or switch to peer-to-peer.`));
+    const timer = setTimeout(() => {
+      ws.close();
+      fail();
+    }, 6000);
+    ws.onopen = () => {
+      clearTimeout(timer);
+      opened = true;
+      resolve(link);
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      if (!opened) fail();
+    };
+    ws.onmessage = (e) => link.receive(e.data);
+    ws.onclose = () => link.closed();
+    link.send = (d) => ws.readyState === 1 && ws.send(d);
+    link.close = () => ws.close();
+  });
+}
+
 function toSab(s) {
   if (!s) return null;
   return {
@@ -56,7 +124,7 @@ export class NetSession {
     this.online = true;
     this.prefs = prefs;
     this.h = handlers;
-    this.ws = null;
+    this.link = null;
     this.room = null;
     this.you = null;
     this.game = null;
@@ -68,51 +136,34 @@ export class NetSession {
   }
 
   // ---------- connection ----------
-  connect(url) {
-    return new Promise((resolve, reject) => {
-      let ws;
+  /** Attach a transport: WebSocket (dedicated server), in-page (P2P host) or WebRTC (P2P guest). */
+  useLink(link, mode) {
+    this.mode = mode;
+    this.link = link;
+    link.onmessage = (data) => {
       try {
-        ws = new WebSocket(url);
-      } catch {
-        reject(new Error(`"${url}" is not a valid server address.`));
-        return;
+        this.onMessage(JSON.parse(data));
+      } catch (err) {
+        console.error(err);
       }
-      const fail = () =>
-        reject(
-          new Error(
-            `Can't reach a game server at ${url}. Online play needs the Sus Station server (npm start); set its address in Settings. Freeplay works without it.`,
-          ),
-        );
-      const timer = setTimeout(() => {
-        ws.close();
-        fail();
-      }, 6000);
-      ws.onopen = () => {
-        clearTimeout(timer);
-        this.ws = ws;
-        resolve();
-      };
-      ws.onerror = () => {
-        clearTimeout(timer);
-        if (!this.ws) fail();
-      };
-      ws.onmessage = (e) => {
-        try {
-          this.onMessage(JSON.parse(e.data));
-        } catch (err) {
-          console.error(err);
-        }
-      };
-      ws.onclose = () => {
-        const was = this.ws;
-        this.ws = null;
-        if (was && !this.closing) this.h.onClosed?.();
-      };
-    });
+    };
+    link.onclose = () => {
+      const was = this.link;
+      this.link = null;
+      if (was && !this.closing) this.h.onClosed?.(this);
+    };
+  }
+
+  async connect(url) {
+    this.useLink(await wsLink(url), 'server');
+  }
+
+  get connected() {
+    return !!this.link;
   }
 
   send(m) {
-    if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(m));
+    this.link?.send(JSON.stringify(m));
   }
 
   list() {
@@ -134,7 +185,7 @@ export class NetSession {
   leave() {
     this.closing = true;
     this.send({ t: 'leave' });
-    this.ws?.close();
+    this.link?.close();
   }
 
   get isHost() {

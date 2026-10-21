@@ -11,28 +11,37 @@ meetings, argue, vote, eject. Play online with friends or offline against bots, 
 
 ```bash
 npm install
-npm start        # http://localhost:8080
+npm run build    # dist/sus-station.html: the whole game in one file
 ```
 
-The title menu offers **Online**, **How To Play** and **Freeplay**.
+Open `dist/sus-station.html` in Chrome, Firefox or Safari. The title menu offers **Online**, **How To Play**
+and **Freeplay**.
 
 - **Freeplay**: you and bots. Walk around the dropship lobby, use the laptop to change your color or pick
   your role, then press Start.
-- **Online**: enter a name, then **Host** a game (you get a 6-letter code), browse **Public** games, or type a
-  **Private** code. Empty seats fill with bots unless the host turns off "Fill With Bots".
+- **Online** (peer-to-peer): enter a name and **Host** a game to get a 6-letter code, or type a friend's code
+  under **Private**. Empty seats fill with bots unless the host turns off "Fill With Bots".
 
-### Playing with friends
+### Playing with friends (peer-to-peer, no server)
 
-`npm start` runs one server that serves the game and hosts the online rooms.
+Online games are peer-to-peer. The host's browser runs the game, and everyone else connects straight to it
+over WebRTC. Send your friends the `sus-station.html` file (or put it on any static host such as GitHub
+Pages or Netlify). The host presses **Host**, then reads out the code.
 
-- **Same Wi-Fi:** friends open `http://<your computer's IP>:8080`.
-- **Over the internet:** deploy the `Dockerfile` to any host that supports WebSockets (Render, Fly.io,
-  Railway, a small VPS) and share its URL. Or run `npm start` and expose port 8080 with a tunnel such as
-  `cloudflared tunnel --url http://localhost:8080`.
-- If you open the game some other way (for example the single-file build), set the server address under
-  Settings (gear icon on the title screen), e.g. `wss://your-host.example/ws`.
+- A free public PeerJS service introduces players by code. Game traffic goes directly between browsers,
+  through the public PeerJS relay when a network blocks direct connections.
+- The host's tab is the server: if the host closes it, the game ends for everyone. Background tabs keep
+  running the game.
+- To use your own matchmaking service, run `npx peerjs --port 9000` and enter `http://your-host:9000/`
+  under Settings → Online → Matchmaking service.
+- Peer-to-peer needs a normal browser tab. Previews, in-app viewers and the claude.ai page can't open
+  peer connections; Freeplay works everywhere.
 
-`npm run build` writes `dist/sus-station.html`, a single file that plays Freeplay with no server.
+### Dedicated server (optional)
+
+`npm start` runs a Node.js server at `http://localhost:8080` that serves the game and hosts rooms itself, with
+a public game list. Choose **Dedicated server** under Settings → Online. Deploy it with the included
+`Dockerfile` to any host that supports WebSockets.
 
 | Action | Keyboard | Touch |
 | --- | --- | --- |
@@ -55,8 +64,9 @@ The title menu offers **Online**, **How To Play** and **Freeplay**.
   vote reveal, ejection cutscene, confirm ejects, ghosts, all four win conditions
 - Bots that do tasks, remember who they saw with whom, hunt, vent, sabotage, fix sabotage,
   argue in meetings, react to your chat, and vote
-- Online rooms for up to 15 players: authoritative server, players only receive what they can see,
-  movement and actions checked on the server, bots take over dropped seats
+- Online rooms for up to 15 players, peer-to-peer (the host's browser runs the room) or on a dedicated
+  server: players only receive what they can see, movement and actions are checked by the host, bots take
+  over dropped seats
 - Synthesized sound: layered effects with reverb, footsteps, ship hum, menu and lobby music, volume sliders
 - Every sprite drawn in code; no image or audio files
 
@@ -71,7 +81,9 @@ src/
   game.js         the rules (no DOM): roles, kills, tasks, sabotage, meetings, votes, wins
   bots.js         bot behavior
   session.js      freeplay session (you + bots, in the browser)
-  net.js          online session (mirrors the server's game, sends actions)
+  room.js         online room: lobby, host controls, authoritative game loop (host browser or server)
+  p2p.js          peer-to-peer hosting and joining over WebRTC (PeerJS)
+  net.js          online session (mirrors the host's game, sends actions)
   render.js       map chunks, characters, fog of war, effects
   sprites.js      procedural crewmate / ghost / body art
   menu.js         title, online, how to play, settings screens
@@ -82,7 +94,7 @@ src/
   input.js        keyboard, touch joystick, mouse
   audio.js        synthesized sound and music
   tasks/          task definitions, minigame host and kit, one file per minigame
-server/           room server (npm start)
+server/           optional dedicated server (npm start)
 tests/            rule, map and server tests (npm test)
 scripts/          dev server, single-file build, bot soak test
 dev/              minigame bench, sound bench, map overview pages

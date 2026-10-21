@@ -156,12 +156,13 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 
 | Feature | Priority | Prototype |
 | --- | --- | --- |
-| Authoritative room server sharing the simulation code | P1 | ✅ |
+| Peer-to-peer play: the host's browser runs the room, others join by code over WebRTC | P1 | ✅ |
+| Authoritative room server sharing the simulation code | P1 | ✅ (optional dedicated server) |
 | Create room with 6-letter code, join by code | P1 | ✅ |
-| Public lobby browser with filters (map, impostors, language) | P1 | 🟡 (list of public games, no filters) |
+| Public lobby browser with filters (map, impostors, language) | P1 | 🟡 (dedicated server only, no filters) |
 | Client prediction for own movement, interpolation for others | P1 | ✅ |
 | Server-side vision culling and action validation (anti-cheat) | P1 | ✅ |
-| Reconnect within 60 s, host migration | P1 | 🟡 (host migrates; a bot takes over a dropped seat; no rejoin yet) |
+| Reconnect within 60 s, host migration | P1 | 🟡 (a bot takes over a dropped seat; dedicated server migrates the host; peer-to-peer games end if the host leaves) |
 | Bots fill empty seats ("Fill With Bots" setting) | P2 | ✅ |
 | Regions and matchmaking | P1 | ⬜ |
 

@@ -8,7 +8,7 @@ import { extname, join, normalize, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { WebSocketServer } from 'ws';
-import { Room, cleanName } from './room.mjs';
+import { Room, cleanName } from '../src/room.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url)).replace(/[/\\]?$/, sep);
 const TYPES = {
@@ -21,6 +21,7 @@ const TYPES = {
   '.png': 'image/png',
 };
 const PUBLIC = ['index.html', 'src', 'dist', 'dev'];
+const PEERJS = 'node_modules/peerjs/dist/peerjs.min.js';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 
 /** Start the HTTP + WebSocket server. Resolves once it is listening. */
@@ -33,7 +34,8 @@ export function startServer({ port = 8080, quiet = false } = {}) {
       const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^[/\\]+/, '');
       if (path === 'health') return void res.writeHead(200, { 'content-type': 'text/plain' }).end('ok');
       const rel = path === '' ? 'index.html' : path;
-      if (rel.includes('..') || !PUBLIC.includes(rel.split(/[/\\]/)[0])) throw new Error('not public');
+      const vendor = rel === PEERJS;
+      if (rel.includes('..') || (!vendor && !PUBLIC.includes(rel.split(/[/\\]/)[0]))) throw new Error('not public');
       let file = join(root, rel);
       if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
       if (!file.startsWith(root)) throw new Error('outside root');
