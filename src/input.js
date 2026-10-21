@@ -28,6 +28,7 @@ export class Input {
     this.keys = new Set();
     this.queue = [];
     this.pointer = null; // { id, type, ox, oy, x, y }
+    this.mouse = null; // { x, y, t }: last mouse position (CSS px) and when it last moved (s)
     this.surface = surface;
     this.joyEl = joyEl;
     this.enabled = true;
@@ -43,6 +44,11 @@ export class Input {
       }
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
+    window.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse') this.mouse = { x: e.clientX, y: e.clientY, t: performance.now() / 1000 };
+    });
+    document.documentElement.addEventListener('pointerleave', () => (this.mouse = null));
+    window.addEventListener('blur', () => (this.mouse = null));
     window.addEventListener('blur', () => {
       this.keys.clear();
       this.release();
@@ -118,6 +124,12 @@ export class Input {
       return d < 24 ? [0, 0] : [dx / d, dy / d];
     }
     return this.joyVector(p);
+  }
+
+  /** Mouse position if it moved within the last `idle` seconds, else null (a resting mouse is ignored). */
+  activeMouse(idle) {
+    const m = this.mouse;
+    return m && performance.now() / 1000 - m.t < idle ? m : null;
   }
 
   drain() {

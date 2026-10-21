@@ -12,7 +12,7 @@ import { LobbyUI } from './lobby.js';
 import { LocalSession } from './session.js';
 import { NetSession, defaultServerUrl } from './net.js';
 import { hostRoom, joinRoom } from './p2p.js';
-import { defaultSettings, COLORS } from './config.js';
+import { defaultSettings, COLORS, DIST } from './config.js';
 import { sfx, setAlarm, unlock, music, ambience, footstep } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
@@ -491,6 +491,31 @@ function togglePause() {
 let last = performance.now();
 let lastStep = 0;
 
+const LOOK_IDLE = 2; // seconds of a still mouse before the head stops tracking it
+
+/** Point the local crewmate's visor at the mouse; a resting or absent mouse means look ahead. */
+function updateLook(p, allowed) {
+  if (!p) return;
+  const m = allowed && p.alive ? input.activeMouse(LOOK_IDLE) : null;
+  if (!m) {
+    p.look = null;
+    return;
+  }
+  const [hx, hy] = renderer.worldToCss(p.x, p.y - 0.85 * DIST.char);
+  const dx = m.x - hx;
+  const dy = m.y - hy;
+  const len = Math.hypot(dx, dy);
+  // Full strength a couple of cells away; none right on top of the head (avoids jitter).
+  const s = Math.max(0, Math.min(1, (len / renderer.cssPPC - 0.4) / 2));
+  if (len < 1 || s === 0) {
+    p.look = null;
+    return;
+  }
+  p.look = { x: (dx / len) * s, y: (dy / len) * s };
+  // Standing still, the whole crewmate turns toward the mouse.
+  if (!p.moving && Math.abs(dx / len) > 0.3) p.facing = dx > 0 ? 1 : -1;
+}
+
 function footsteps(p) {
   if (!p || !p.alive || !p.moving) return;
   const step = Math.floor(p.walk * 4);
@@ -509,6 +534,7 @@ function frame(now) {
   if (app.scene === 'lobby' && s?.lobbyGame) {
     for (const a of input.drain()) action(a);
     const blocked = lobbyUI.panelOpen || app.menuOpen;
+    updateLook(s.lobbyGame.local, !blocked);
     s.tickLobby(dt, blocked ? [0, 0] : input.vector());
     footsteps(s.lobbyGame.local);
     renderer.draw(dt, t);
@@ -521,6 +547,7 @@ function frame(now) {
     for (const a of input.drain()) action(a);
     if (!app.paused) {
       const canMove = g.phase === 'play' && !host.isOpen && !hud.mapOpen && !me.inVent && !app.menuOpen;
+      updateLook(me, canMove);
       s.tickGame(dt, canMove ? input.vector() : [0, 0], canMove, app.speed);
       footsteps(me);
     }

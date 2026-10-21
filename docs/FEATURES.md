@@ -36,6 +36,8 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Touch joystick (drag on the left half of the screen) | P0 | ✅ |
 | Mouse click-and-hold to move toward the cursor | P1 | ✅ |
 | Camera locked on the player, 3/4 top-down view | P0 | ✅ |
+| Visor follows the mouse (rests after 2 s of a still mouse); standing still, you turn toward it | P1 | ✅ |
+| Bots glance at nearby crewmates or their console; look direction synced online | P1 | ✅ |
 | Line-of-sight vision polygon with hard shadows; map stays faintly visible outside it | P0 | ✅ |
 | Players and bodies hidden outside your vision | P0 | ✅ |
 | Separate crew and impostor vision radius settings | P0 | ✅ |

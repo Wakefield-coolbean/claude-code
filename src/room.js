@@ -17,6 +17,20 @@ const MIN_PLAYERS = 4;
 
 const r2 = (v) => Math.round(v * 100) / 100;
 
+/** Look direction on the wire: [x, y] (length <= 1) or 0 for "looking ahead". */
+export function packLook(look) {
+  return look ? [r2(look.x), r2(look.y)] : 0;
+}
+
+export function unpackLook(v) {
+  if (!Array.isArray(v) || v.length !== 2) return null;
+  const x = Number(v[0]);
+  const y = Number(v[1]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  const d = Math.hypot(x, y);
+  return d > 1 ? { x: x / d, y: y / d } : { x, y };
+}
+
 export function cleanName(name, fallback) {
   const n = String(name || '')
     .replace(/[^\p{L}\p{N} _.-]/gu, '')
@@ -211,7 +225,7 @@ export class Room {
     const x = Number(m.x);
     const y = Number(m.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    c.lobby = { x: r2(Math.max(x0, Math.min(x1, x))), y: r2(Math.max(y0, Math.min(y1, y))), f: m.f < 0 ? -1 : 1, m: m.m ? 1 : 0 };
+    c.lobby = { x: r2(Math.max(x0, Math.min(x1, x))), y: r2(Math.max(y0, Math.min(y1, y))), f: m.f < 0 ? -1 : 1, m: m.m ? 1 : 0, l: packLook(unpackLook(m.l)) };
   }
 
   // ---------- game ----------
@@ -278,7 +292,7 @@ export class Room {
         if (left <= 0) this.startGame();
       }
       if (this.tickN % LOBBY_EVERY === 0) {
-        this.broadcast({ t: 'ls', ps: [...this.clients.values()].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m]) });
+        this.broadcast({ t: 'ls', ps: [...this.clients.values()].map((c) => [c.id, c.lobby.x, c.lobby.y, c.lobby.f, c.lobby.m, c.lobby.l || 0]) });
       }
       return;
     }
@@ -302,7 +316,7 @@ export class Room {
     for (const p of g.players) {
       if (p === me || p.inVent || (!p.alive && !ghost)) continue;
       if (!vis(p.x, p.y - 0.55)) continue;
-      ps.push([p.id, r2(p.x), r2(p.y), p.facing, p.moving ? 1 : 0, p.alive ? 1 : 0]);
+      ps.push([p.id, r2(p.x), r2(p.y), p.facing, p.moving ? 1 : 0, p.alive ? 1 : 0, packLook(p.look)]);
     }
     const shown = new Set(ps.map((p) => p[0]));
     const out = {
@@ -468,6 +482,7 @@ export class Room {
     p.y = y;
     p.facing = m.f < 0 ? -1 : 1;
     p.moving = !!m.m;
+    p.look = unpackLook(m.l);
     if (p.moving) g.visualFx.delete(p.id);
   }
 

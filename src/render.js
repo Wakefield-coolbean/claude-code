@@ -5,6 +5,7 @@ import { DIST } from './config.js';
 import { THEMES } from './map.js';
 import { SpriteCache, drawGhost, WALK_FRAMES } from './sprites.js';
 import { World } from './grid.js';
+import { drawDecor, drawDecorProp, drawDecorLive } from './decor.js';
 
 const INK = '#07090c';
 const SPACE = '#05070d';
@@ -106,6 +107,11 @@ export class Renderer {
     }
   }
 
+  /** CSS pixels per map cell. */
+  get cssPPC() {
+    return this.ppc / this.dpr;
+  }
+
   worldToScreen(x, y) {
     return [(x - this.cam.x) * this.ppc + this.canvas.width / 2, (y - this.cam.y) * this.ppc + this.canvas.height / 2];
   }
@@ -186,6 +192,7 @@ export class Renderer {
       }
     }
     if (m.id === 'dropship') this.drawPortholes(ctx, x0, y0, x1, y1);
+    drawDecor(ctx, m, x0, y0, x1, y1);
     this.drawDoorFrames(ctx);
     this.drawVents(ctx, x0, y0, x1, y1);
     for (const p of m.props) this.drawProp(ctx, p);
@@ -357,6 +364,7 @@ export class Renderer {
     ctx.lineWidth = 0.08;
     ctx.strokeStyle = INK;
     ctx.lineJoin = 'round';
+    if (drawDecorProp(ctx, p)) return;
     if (p.circle) {
       const [x, y, r] = p.circle;
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
@@ -671,6 +679,7 @@ export class Renderer {
 
   // ---------- frame ----------
   draw(dt, time) {
+    this.dt = dt;
     const g = this.game;
     const ctx = this.ctx;
     const me = g.local || g.players[0];
@@ -725,6 +734,7 @@ export class Renderer {
         this.ventGrate(ctx, v.x, v.y, Math.sin((age / 0.6) * Math.PI));
       }
     }
+    drawDecorLive(ctx, g.map, time, vx0, vy0, vx1, vy1);
     this.drawHighlights(ctx, me, time);
 
     // Y-sorted drawables.
@@ -828,7 +838,17 @@ export class Renderer {
     ctx.beginPath();
     ctx.ellipse(sx, sy, 0.48 * this.ppc, 0.16 * this.ppc, 0, 0, Math.PI * 2);
     ctx.fill();
-    this.sprites.blit(ctx, this.sprites.crewmate(p, frame), sx, sy, p.facing, this.ppc);
+    this.sprites.blit(ctx, this.sprites.crewmate(p, frame, false), sx, sy, p.facing, this.ppc);
+    // The visor eases toward where this crewmate is looking (p.look: world direction, length = strength).
+    const ls = (p.lookS ||= { x: 0, y: 0 });
+    const k = Math.min(1, (this.dt || 0.016) * 9);
+    ls.x += ((p.look?.x || 0) - ls.x) * k;
+    ls.y += ((p.look?.y || 0) - ls.y) * k;
+    const mag = Math.min(1, Math.hypot(ls.x, ls.y));
+    const toward = mag > 1e-3 ? (ls.x / mag) * p.facing : 1;
+    const fwd = 1 + (Math.max(0, toward) - 1) * mag;
+    const up = Math.max(-1, Math.min(1, ls.y));
+    this.sprites.visor(ctx, sx, sy, p.facing, this.ppc, fwd, up, frame);
     ctx.restore();
   }
 

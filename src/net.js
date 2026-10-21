@@ -4,6 +4,7 @@
 // actions instead of applying them, so the HUD, meetings and minigames work unchanged.
 
 import { Game } from './game.js';
+import { packLook, unpackLook } from './room.js';
 
 const SEND_HZ = 15;
 const INTERP_DELAY = 0.12;
@@ -261,7 +262,7 @@ export class NetSession {
     }
     if (me && now() >= this.sendAt) {
       this.sendAt = now() + 1 / 10;
-      this.send({ t: 'lp', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0 });
+      this.send({ t: 'lp', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0, l: packLook(me.look) });
     }
   }
 
@@ -283,11 +284,12 @@ export class NetSession {
         const g = this.lobbyGame;
         if (!g) break;
         const t = now();
-        for (const [id, x, y, f, mv] of m.ps) {
+        for (const [id, x, y, f, mv, look] of m.ps) {
           const p = g.players.find((q) => q.netId === id);
           if (!p || p === g.local) continue;
           p.facing = f;
           p.moving = !!mv;
+          p.look = unpackLook(look);
           p.buf.push([t, x, y]);
           if (p.buf.length > 8) p.buf.shift();
         }
@@ -355,12 +357,13 @@ export class NetSession {
     const t = now();
     const me = g.local;
     const seen = new Set();
-    for (const [id, x, y, f, mv, al] of s.ps) {
+    for (const [id, x, y, f, mv, al, look] of s.ps) {
       const p = g.players[id];
       seen.add(id);
       p.alive = !!al;
       p.facing = f;
       p.moving = !!mv;
+      p.look = unpackLook(look);
       p.inVent = null;
       if (p.hiddenNet) {
         p.hiddenNet = false;
@@ -559,10 +562,11 @@ export class NetSession {
     }
     if (g.phase === 'play' && !me.inVent && now() >= this.sendAt) {
       this.sendAt = now() + 1 / SEND_HZ;
-      const key = `${me.x.toFixed(2)},${me.y.toFixed(2)},${me.facing},${me.moving}`;
+      const look = packLook(me.look);
+      const key = `${me.x.toFixed(2)},${me.y.toFixed(2)},${me.facing},${me.moving},${look}`;
       if (key !== this.lastSent) {
         this.lastSent = key;
-        this.send({ t: 'p', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0 });
+        this.send({ t: 'p', x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, f: me.facing, m: me.moving ? 1 : 0, l: look });
       }
     }
   }

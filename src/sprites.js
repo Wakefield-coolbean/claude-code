@@ -59,33 +59,61 @@ function shade(ctx, color, shadow) {
   ctx.stroke();
 }
 
-function visor(ctx) {
-  ctx.beginPath();
-  ctx.roundRect(0.0, -1.02, 0.52, 0.31, 0.15);
+/**
+ * The glass visor. fwd (0..1) is how far it has turned toward the facing side (1 = profile,
+ * the classic look; 0 = turned toward the camera); up (-1..1) tilts it, negative = up.
+ * It slides around the helmet like a band on a sphere and foreshortens as it tilts.
+ */
+export function drawVisor(ctx, fwd = 1, up = 0) {
+  const w = 0.5 + 0.02 * fwd;
+  const h = 0.31 * (1 - 0.2 * Math.abs(up));
+  const cx = -0.03 + 0.29 * fwd;
+  const cy = -0.865 + up * 0.13;
+  const x = cx - w / 2;
+  const y = cy - h / 2;
+  const shape = () => {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, h / 2);
+  };
+  shape();
   ctx.fillStyle = VISOR;
   ctx.fill();
   ctx.save();
   ctx.clip();
+  // Darker lower glass; more of it shows when looking down.
   ctx.fillStyle = VISOR_DARK;
-  ctx.fillRect(0, -0.84, 0.6, 0.2);
+  ctx.fillRect(x - 0.05, cy + h * (0.08 - up * 0.18), w + 0.1, h);
+  // The reflection drifts a little against the turn, like light on curved glass.
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.beginPath();
-  ctx.roundRect(0.24, -0.97, 0.18, 0.07, 0.035);
+  ctx.roundRect(cx + w * 0.02 + (1 - fwd) * 0.05, y + h * 0.16 - up * 0.02, 0.18, 0.07, 0.035);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.arc(cx + w * 0.36 + (1 - fwd) * 0.04, y + h * 0.3, 0.025, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
-  ctx.beginPath();
-  ctx.roundRect(0.0, -1.02, 0.52, 0.31, 0.15);
+  shape();
   ctx.stroke();
 }
 
-/** Draw a living crewmate. frame: walk frame index or -1 for idle. */
-export function drawCrewmate(ctx, color, shadow, frame = -1) {
+function visor(ctx) {
+  drawVisor(ctx, 1, 0);
+}
+
+/** Vertical bob of the body (and visor) for a walk frame. */
+export function walkBob(frame) {
+  return frame < 0 ? 0 : -Math.abs(Math.sin((frame / WALK_FRAMES) * Math.PI * 2)) * 0.04;
+}
+
+/** Draw a living crewmate. frame: walk frame index or -1 for idle. withVisor=false leaves the visor to the caller. */
+export function drawCrewmate(ctx, color, shadow, frame = -1, withVisor = true) {
   ctx.lineWidth = 0.075;
   ctx.lineJoin = 'round';
   ctx.strokeStyle = INK;
   const ph = frame < 0 ? 0 : (frame / WALK_FRAMES) * Math.PI * 2;
   const swing = frame < 0 ? 0 : Math.sin(ph);
-  const bob = frame < 0 ? 0 : -Math.abs(Math.sin(ph)) * 0.04;
+  const bob = walkBob(frame);
   backpack(ctx, color, shadow);
   ctx.save();
   ctx.translate(0, 0);
@@ -95,7 +123,7 @@ export function drawCrewmate(ctx, color, shadow, frame = -1) {
   ctx.save();
   ctx.translate(0, bob);
   shade(ctx, color, shadow);
-  visor(ctx);
+  if (withVisor) visor(ctx);
   ctx.restore();
 }
 
@@ -199,8 +227,22 @@ export class SpriteCache {
     ctx.restore();
   }
 
-  crewmate(p, frame) {
-    return this.get(`c${p.colorIndex}:${frame}`, p.color, p.shadow, (c, a, b) => drawCrewmate(c, a, b, frame));
+  crewmate(p, frame, withVisor = true) {
+    const key = `c${p.colorIndex}:${frame}${withVisor ? '' : ':nv'}`;
+    return this.get(key, p.color, p.shadow, (c, a, b) => drawCrewmate(c, a, b, frame, withVisor));
+  }
+
+  /** Draw a visor live at a character's feet position (screen px), matching blit's transform. */
+  visor(ctx, sx, sy, facing, ppc, fwd, up, frame) {
+    const k = ppc * K;
+    ctx.save();
+    ctx.translate(sx, sy + walkBob(frame) * k);
+    ctx.scale(facing * k, k);
+    ctx.lineWidth = 0.075;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = INK;
+    drawVisor(ctx, fwd, up);
+    ctx.restore();
   }
 
   body(b, colorIndex) {

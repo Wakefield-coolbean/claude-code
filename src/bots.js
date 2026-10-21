@@ -172,6 +172,7 @@ export class Bots {
         b.chatQueue.push({ text: `${q.colorName.toLowerCase()} is safe, saw them scan`, prio: 1 });
       }
     }
+    this.glance(b, p, visible);
     if (p.role === 'impostor' || b.goal?.kind === 'report') return;
     for (const body of g.bodies) {
       if (b.reported.has(body.id) || !g.sees(p, body.x, body.y - 0.3)) continue;
@@ -196,6 +197,33 @@ export class Bots {
         this.go(b, body.x, body.y);
       }
     }
+  }
+
+  /** Where the bot's visor points: the console while working, else the crewmate it is watching. */
+  glance(b, p, visible) {
+    const g = this.game;
+    const look = (x, y, strength) => {
+      const dx = x - p.x;
+      const dy = y - (p.y - 0.4);
+      const d = Math.hypot(dx, dy) || 1;
+      p.look = { x: (dx / d) * strength, y: (dy / d) * strength };
+      if (!p.moving && Math.abs(dx / d) > 0.3) p.facing = dx > 0 ? 1 : -1;
+    };
+    const st = b.goal?.station && g.t < b.busyUntil ? g.map.stations[b.goal.station] : null;
+    if (st) return look(st.x, st.y - (st.wall ? 1 : 0.3), 0.8);
+    const target = b.goal?.target != null ? this.P(b.goal.target) : null;
+    if (target && visible.includes(target)) return look(target.x, target.y - 0.4, 1);
+    let near = null;
+    let nd = 6;
+    for (const q of visible) {
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < nd) {
+        nd = d;
+        near = q;
+      }
+    }
+    if (near) look(near.x, near.y - 0.4, 0.9);
+    else p.look = null;
   }
 
   // ---------- crew ----------
