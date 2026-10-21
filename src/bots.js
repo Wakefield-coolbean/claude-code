@@ -479,7 +479,7 @@ export class Bots {
     }
     // Hunting, after a short random hesitation once the cooldown is ready.
     if (p.killCooldown > 0) b.huntAt = null;
-    else if (b.huntAt == null) b.huntAt = g.t + 14 + this.rng() * 24;
+    else if (b.huntAt == null) b.huntAt = g.t + 10 + this.rng() * 20;
     if (p.killCooldown <= 0 && g.t >= b.huntAt) {
       const target = this.isolatedTarget(b, p, g.t - Math.max(b.lastKillT, 0) > 45);
       if (target && target.id !== b.isoTarget) {
