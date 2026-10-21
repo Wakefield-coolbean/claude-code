@@ -36,6 +36,7 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Touch joystick (drag on the left half of the screen) | P0 | ✅ |
 | Mouse click-and-hold to move toward the cursor | P1 | ✅ |
 | Camera locked on the player, 3/4 top-down view | P0 | ✅ |
+| Walk cycle like the original: legs swing from the hips, body bounces and leans | P0 | ✅ |
 | Visor follows the mouse (rests after 2 s of a still mouse); standing still, you turn toward it | P1 | ✅ |
 | Bots glance at nearby crewmates or their console; look direction synced online | P1 | ✅ |
 | Line-of-sight vision polygon with hard shadows; map stays faintly visible outside it | P0 | ✅ |
@@ -87,7 +88,8 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Kill button with cooldown (10 s at round start, full after meetings) and range setting | P0 | ✅ |
 | Killer snaps to the victim; body left behind | P0 | ✅ |
 | Victim sees a kill animation | P0 | ✅ |
-| Unique kill animations per weapon (knife, tongue, gun, neck snap) | P1 | ⬜ |
+| Unique kill animations per weapon (knife, tongue, gun, neck snap) | P1 | ✅ |
+| In-world kill: killer lunges, victim's top half pops off, body drops; victim's ghost rises | P1 | ✅ |
 | Vents: enter, exit, hop along a network with arrows; hidden while inside | P0 | ✅ |
 | Vent animation visible to nearby players | P0 | ✅ |
 | Sabotage map with cooldowns | P0 | ✅ |
@@ -151,7 +153,7 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Confirm ejects, anonymous votes, task bar updates, visual tasks | P0 | ✅ |
 | Common / long / short task counts | P0 | ✅ |
 | Choose name and color | P0 | ✅ |
-| Walkable pre-game lobby ship with laptop for cosmetics | P1 | ✅ (colors and name; hats etc. later) |
+| Walkable pre-game lobby ship with laptop for cosmetics | P1 | ✅ |
 | Host controls: kick, ban, start countdown | P1 | 🟡 (kick and countdown; no ban list) |
 | Recommended settings presets per player count | P1 | ⬜ |
 
@@ -174,8 +176,9 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | Feature | Priority | Prototype |
 | --- | --- | --- |
 | 18 colors, one per player | P0 | ✅ |
-| Hats, visors, skins, pets, nameplates | P1 | ⬜ |
-| Cosmetic preview on the lobby laptop | P1 | ⬜ |
+| Hats (26), visors (8), skins (10), pets (8); synced online, bots dress at random | P1 | ✅ |
+| Nameplates | P2 | ⬜ |
+| Cosmetic preview on the lobby laptop (walking in place, with pet) | P1 | ✅ |
 | Cosmetics shop / unlocks | P2 | ⬜ |
 
 ## 11. HUD and UI

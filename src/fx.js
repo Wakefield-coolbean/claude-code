@@ -57,7 +57,8 @@ export class WorldFx {
     const dir = from ? (from.x <= to.x ? 1 : -1) : -victim.facing;
     this.list.push({ kind: 'death', p: victim, bodyId: body.id, t0: t, end: t + DEATH, x: to.x, y: to.y, dir, facing: victim.facing });
     // Your own ghost rises out of the body once the cutscene ends.
-    if (victim === this.game.local) this.list.push({ kind: 'rise', p: victim, t0: t + KILL_SCENE, end: t + KILL_SCENE + RISE, x: to.x, y: to.y });
+    if (victim === this.game.local)
+      this.list.push({ kind: 'rise', p: victim, t0: t + KILL_SCENE, end: t + KILL_SCENE + RISE, x: to.x, y: to.y });
   }
 
   onVent({ player, vent, enter }) {
@@ -65,7 +66,15 @@ export class WorldFx {
     if (!v) return;
     const t = now();
     this.list = this.list.filter((f) => !(f.p === player && (f.kind === 'ventIn' || f.kind === 'ventOut')));
-    this.list.push({ kind: enter ? 'ventIn' : 'ventOut', p: player, t0: t, end: t + (enter ? VENT_IN : VENT_OUT), x: v.x, y: v.y, facing: player.facing });
+    this.list.push({
+      kind: enter ? 'ventIn' : 'ventOut',
+      p: player,
+      t0: t,
+      end: t + (enter ? VENT_IN : VENT_OUT),
+      x: v.x,
+      y: v.y,
+      facing: player.facing,
+    });
   }
 
   /** Drop finished effects; call once per frame. */

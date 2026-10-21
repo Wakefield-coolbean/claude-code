@@ -394,6 +394,29 @@ export class SpriteCache {
     );
   }
 
+  /** Highest point of a hat in character units (e.g. -1.8), or null without one; measured once from its pixels. */
+  hatTop(id) {
+    if (!id || id === 'none') return null;
+    this.tops ||= new Map();
+    if (!this.tops.has(id)) {
+      let top = 0;
+      for (const layer of ['back', 'front']) {
+        const bmp = this.hat(id, layer);
+        const { data, width, height } = bmp.getContext('2d').getImageData(0, 0, bmp.width, bmp.height);
+        let row = height;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] > 60) {
+            row = Math.floor((i - 3) / 4 / width);
+            break;
+          }
+        }
+        top = Math.min(top, row / this.scale - BIG.OY);
+      }
+      this.tops.set(id, top);
+    }
+    return this.tops.get(id);
+  }
+
   pet(id, frame) {
     return this.get(`p${id}:${frame}`, null, null, (c) => {
       ink(c);

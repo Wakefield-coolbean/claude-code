@@ -1831,25 +1831,6 @@ kbd {
   }
 }
 
-.kill-stage {
-  display: flex;
-  gap: 0;
-  align-items: flex-end;
-}
-
-.killer {
-  animation: lunge 0.65s ease-in forwards;
-}
-
-@keyframes lunge {
-  60% {
-    transform: translateX(-30px);
-  }
-  to {
-    transform: translateX(60px);
-  }
-}
-
 /* Ejection */
 .screen.eject {
   background: #000;
@@ -1860,16 +1841,6 @@ kbd {
   top: 38%;
   left: 0;
   transform: translateX(-200px);
-}
-
-.eject-body.go {
-  animation: tumble 7s linear forwards;
-}
-
-@keyframes tumble {
-  to {
-    transform: translateX(calc(100vw + 200px)) rotate(900deg);
-  }
 }
 
 .eject-text {

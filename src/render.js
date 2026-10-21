@@ -877,7 +877,10 @@ export class Renderer {
     for (const p of this.game.players) {
       if (!show(p)) continue;
       const [nx, ny] = this.fx.pos(p, time) || [p.x, p.y];
-      const [sx, sy] = toS(nx, ny - 1.32 * DIST.char);
+      // Names float just above tall hats.
+      const top = this.sprites.hatTop(p.outfit?.hat);
+      const lift = top == null ? 0 : Math.max(0, -top - 1.2);
+      const [sx, sy] = toS(nx, ny - (1.32 + lift) * DIST.char);
       const teammate = me.role === 'impostor' && p.role === 'impostor';
       ctx.globalAlpha = p.alive ? 1 : 0.6;
       ctx.strokeStyle = INK;

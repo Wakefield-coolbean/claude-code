@@ -59,6 +59,10 @@ a public game list. Choose **Dedicated server** under Settings → Online. Deplo
 - **The Kestrel**: 14 rooms, 5 vent networks, doors, emergency button, admin table; crewmates in proportion to the ship
 - Furnished rooms: vending machines, beds, server racks, plants, pipes, lamps, signs, blinking lights and more
 - Your visor turns to follow the mouse; bots glance at whatever they are looking at
+- Among Us-style animation: a bouncy walk with swinging legs, four kill cutscenes (knife, tongue, shot,
+  neck snap), in-world kill lunges, ghosts rising, vent drops and pops, sliding doors, a tumbling ejection,
+  and a meeting tablet that slides up with stamped votes
+- Cosmetics at the lobby laptop: 26 hats, 8 visors, 10 skins and 8 pets, seen by everyone online
 - **Dropship lobby**: walk around before the game, customize at the laptop, room code, settings list, host Start with countdown
 - Line-of-sight vision with hard shadows; lights sabotage shrinks crew vision
 - Security cameras: four live hallway feeds at the Security desk; the cameras' red lights blink while anyone watches, and comms sabotage turns the feeds to static
@@ -88,7 +92,10 @@ src/
   p2p.js          peer-to-peer hosting and joining over WebRTC (PeerJS)
   net.js          online session (mirrors the host's game, sends actions)
   render.js       map chunks, characters, fog of war, effects
-  sprites.js      procedural crewmate / ghost / body art
+  sprites.js      procedural crewmate / ghost / body art, walk cycle, outfit layers
+  cosmetics.js    hats, visors, skins and pets (catalog and art)
+  fx.js           in-world kill, vent and door animations
+  cutscenes.js    kill cutscenes seen by the victim
   menu.js         title, online, how to play, settings screens
   lobby.js        dropship lobby overlay
   hud.js          task list, task bar, buttons, map overlay
@@ -100,13 +107,13 @@ src/
 server/           optional dedicated server (npm start)
 tests/            rule, map and server tests (npm test)
 scripts/          dev server, single-file build, bot soak test
-dev/              minigame bench, sound bench, map overview pages
+dev/              minigame bench, sound bench, map overview, walk cycle, cosmetics and kill cutscene pages
 ```
 
 ## Checks
 
 ```bash
-npm test                          # 27 rule, map and server tests
+npm test                          # 28 rule, map and server tests
 node scripts/soak.mjs 100 10 2    # 100 bot-only games: win rates, game length, meetings
 ```
 
