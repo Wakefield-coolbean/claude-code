@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Cosmetics Gallery</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" />
+    <style>
+      body {
+        margin: 0;
+        background: #8d98a4;
+        font:
+          700 14px 'Baloo 2',
+          sans-serif;
+        color: #07090c;
+      }
+      h2 {
+        margin: 12px 16px 0;
+      }
+      canvas {
+        display: block;
+        margin: 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <script type="module">
+      // Every hat, visor, skin and pet. Each item: standing, mid-stride, and visor turned up/toward the camera.
+      // ?scale=px per cell &only=hats|visors|skins|pets
+      import { drawCharacter } from '../src/sprites.js';
+      import { HATS, VISORS, SKINS, PETS, PET_FRAMES, drawPet } from '../src/cosmetics.js';
+      import { COLORS } from '../src/config.js';
+      const q = new URLSearchParams(location.search);
+      const S = Number(q.get('scale') || 56);
+      const only = q.get('only');
+      const POSES = [
+        { frame: -1, fwd: 1, up: 0 },
+        { frame: 3, fwd: 1, up: 0 },
+        { frame: 8, fwd: 1, up: 0.5 },
+        { frame: -1, fwd: 0.3, up: -0.6 },
+      ];
+      const PER_ROW = 4;
+      const CELL_W = 1.5;
+      const CELL_H = 2.7;
+
+      function section(title, items, drawItem, cells) {
+        if (only && only !== title.toLowerCase()) return;
+        const h = document.createElement('h2');
+        h.textContent = `${title} (${items.length - 1})`;
+        document.body.appendChild(h);
+        const list = items.slice(1);
+        const rows = Math.ceil(list.length / PER_ROW);
+        const c = document.createElement('canvas');
+        const itemW = (cells * CELL_W + 0.4) * S;
+        c.width = PER_ROW * itemW;
+        c.height = rows * CELL_H * S;
+        document.body.appendChild(c);
+        const ctx = c.getContext('2d');
+        list.forEach((item, i) => {
+          const x0 = (i % PER_ROW) * itemW;
+          const y0 = Math.floor(i / PER_ROW) * CELL_H * S;
+          ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+          ctx.fillRect(x0, y0, itemW - 4, CELL_H * S - 4);
+          ctx.fillStyle = '#07090c';
+          ctx.textAlign = 'left';
+          ctx.fillText(`${item.name} (${item.id})`, x0 + 6, y0 + CELL_H * S - 10);
+          for (let k = 0; k < cells; k++) {
+            ctx.save();
+            ctx.translate(x0 + (k + 0.5) * CELL_W * S + 0.2 * S, y0 + (CELL_H - 0.45) * S);
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 0.48 * S, 0.16 * S, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.scale(S, S);
+            drawItem(ctx, item, k, i);
+            ctx.restore();
+          }
+        });
+      }
+
+      const look = (i, outfit) => {
+        const [, color, shadow] = COLORS[i % COLORS.length];
+        return { color, shadow, outfit };
+      };
+      const posed = (ctx, l, k) => drawCharacter(ctx, l, POSES[k]);
+
+      section('Hats', HATS, (ctx, it, k, i) => posed(ctx, look(i + k, { hat: it.id }), k), 4);
+      section('Visors', VISORS, (ctx, it, k, i) => posed(ctx, look(i * 3 + k, { visor: it.id }), k), 4);
+      section('Skins', SKINS, (ctx, it, k, i) => posed(ctx, look(i * 2 + k, { skin: it.id }), k), 4);
+      section(
+        'Pets',
+        PETS,
+        (ctx, it, k) => {
+          ctx.save();
+          ctx.scale(1.6, 1.6);
+          drawPet(ctx, it.id, k === 0 ? -1 : Math.floor(((k - 1) * PET_FRAMES) / 3));
+          ctx.restore();
+        },
+        4,
+      );
+      section(
+        'Ghosts',
+        HATS.slice(0, 7),
+        (ctx, it, k, i) => drawCharacter(ctx, look(i + k, { hat: it.id }), { kind: k % 2 ? 'ghost' : 'alive' }),
+        2,
+      );
+    </script>
+  </body>
+</html>
