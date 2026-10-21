@@ -140,6 +140,7 @@ function acceptGuest(room, conn) {
       c.joined = true;
       c.name = cleanName(m.name, 'Player');
       c.color = m.color | 0;
+      c.outfit = m.outfit;
       room.add(c);
       return;
     }
@@ -162,7 +163,7 @@ function acceptGuest(room, conn) {
  * Host a room in this browser. Resolves with a Link for this player's own session;
  * closing it ends the room for everyone.
  */
-export async function hostRoom({ name, color, settings, signal }) {
+export async function hostRoom({ name, color, outfit, settings, signal }) {
   let peer = null;
   let code = '';
   for (let i = 0; i < 4 && !peer; i++) {
@@ -180,6 +181,7 @@ export async function hostRoom({ name, color, settings, signal }) {
     id: 'host',
     name: cleanName(name, 'Host'),
     color,
+    outfit,
     sendRaw: (d) => link.receive(d),
     send: (m) => link.receive(JSON.stringify(m)),
   };
@@ -213,7 +215,7 @@ export async function hostRoom({ name, color, settings, signal }) {
 }
 
 /** Join a room hosted in another player's browser. Resolves with a Link once connected. */
-export async function joinRoom(code, { name, color, signal }) {
+export async function joinRoom(code, { name, color, outfit, signal }) {
   const peer = await openPeer(null, signal);
   return new Promise((resolve, reject) => {
     let done = false;
@@ -248,7 +250,7 @@ export async function joinRoom(code, { name, color, signal }) {
         peer.destroy();
         link.closed();
       };
-      link.send(JSON.stringify({ t: 'join', code, name, color }));
+      link.send(JSON.stringify({ t: 'join', code, name, color, outfit }));
       resolve(link);
     });
   });

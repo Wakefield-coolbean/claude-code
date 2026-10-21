@@ -14,6 +14,7 @@ import { NetSession, defaultServerUrl } from './net.js';
 import { hostRoom, joinRoom } from './p2p.js';
 import { defaultSettings, COLORS, DIST } from './config.js';
 import { sfx, setAlarm, unlock, music, ambience, footstep } from './audio.js';
+import { cleanLook } from './cosmetics.js';
 
 const $ = (id) => document.getElementById(id);
 const PREFS_KEY = 'sus-station-prefs';
@@ -21,10 +22,20 @@ const PREFS_KEY = 'sus-station-prefs';
 function loadPrefs() {
   // net: 'p2p' (players connect browser to browser) or 'server' (dedicated server at `server`).
   // signal: PeerJS signaling server for p2p ('' = the free public one).
-  const base = { name: '', color: 0, role: 'random', pub: false, net: 'p2p', server: '', signal: '', settings: defaultSettings() };
+  const base = {
+    name: '',
+    color: 0,
+    role: 'random',
+    pub: false,
+    net: 'p2p',
+    server: '',
+    signal: '',
+    settings: defaultSettings(),
+    outfit: cleanLook(),
+  };
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null');
-    if (saved) return { ...base, ...saved, settings: { ...base.settings, ...saved.settings } };
+    if (saved) return { ...base, ...saved, settings: { ...base.settings, ...saved.settings }, outfit: cleanLook(saved.outfit) };
   } catch {
     /* storage unavailable */
   }
@@ -116,6 +127,7 @@ const lobbyUI = new LobbyUI($('lobby'), {
     }
     if (change.name) app.prefs.name = change.name;
     if (change.color != null) app.prefs.color = change.color;
+    if (change.outfit) change = { outfit: (app.prefs.outfit = cleanLook({ ...app.prefs.outfit, ...change.outfit })) };
     savePrefs();
     app.session.setMe(change);
     if (!app.session.online) lobbyUI.refresh();
@@ -162,8 +174,8 @@ async function goOnline(kind, code) {
       app.session?.leave?.();
       const link =
         kind === 'host'
-          ? await hostRoom({ name: p.name, color: p.color, settings: p.settings, signal: p.signal })
-          : await joinRoom(code, { name: p.name, color: p.color, signal: p.signal });
+          ? await hostRoom({ name: p.name, color: p.color, outfit: p.outfit, settings: p.settings, signal: p.signal })
+          : await joinRoom(code, { name: p.name, color: p.color, outfit: p.outfit, signal: p.signal });
       const s = new NetSession(p, sessionHandlers);
       app.session = s;
       s.useLink(link, 'p2p');

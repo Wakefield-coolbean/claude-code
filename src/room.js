@@ -8,6 +8,7 @@ import { Game, buildRoster, mulberry32 } from './game.js';
 import { Bots } from './bots.js';
 import { DIST, COLORS, cleanSettings } from './config.js';
 import { getMap } from './map.js';
+import { cleanLook } from './cosmetics.js';
 
 const TICK_HZ = 30;
 const SNAP_EVERY = 2; // 15 snapshots per second
@@ -120,6 +121,7 @@ export class Room {
     c.room = this;
     c.pid = null;
     c.color = this.freeColor(c.color, c.id);
+    c.outfit = cleanLook(c.outfit);
     this.placeInLobby(c);
     this.clients.set(c.id, c);
     c.send({ t: 'joined', code: this.code, you: c.id });
@@ -169,7 +171,14 @@ export class Room {
       pub: this.pub,
       phase: this.phase,
       settings: this.settings,
-      players: [...this.clients.values()].map((c) => ({ id: c.id, name: c.name, color: c.color, x: c.lobby.x, y: c.lobby.y })),
+      players: [...this.clients.values()].map((c) => ({
+        id: c.id,
+        name: c.name,
+        color: c.color,
+        outfit: c.outfit,
+        x: c.lobby.x,
+        y: c.lobby.y,
+      })),
     });
   }
 
@@ -182,6 +191,7 @@ export class Room {
       case 'me':
         if (m.name != null) c.name = cleanName(m.name, c.name);
         if (m.color != null) c.color = this.freeColor(m.color | 0, c.id);
+        if (m.outfit != null) c.outfit = cleanLook(m.outfit);
         this.sendRoom();
         break;
       case 'settings':
@@ -241,7 +251,7 @@ export class Room {
     const seed = (Math.random() * 2 ** 32) >>> 0;
     const total = this.settings.fillBots ? Math.max(this.settings.players, humans.length, MIN_PLAYERS) : humans.length;
     const roster = buildRoster(
-      humans.map((c) => ({ name: c.name, color: c.color, remote: true })),
+      humans.map((c) => ({ name: c.name, color: c.color, outfit: c.outfit, remote: true })),
       total,
       mulberry32(seed),
     );
@@ -251,7 +261,7 @@ export class Room {
     this.bots = new Bots(g);
     this.phase = 'game';
     g.on('*', (type, d) => this.onEvent(type, d));
-    const pub = roster.map((r) => ({ name: r.name, color: r.color, bot: !!r.isBot }));
+    const pub = roster.map((r) => ({ name: r.name, color: r.color, outfit: cleanLook(r.outfit), bot: !!r.isBot }));
     for (const c of humans) {
       const me = g.players[c.pid];
       const mates = me.role === 'impostor' ? g.players.filter((p) => p.role === 'impostor').map((p) => p.id) : [];

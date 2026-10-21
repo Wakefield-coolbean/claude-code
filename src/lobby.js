@@ -3,9 +3,43 @@
 
 import { COLORS } from './config.js';
 import { bean } from './screens.js';
+import { drawCharacter, WALK_FRAMES, WALK_FPS } from './sprites.js';
+import { HATS, VISORS, SKINS, PETS, PET_FRAMES, drawPet } from './cosmetics.js';
 import { escapeHtml, icon } from './hud.js';
 import { settingsText, settingsRows } from './menu.js';
 import { sfx } from './audio.js';
+
+const TABS = [
+  { id: 'color', label: 'Color' },
+  { id: 'hat', label: 'Hat', slot: 'hat', list: HATS },
+  { id: 'visor', label: 'Visor', slot: 'visor', list: VISORS },
+  { id: 'skin', label: 'Skin', slot: 'skin', list: SKINS },
+  { id: 'pet', label: 'Pet', slot: 'pet', list: PETS },
+];
+
+function inkStyle(ctx) {
+  ctx.lineWidth = 0.075;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#07090c';
+}
+
+/** A pet on its own, about `size` px tall. */
+function petCanvas(id, size) {
+  const c = document.createElement('canvas');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const s = size / 0.8;
+  c.width = Math.ceil(1.2 * s * dpr);
+  c.height = Math.ceil(0.95 * s * dpr);
+  c.style.width = `${1.2 * s}px`;
+  c.style.height = `${0.95 * s}px`;
+  c.className = 'bean';
+  const ctx = c.getContext('2d');
+  ctx.scale(s * dpr, s * dpr);
+  ctx.translate(0.6, 0.85);
+  inkStyle(ctx);
+  drawPet(ctx, id, -1);
+  return c;
+}
 
 export class LobbyUI {
   /** @param {object} h { onStart, onLeave, onSettingsScreen, onCustomize, onSettings, onKick } */
@@ -31,18 +65,26 @@ export class LobbyUI {
       <div class="lobby-countdown" id="l-countdown" aria-live="assertive"></div>
       <div class="toast" id="l-toast" role="status"></div>
       <div class="lobby-panel" id="p-custom" hidden>
-        <div class="panel-card">
+        <div class="panel-card custom-card">
           <button class="mg-close" type="button" data-close aria-label="Close">✕</button>
-          <h2>Customize</h2>
+          <div class="custom-tabs" role="tablist" aria-label="Customize">
+            ${TABS.map((t) => `<button type="button" role="tab" data-tab="${t.id}">${t.label}</button>`).join('')}
+          </div>
           <div class="custom-grid">
-            <div class="custom-preview"></div>
+            <div class="custom-preview"><canvas class="custom-stage"></canvas></div>
             <div class="custom-fields">
-              <label class="field"><span>Name</span><input id="c-name" maxlength="10" autocomplete="off" spellcheck="false"></label>
-              <div class="field"><span>Color</span><div class="swatches" id="c-colors"></div></div>
-              <div class="field" id="c-role-field"><span>Role (freeplay)</span>
-                <div class="seg" role="radiogroup" aria-label="Role">
-                  <button type="button" role="radio" data-role="random">Random</button><button type="button" role="radio" data-role="crew">Crewmate</button><button type="button" role="radio" data-role="impostor">Impostor</button>
+              <div class="custom-pane" data-pane="color">
+                <label class="field"><span>Name</span><input id="c-name" maxlength="10" autocomplete="off" spellcheck="false"></label>
+                <div class="field"><span>Color</span><div class="swatches" id="c-colors"></div></div>
+                <div class="field" id="c-role-field"><span>Role (freeplay)</span>
+                  <div class="seg" role="radiogroup" aria-label="Role">
+                    <button type="button" role="radio" data-role="random">Random</button><button type="button" role="radio" data-role="crew">Crewmate</button><button type="button" role="radio" data-role="impostor">Impostor</button>
+                  </div>
                 </div>
+              </div>
+              <div class="custom-pane" data-pane="items" hidden>
+                <p class="item-name" id="c-item-name"></p>
+                <div class="items" id="c-items" role="listbox"></div>
               </div>
             </div>
           </div>
@@ -81,6 +123,25 @@ export class LobbyUI {
       if (!b || b.disabled) return;
       sfx('click');
       this.h.onCustomize({ color: Number(b.dataset.color) });
+    });
+    this.tab = 'color';
+    $('.custom-tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (!b || b.dataset.tab === this.tab) return;
+      sfx('click');
+      this.tab = b.dataset.tab;
+      this.renderCustomize();
+    });
+    $('#c-items').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-item]');
+      if (!b) return;
+      sfx('click');
+      const slot = TABS.find((t) => t.id === this.tab).slot;
+      this.h.onCustomize({ outfit: { [slot]: b.dataset.item } });
+    });
+    $('#c-items').addEventListener('pointerover', (e) => {
+      const b = e.target.closest('[data-item]');
+      if (b) $('#c-item-name').textContent = b.title;
     });
     $('#c-role-field').addEventListener('click', (e) => {
       const b = e.target.closest('[data-role]');
@@ -138,6 +199,7 @@ export class LobbyUI {
 
   closePanels() {
     this.root.querySelectorAll('.lobby-panel').forEach((p) => (p.hidden = true));
+    window.cancelAnimationFrame(this.stageRaf);
   }
 
   // ---------- panels ----------
@@ -145,6 +207,68 @@ export class LobbyUI {
     this.closePanels();
     this.$('#p-custom').hidden = false;
     this.renderCustomize();
+    const loop = (t) => {
+      this.drawStage(t / 1000);
+      this.stageRaf = requestAnimationFrame(loop);
+    };
+    this.stageRaf = requestAnimationFrame(loop);
+  }
+
+  /** My current look: color from the room (online colors can be taken), outfit from prefs. */
+  myLook() {
+    const s = this.session;
+    const mine = s.roomPlayers().find((p) => p.you);
+    const color = mine ? mine.color : s.prefs.color;
+    const [, c, sh] = COLORS[color];
+    return { colorIndex: color, color: c, shadow: sh, outfit: s.prefs.outfit || {} };
+  }
+
+  /** The preview: you walking in place, pet trotting alongside. */
+  drawStage(t) {
+    const cv = this.$('.custom-stage');
+    const box = cv.parentElement.getBoundingClientRect();
+    if (!box.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.round(box.width);
+    const h = Math.round(box.height);
+    if (cv.width !== w * dpr || cv.height !== h * dpr) {
+      cv.width = w * dpr;
+      cv.height = h * dpr;
+      cv.style.width = `${w}px`;
+      cv.style.height = `${h}px`;
+    }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const look = this.myLook();
+    const pet = look.outfit.pet && look.outfit.pet !== 'none';
+    const s = Math.min(w / (pet ? 2.6 : 1.9), h / 2.5) * dpr; // px per cell
+    const fx = (pet ? w * 0.6 : w / 2) * dpr;
+    const fy = h * 0.86 * dpr;
+    const walking = Math.floor(t / 2.5) % 2 === 1; // stand, then walk in place
+    const frame = walking ? Math.floor(t * WALK_FPS) % WALK_FRAMES : -1;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, 0.5 * s, 0.16 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(fx, fy);
+    ctx.scale(s, s);
+    drawCharacter(ctx, look, { frame });
+    ctx.restore();
+    if (pet) {
+      const px = fx - 1.05 * s;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(px, fy, 0.3 * s, 0.1 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(px, fy);
+      ctx.scale(s, s);
+      inkStyle(ctx);
+      drawPet(ctx, look.outfit.pet, walking ? Math.floor(t * 16) % PET_FRAMES : -1);
+      ctx.restore();
+    }
   }
 
   renderCustomize() {
@@ -160,10 +284,12 @@ export class LobbyUI {
             .map((p) => p.color)
         : [],
     );
-    const [, c, sh] = COLORS[color];
-    const prev = this.$('.custom-preview');
-    prev.innerHTML = '';
-    prev.appendChild(bean({ color: c, shadow: sh }, 150));
+    this.root
+      .querySelectorAll('.custom-tabs [data-tab]')
+      .forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === this.tab)));
+    this.$('[data-pane=color]').hidden = this.tab !== 'color';
+    this.$('[data-pane=items]').hidden = this.tab === 'color';
+    if (this.tab !== 'color') return this.renderItems();
     const name = this.$('#c-name');
     if (document.activeElement !== name) name.value = mine?.name || prefs.name;
     this.$('#c-colors').innerHTML = COLORS.map(
@@ -179,6 +305,30 @@ export class LobbyUI {
     const roleField = this.$('#c-role-field');
     roleField.hidden = s.online;
     roleField.querySelectorAll('[data-role]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.role === prefs.role)));
+  }
+
+  /** The grid of hats, visors, skins or pets, each shown on you in your color. */
+  renderItems() {
+    const tab = TABS.find((t) => t.id === this.tab);
+    const look = this.myLook();
+    const current = look.outfit[tab.slot] || 'none';
+    const box = this.$('#c-items');
+    box.innerHTML = '';
+    for (const it of tab.list) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch item';
+      b.dataset.item = it.id;
+      b.title = it.name;
+      b.setAttribute('role', 'option');
+      b.setAttribute('aria-label', it.name);
+      b.setAttribute('aria-pressed', String(it.id === current));
+      if (it.id === 'none') b.innerHTML = '<span class="item-none" aria-hidden="true"></span>';
+      else if (tab.slot === 'pet') b.appendChild(petCanvas(it.id, 46));
+      else b.appendChild(bean({ ...look, outfit: { [tab.slot]: it.id } }, 46));
+      box.appendChild(b);
+    }
+    this.$('#c-item-name').textContent = tab.list.find((it) => it.id === current)?.name || 'None';
   }
 
   openOptions() {

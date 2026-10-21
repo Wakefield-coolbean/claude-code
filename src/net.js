@@ -176,11 +176,11 @@ export class NetSession {
   }
 
   host(settings, pub) {
-    this.send({ t: 'host', name: this.prefs.name, color: this.prefs.color, settings, pub });
+    this.send({ t: 'host', name: this.prefs.name, color: this.prefs.color, outfit: this.prefs.outfit, settings, pub });
   }
 
   join(code) {
-    this.send({ t: 'join', code, name: this.prefs.name, color: this.prefs.color });
+    this.send({ t: 'join', code, name: this.prefs.name, color: this.prefs.color, outfit: this.prefs.outfit });
   }
 
   leave() {
@@ -215,18 +215,18 @@ export class NetSession {
   }
 
   roomPlayers() {
-    return (this.room?.players || []).map((p) => ({ id: p.id, name: p.name, color: p.color, you: p.id === this.you }));
+    return (this.room?.players || []).map((p) => ({ id: p.id, name: p.name, color: p.color, outfit: p.outfit, you: p.id === this.you }));
   }
 
   syncLobby() {
     const ps = this.room.players;
-    const sig = ps.map((p) => `${p.id}:${p.name}:${p.color}`).join('|');
+    const sig = ps.map((p) => `${p.id}:${p.name}:${p.color}:${JSON.stringify(p.outfit || {})}`).join('|');
     if (this.lobbyGame && sig === this.lobbySig) {
       this.lobbyGame.settings = { ...this.lobbyGame.settings, ...this.room.settings };
       return;
     }
     const old = this.lobbyGame;
-    const roster = ps.map((p) => ({ name: p.name, color: p.color, remote: p.id !== this.you }));
+    const roster = ps.map((p) => ({ name: p.name, color: p.color, outfit: p.outfit, remote: p.id !== this.you }));
     const g = new Game({
       mapId: 'dropship',
       phase: 'lobby',
@@ -339,7 +339,7 @@ export class NetSession {
 
   startGame(m) {
     this.countdown = 0;
-    const roster = m.roster.map((r) => ({ name: r.name, color: r.color, isBot: r.bot, remote: true }));
+    const roster = m.roster.map((r) => ({ name: r.name, color: r.color, outfit: r.outfit, isBot: r.bot, remote: true }));
     const g = new Game({ settings: m.settings, roster, localId: m.pid, replica: true });
     g.t = m.T;
     g.phaseEnd = m.phaseEnd;

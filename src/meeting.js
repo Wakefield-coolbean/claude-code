@@ -68,6 +68,7 @@ export class MeetingUI {
       const el = document.createElement('div');
       el.className = 'plate';
       el.dataset.id = p.id;
+      el.style.setProperty('--i', String(this.plates.size));
       el.setAttribute('role', 'button');
       el.tabIndex = 0;
       el.classList.toggle('dead', !p.alive);

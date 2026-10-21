@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Room } from '../src/room.js';
 import { startServer } from '../server/server.mjs';
 import { TIMING } from '../src/config.js';
+import { HATS, SKINS } from '../src/cosmetics.js';
 
 let nextId = 1;
 function fakeClient(name, color = 0) {
@@ -193,4 +194,21 @@ test('watching cams adds what the feeds show to the snapshot, and everyone sees 
   assert.equal(room.snapshot(guest).cam, 1);
   room.onMessage(host, { t: 'a', a: 'watch', kind: null });
   assert.ok(!room.snapshot(host).ps.some((p) => p[0] === onCam.id));
+});
+
+test('outfits are cleaned, shared in the lobby and carried into the game', () => {
+  const { room, host } = newRoom();
+  const hat = HATS.at(-1).id;
+  const skin = SKINS.at(-1).id;
+  const guest = fakeClient('Guest', 3);
+  guest.outfit = { hat, pet: 'not-a-pet' };
+  room.add(guest);
+  assert.deepEqual(guest.outfit, { hat, visor: 'none', skin: 'none', pet: 'none' });
+  room.onMessage(host, { t: 'me', outfit: { skin } });
+  assert.equal(host.last('room').players.find((p) => p.id === host.id).outfit.skin, skin);
+  room.startGame();
+  const start = guest.last('start');
+  assert.equal(start.roster[guest.pid].outfit.hat, hat);
+  assert.equal(room.game.players[host.pid].outfit.skin, skin);
+  assert.ok(room.game.players.every((p) => p.outfit && typeof p.outfit.hat === 'string'));
 });

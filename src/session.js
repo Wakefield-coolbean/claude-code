@@ -28,12 +28,12 @@ export class LocalSession {
   buildLobby() {
     const { prefs } = this;
     const old = this.lobbyGame;
-    const roster = buildRoster([{ name: prefs.name, color: prefs.color }], prefs.settings.players, Math.random);
+    const roster = buildRoster([{ name: prefs.name, color: prefs.color, outfit: prefs.outfit }], prefs.settings.players, Math.random);
     // Keep the bots that were already standing around.
     if (old) {
       old.players.slice(1).forEach((p, i) => {
         if (roster[i + 1] && !roster.slice(0, i + 1).some((r) => r.color === p.colorIndex)) {
-          roster[i + 1] = { name: p.name, color: p.colorIndex, isBot: true };
+          roster[i + 1] = { name: p.name, color: p.colorIndex, outfit: p.outfit, isBot: true };
         }
       });
     }
@@ -52,12 +52,13 @@ export class LocalSession {
   }
 
   roomPlayers() {
-    return this.lobbyGame.players.map((p, i) => ({ id: i, name: p.name, color: p.colorIndex, you: i === 0, bot: i > 0 }));
+    return this.lobbyGame.players.map((p, i) => ({ id: i, name: p.name, color: p.colorIndex, outfit: p.outfit, you: i === 0, bot: i > 0 }));
   }
 
-  setMe({ name, color }) {
+  setMe({ name, color, outfit }) {
     if (name != null) this.prefs.name = name;
     if (color != null) this.prefs.color = color;
+    if (outfit != null) this.prefs.outfit = outfit;
     this.h.onSavePrefs?.();
     this.buildLobby();
   }
@@ -107,8 +108,8 @@ export class LocalSession {
     const { prefs } = this;
     const roster = this.lobbyGame.players.map((p, i) =>
       i === 0
-        ? { name: prefs.name || COLORS[prefs.color][0], color: prefs.color, role: prefs.role }
-        : { name: p.name, color: p.colorIndex, isBot: true },
+        ? { name: prefs.name || COLORS[prefs.color][0], color: prefs.color, outfit: prefs.outfit, role: prefs.role }
+        : { name: p.name, color: p.colorIndex, outfit: p.outfit, isBot: true },
     );
     const game = new Game({ settings: prefs.settings, seed: (Math.random() * 2 ** 32) >>> 0, roster, localId: 0 });
     this.game = game;

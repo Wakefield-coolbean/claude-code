@@ -5,6 +5,7 @@ import { COLORS, BOT_NAMES, DIST, TIMING, defaultSettings } from './config.js';
 import { getMap, roomAt, ventNeighbors } from './map.js';
 import { World } from './grid.js';
 import { dealTasks } from './tasks/defs.js';
+import { cleanLook, randomLook } from './cosmetics.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -34,7 +35,9 @@ export function buildRoster(humans, total, rng) {
   const colors = [...COLORS.keys()].filter((c) => !taken.has(c)).sort(() => rng() - 0.5);
   const usedNames = new Set(roster.map((h) => h.name.toLowerCase()));
   const names = BOT_NAMES.filter((n) => !usedNames.has(n.toLowerCase())).sort(() => rng() - 0.5);
-  while (roster.length < total && colors.length) roster.push({ name: names.pop() || 'Bot', color: colors.pop(), isBot: true });
+  while (roster.length < total && colors.length) {
+    roster.push({ name: names.pop() || 'Bot', color: colors.pop(), isBot: true, outfit: randomLook(rng) });
+  }
   return roster;
 }
 
@@ -115,6 +118,7 @@ export class Game {
         name: r.name || cname,
         colorIndex: r.color,
         colorName: cname,
+        outfit: cleanLook(r.outfit),
         color,
         shadow,
         isBot: !!r.isBot,

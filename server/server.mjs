@@ -98,6 +98,7 @@ export function startServer({ port = 8080, quiet = false } = {}) {
         c.room?.remove(c);
         c.name = cleanName(m.name, 'Player');
         c.color = m.color | 0;
+        c.outfit = m.outfit;
         const code = newCode();
         rooms.set(code, new Room(code, c, { settings: m.settings, pub: m.pub }, (r) => rooms.delete(r.code)));
         return;
@@ -114,6 +115,7 @@ export function startServer({ port = 8080, quiet = false } = {}) {
         c.room?.remove(c);
         c.name = cleanName(m.name, 'Player');
         c.color = m.color | 0;
+        c.outfit = m.outfit;
         room.add(c);
         return;
       }
