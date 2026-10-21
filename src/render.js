@@ -3,7 +3,8 @@
 
 import { DIST } from './config.js';
 import { THEMES } from './map.js';
-import { SpriteCache, drawGhost, WALK_FRAMES } from './sprites.js';
+import { SpriteCache, drawGhost, walkPose, WALK_FRAMES, WALK_FPS } from './sprites.js';
+import { PET_FRAMES } from './cosmetics.js';
 import { World } from './grid.js';
 import { drawDecor, drawDecorProp, drawDecorLive, securityCam } from './decor.js';
 
@@ -70,6 +71,7 @@ export class Renderer {
     this.fogCtx = this.fog.getContext('2d');
     this.sprites = new SpriteCache();
     this.chunks = new Map();
+    this.pets = new Map(); // player id -> { x, y, facing, moving, walk }
     this.cam = { x: 0, y: 0 };
     this.shake = 0;
     if (game) this.setGame(game);
@@ -77,6 +79,7 @@ export class Renderer {
   }
 
   setGame(game) {
+    if (this.game !== game) this.pets.clear();
     this.game = game;
     this.map = game.map;
     // Static wall outlines with every door open.
@@ -738,10 +741,12 @@ export class Renderer {
     drawDecorLive(ctx, g.map, time, vx0, vy0, vx1, vy1);
     this.drawCameras(ctx, time, vx0, vy0, vx1, vy1);
     this.drawHighlights(ctx, me, time);
+    this.updatePets(dt);
 
     const seeAll = !g.local || g.phase === 'lobby';
     const shown = (p) => !p.inVent && (seeAll || (p.alive ? g.seesPlayer(me, p) : !me.alive));
-    this.drawActors(ctx, time, (b) => seeAll || g.sees(me, b.x, b.y - 0.3), shown);
+    const petShown = (pet) => seeAll || g.sees(me, pet.x, pet.y - 0.2);
+    this.drawActors(ctx, time, (b) => seeAll || g.sees(me, b.x, b.y - 0.3), shown, petShown);
     this.drawVisualFx(ctx, (p) => !g.local || g.seesPlayer(me, p), time);
 
     // Fog of war.
@@ -789,12 +794,63 @@ export class Renderer {
     this.drawArrows(ctx, me, toS, time);
   }
 
-  /** Bodies, crewmates and closed doors, back to front. */
-  drawActors(ctx, time, showBody, showPlayer) {
+  /** Pets trot after their owners, keeping a step behind. Purely visual; each screen runs its own. */
+  updatePets(dt) {
+    for (const p of this.game.players) {
+      const id = p.outfit?.pet;
+      if (!id || id === 'none' || !p.alive) {
+        this.pets.delete(p.id);
+        continue;
+      }
+      const tx = p.x - p.facing * 0.8;
+      const ty = p.y + 0.12;
+      let pet = this.pets.get(p.id);
+      if (!pet || Math.hypot(tx - pet.x, ty - pet.y) > 6) {
+        pet = { id, x: tx, y: ty, facing: p.facing, moving: false, walk: 0 };
+        this.pets.set(p.id, pet);
+      }
+      pet.id = id;
+      const dx = tx - pet.x;
+      const dy = ty - pet.y;
+      const d = Math.hypot(dx, dy);
+      const step = Math.min(d, DIST.speed * 1.15 * dt * Math.min(1, d / 0.5));
+      pet.moving = d > 0.12 && step > 0.002;
+      if (pet.moving) {
+        pet.x += (dx / d) * step;
+        pet.y += (dy / d) * step;
+        pet.walk += dt;
+        if (Math.abs(dx) > 0.05) pet.facing = dx > 0 ? 1 : -1;
+      } else {
+        pet.facing = p.facing;
+      }
+    }
+  }
+
+  drawPet(ctx, pet, time) {
+    const [sx, sy] = this.screenPos(ctx, pet.x, pet.y);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, 0.28 * this.ppc, 0.1 * this.ppc, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const frame = pet.moving ? Math.floor(pet.walk * 16) % PET_FRAMES : -1;
+    const bob = pet.moving ? 0 : Math.sin(time * 2.4 + pet.x) * 0.012 * this.ppc;
+    this.sprites.blit(ctx, this.sprites.pet(pet.id, frame), sx, sy + bob, pet.facing, this.ppc);
+    ctx.restore();
+  }
+
+  /** Bodies, crewmates, pets and closed doors, back to front. */
+  drawActors(ctx, time, showBody, showPlayer, showPet = () => true) {
     const g = this.game;
     const items = [];
     for (const b of g.bodies) if (showBody(b)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
-    for (const p of g.players) if (showPlayer(p)) items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
+    for (const p of g.players) {
+      if (!showPlayer(p)) continue;
+      items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
+      const pet = p.alive && !p.inVent ? this.pets.get(p.id) : null;
+      if (pet && showPet(pet)) items.push({ y: pet.y, draw: () => this.drawPet(ctx, pet, time) });
+    }
     for (const d of g.map.doors) {
       if (g.world.doorClosed[d.id]) items.push({ y: d.rect[3], draw: () => this.drawDoor(ctx, d) });
     }
@@ -867,7 +923,13 @@ export class Renderer {
     const inView = (x, y) => x > x0 - 1 && x < x1 + 1 && y > y0 - 0.5 && y < y1 + 2;
     const onFeed = (p) => p.alive && !p.inVent && inView(p.x, p.y);
     this.feeding = true;
-    this.drawActors(ctx, time, (b) => inView(b.x, b.y), onFeed);
+    this.drawActors(
+      ctx,
+      time,
+      (b) => inView(b.x, b.y),
+      onFeed,
+      (pet) => inView(pet.x, pet.y),
+    );
     this.feeding = false;
     this.drawVisualFx(ctx, onFeed, time);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -879,20 +941,28 @@ export class Renderer {
     const [sx, sy] = this.screenPos(ctx, p.x, p.y);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const hat = p.outfit?.hat;
     if (!p.alive) {
       const f = Math.floor(time * 6) % 6;
       const bmp = this.sprites.get(`g${p.colorIndex}:${f}`, p.color, p.shadow, (c, a, b) => drawGhost(c, a, b, f / 6));
-      const bob = Math.sin(time * 3 + p.id) * 0.1 * this.ppc;
-      this.sprites.blit(ctx, bmp, sx, sy - 0.2 * this.ppc + bob, p.facing, this.ppc, 0.55);
+      const gy = sy - 0.2 * this.ppc + Math.sin(time * 3 + p.id) * 0.1 * this.ppc;
+      const back = this.sprites.hat(hat, 'back');
+      if (back) this.sprites.blit(ctx, back, sx, gy, p.facing, this.ppc, 0.55);
+      this.sprites.blit(ctx, bmp, sx, gy, p.facing, this.ppc, 0.55);
+      const front = this.sprites.hat(hat, 'front');
+      if (front) this.sprites.blit(ctx, front, sx, gy, p.facing, this.ppc, 0.55);
       ctx.restore();
       return;
     }
-    const frame = p.moving ? Math.floor(p.walk * 16) % WALK_FRAMES : -1;
+    const frame = p.moving ? Math.floor(p.walk * WALK_FPS) % WALK_FRAMES : -1;
+    const pose = walkPose(frame);
     // Soft floor shadow.
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.beginPath();
     ctx.ellipse(sx, sy, 0.48 * this.ppc, 0.16 * this.ppc, 0, 0, Math.PI * 2);
     ctx.fill();
+    const back = this.sprites.hat(hat, 'back');
+    if (back) this.sprites.blit(ctx, back, sx, sy, p.facing, this.ppc, 1, pose);
     this.sprites.blit(ctx, this.sprites.crewmate(p, frame, false), sx, sy, p.facing, this.ppc);
     // The visor eases toward where this crewmate is looking (p.look: world direction, length = strength).
     const ls = (p.lookS ||= { x: 0, y: 0 });
@@ -905,7 +975,9 @@ export class Renderer {
     const toward = mag > 1e-3 ? (ls.x / mag) * p.facing : 1;
     const fwd = 1 + (Math.max(0, toward) - 1) * mag;
     const up = Math.max(-1, Math.min(1, ls.y));
-    this.sprites.visor(ctx, sx, sy, p.facing, this.ppc, fwd, up, frame);
+    this.sprites.visor(ctx, sx, sy, p.facing, this.ppc, fwd, up, frame, p.outfit?.visor);
+    const front = this.sprites.hat(hat, 'front');
+    if (front) this.sprites.blit(ctx, front, sx, sy, p.facing, this.ppc, 1, pose);
     ctx.restore();
   }
 
@@ -914,7 +986,7 @@ export class Renderer {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const p = this.game.players[b.id];
-    this.sprites.blit(ctx, this.sprites.body(b, p.colorIndex), sx, sy, 1, this.ppc);
+    this.sprites.blit(ctx, this.sprites.body(b, p.colorIndex, p.outfit?.skin), sx, sy, 1, this.ppc);
     ctx.restore();
   }
 

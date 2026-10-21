@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Walk Cycle</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap">
+<style>body{margin:0;background:#8d98a4;font:700 14px "Baloo 2",sans-serif} canvas{display:block}</style>
+</head>
+<body>
+<canvas id="out"></canvas>
+<script type="module">
+  // Every walk frame of a crewmate, plus one walking live. ?scale=px per cell &outfit=hat,visor,skin,pet
+  import { drawCharacter, WALK_FRAMES, WALK_FPS } from '../src/sprites.js';
+  import { drawPet, PET_FRAMES } from '../src/cosmetics.js';
+  import { COLORS } from '../src/config.js';
+  const q = new URLSearchParams(location.search);
+  const S = Number(q.get('scale') || 70);
+  const [hat, visor, skin, pet] = (q.get('outfit') || 'none,none,none,none').split(',');
+  const look = { color: COLORS[0][1], shadow: COLORS[0][2], outfit: { hat, visor, skin, pet } };
+  const out = document.getElementById('out');
+  const cols = WALK_FRAMES + 2;
+  out.width = cols * 1.6 * S;
+  out.height = 2.6 * S * 2;
+  const ctx = out.getContext('2d');
+  function cell(i, row, frame, label) {
+    ctx.save();
+    ctx.translate((i + 0.5) * 1.6 * S, (row + 1) * 2.6 * S - 0.4 * S);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.48 * S, 0.16 * S, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#07090c';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, 0, 0.35 * S);
+    ctx.scale(S, S);
+    if (row === 0) drawCharacter(ctx, look, { frame });
+    else if (pet !== 'none') drawPet(ctx, pet, frame < 0 ? -1 : frame % PET_FRAMES);
+    ctx.restore();
+  }
+  function draw(t) {
+    ctx.clearRect(0, 0, out.width, out.height);
+    cell(0, 0, -1, 'idle');
+    for (let f = 0; f < WALK_FRAMES; f++) cell(f + 1, 0, f, String(f));
+    cell(WALK_FRAMES + 1, 0, Math.floor((t / 1000) * WALK_FPS) % WALK_FRAMES, 'live');
+    if (pet !== 'none') {
+      cell(0, 1, -1, 'idle');
+      for (let f = 0; f < PET_FRAMES; f++) cell(f + 1, 1, f, String(f));
+      cell(WALK_FRAMES + 1, 1, Math.floor((t / 1000) * 16) % PET_FRAMES, 'live');
+    }
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+</script>
+</body>
+</html>

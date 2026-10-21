@@ -2,6 +2,7 @@
 // Units are map cells with the feet at (0, 0) and the character facing right.
 
 import { DIST } from './config.js';
+import { drawHat, drawSkinTorso, drawSkinLeg, drawVisorAcc, drawPet } from './cosmetics.js';
 
 const INK = '#07090c';
 const K = DIST.char;
@@ -9,11 +10,57 @@ const VISOR = '#93c8db';
 const VISOR_DARK = '#4f8aa2';
 const BONE = '#f3efe2';
 
-const W = 1.5; // bitmap size in cells
-const H = 1.7;
-const OX = 0.75; // feet position inside the bitmap
-const OY = 1.55;
-export const WALK_FRAMES = 8;
+// Bitmap boxes in cells, with the feet's position inside: characters, and hats (which reach higher).
+const BOX = { W: 1.7, H: 1.85, OX: 0.85, OY: 1.65 };
+const BIG = { W: 2.4, H: 2.9, OX: 1.2, OY: 2.45 };
+
+// The walk: 12 frames per two steps. Legs swing from the hips like pendulums; the planted foot
+// stays on the floor, the swinging one lifts, and the body bounces up as the legs pass and
+// leans into the walk.
+export const WALK_FRAMES = 12;
+export const WALK_FPS = 24;
+const HIP_Y = -0.3;
+const LEG_LEN = 0.3;
+const HIPS = [-0.16, 0.2]; // back (far) leg, front (near) leg
+const SWING = 0.5; // radians either way
+
+/**
+ * Pose for a walk frame (-1 = standing): body bob (cells, + = down), lean (radians), and per leg
+ * its swing `a` (foot forward when > 0) and length `len`.
+ */
+export function walkPose(frame) {
+  if (frame < 0)
+    return {
+      bob: 0,
+      tilt: 0,
+      legs: [
+        { a: 0, len: LEG_LEN },
+        { a: 0, len: LEG_LEN },
+      ],
+    };
+  const ph = (frame / WALK_FRAMES) * Math.PI * 2;
+  const s = Math.sin(ph);
+  const c = Math.cos(ph);
+  // The body rises as the legs pass under it and dips as they spread.
+  const bob = -0.035 * Math.abs(c) + 0.02 * Math.abs(s);
+  const reach = -(HIP_Y + bob); // hip height above the floor
+  // The planted leg stretches to keep its foot on the floor; the other one lifts and kicks back.
+  // Each leg keeps a little to its own side (back leg behind, front leg ahead) so they don't scissor.
+  const legs = [-1, 1].map((dir) => {
+    const lift = Math.max(0, dir * c) * 0.09;
+    const swing = dir * SWING * s + dir * 0.1;
+    return { a: swing - lift * 2.6, len: reach / Math.cos(swing) - lift };
+  });
+  const tilt = 0.075 + 0.03 * Math.sin(ph * 2 + 0.6);
+  return { bob, tilt, legs };
+}
+
+/** Move ctx into the body's frame for a pose (lean pivots at the hips). */
+export function poseBody(ctx, pose) {
+  ctx.translate(0, pose.bob + HIP_Y);
+  ctx.rotate(pose.tilt);
+  ctx.translate(0, -HIP_Y);
+}
 
 function bodyPath(ctx) {
   ctx.beginPath();
@@ -28,15 +75,31 @@ function backpack(ctx, color, shadow) {
   ctx.stroke();
 }
 
-function leg(ctx, x, lift, color) {
-  ctx.beginPath();
-  ctx.roundRect(x, -0.34 - lift, 0.28, 0.34, [0.04, 0.04, 0.12, 0.12]);
-  ctx.fillStyle = color;
+/** One leg hanging from its hip, swung by `a` (foot forward when > 0), `len` long. */
+function leg(ctx, hx, a, len, color, shadow, front, skin, y0 = HIP_Y) {
+  ctx.save();
+  ctx.translate(hx, y0);
+  ctx.rotate(-a);
+  const path = () => {
+    ctx.beginPath();
+    ctx.roundRect(-0.14, -0.08, 0.28, len + 0.08, [0.04, 0.04, 0.13, 0.13]);
+  };
+  path();
+  ctx.fillStyle = front ? color : shadow;
   ctx.fill();
+  if (skin && skin !== 'none') {
+    ctx.save();
+    path();
+    ctx.clip();
+    drawSkinLeg(ctx, skin, color, shadow, front, len);
+    ctx.restore();
+  }
+  path();
   ctx.stroke();
+  ctx.restore();
 }
 
-function shade(ctx, color, shadow) {
+function shade(ctx, color, shadow, skin) {
   bodyPath(ctx);
   ctx.fillStyle = color;
   ctx.fill();
@@ -54,6 +117,7 @@ function shade(ctx, color, shadow) {
   ctx.beginPath();
   ctx.ellipse(-0.12, -1.08, 0.16, 0.06, -0.3, 0, Math.PI * 2);
   ctx.fill();
+  if (skin && skin !== 'none') drawSkinTorso(ctx, skin, color, shadow);
   ctx.restore();
   bodyPath(ctx);
   ctx.stroke();
@@ -101,29 +165,64 @@ function visor(ctx) {
   drawVisor(ctx, 1, 0);
 }
 
-/** Vertical bob of the body (and visor) for a walk frame. */
-export function walkBob(frame) {
-  return frame < 0 ? 0 : -Math.abs(Math.sin((frame / WALK_FRAMES) * Math.PI * 2)) * 0.04;
-}
-
-/** Draw a living crewmate. frame: walk frame index or -1 for idle. withVisor=false leaves the visor to the caller. */
-export function drawCrewmate(ctx, color, shadow, frame = -1, withVisor = true) {
+function ink(ctx) {
   ctx.lineWidth = 0.075;
   ctx.lineJoin = 'round';
   ctx.strokeStyle = INK;
-  const ph = frame < 0 ? 0 : (frame / WALK_FRAMES) * Math.PI * 2;
-  const swing = frame < 0 ? 0 : Math.sin(ph);
-  const bob = walkBob(frame);
-  backpack(ctx, color, shadow);
+}
+
+/**
+ * Draw a living crewmate. frame: walk frame index or -1 for idle. withVisor=false leaves the
+ * visor (and anything worn over it or on the head) to the caller.
+ */
+export function drawCrewmate(ctx, color, shadow, frame = -1, withVisor = true, skin = 'none') {
+  ink(ctx);
+  const pose = walkPose(frame);
   ctx.save();
-  ctx.translate(0, 0);
-  leg(ctx, -0.3 - swing * 0.09, Math.max(0, swing) * 0.07, shadow);
-  leg(ctx, 0.06 + swing * 0.09, Math.max(0, -swing) * 0.07, color);
+  poseBody(ctx, pose);
+  backpack(ctx, color, shadow);
   ctx.restore();
   ctx.save();
-  ctx.translate(0, bob);
-  shade(ctx, color, shadow);
+  ctx.translate(0, pose.bob);
+  leg(ctx, HIPS[0], pose.legs[0].a, pose.legs[0].len, color, shadow, false, skin);
+  leg(ctx, HIPS[1], pose.legs[1].a, pose.legs[1].len, color, shadow, true, skin);
+  ctx.restore();
+  ctx.save();
+  poseBody(ctx, pose);
+  shade(ctx, color, shadow, skin);
   if (withVisor) visor(ctx);
+  ctx.restore();
+}
+
+/**
+ * A whole character with its outfit, drawn in one go (menus, meetings, cutscenes).
+ * look: { color, shadow, outfit?: { hat, visor, skin } }; kind: 'alive' | 'ghost' | 'body'.
+ */
+export function drawCharacter(ctx, look, { kind = 'alive', frame = -1, fwd = 1, up = 0, t = 0 } = {}) {
+  const o = look.outfit || {};
+  const hat = o.hat && o.hat !== 'none' ? o.hat : null;
+  if (kind === 'body') return drawBody(ctx, look.color, look.shadow, o.skin);
+  const pose = walkPose(kind === 'alive' ? frame : -1);
+  if (hat) {
+    ctx.save();
+    poseBody(ctx, pose);
+    ink(ctx);
+    drawHat(ctx, hat, 'back');
+    ctx.restore();
+  }
+  if (kind === 'ghost') drawGhost(ctx, look.color, look.shadow, t);
+  else drawCrewmate(ctx, look.color, look.shadow, frame, false, o.skin);
+  ctx.save();
+  poseBody(ctx, pose);
+  ink(ctx);
+  if (kind !== 'ghost') {
+    drawVisor(ctx, fwd, up);
+    if (o.visor && o.visor !== 'none') drawVisorAcc(ctx, o.visor, fwd, up);
+  }
+  if (hat) {
+    ink(ctx);
+    drawHat(ctx, hat, 'front');
+  }
   ctx.restore();
 }
 
@@ -149,23 +248,32 @@ export function drawGhost(ctx, color, shadow, t = 0) {
   visor(ctx);
 }
 
-export function drawBody(ctx, color, shadow) {
-  ctx.lineWidth = 0.075;
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = INK;
-  leg(ctx, -0.3, 0, shadow);
-  leg(ctx, 0.06, 0, color);
+export function drawBody(ctx, color, shadow, skin = 'none') {
+  ink(ctx);
+  leg(ctx, HIPS[0], 0, LEG_LEN, color, shadow, false, skin);
+  leg(ctx, HIPS[1], 0, LEG_LEN, color, shadow, true, skin);
   // Lower half of the bean.
-  ctx.beginPath();
-  ctx.moveTo(-0.37, -0.62);
-  ctx.lineTo(-0.37, -0.36);
-  ctx.quadraticCurveTo(-0.37, -0.24, -0.24, -0.24);
-  ctx.lineTo(0.26, -0.24);
-  ctx.quadraticCurveTo(0.39, -0.24, 0.39, -0.36);
-  ctx.lineTo(0.39, -0.62);
-  ctx.closePath();
+  const half = () => {
+    ctx.beginPath();
+    ctx.moveTo(-0.37, -0.62);
+    ctx.lineTo(-0.37, -0.36);
+    ctx.quadraticCurveTo(-0.37, -0.24, -0.24, -0.24);
+    ctx.lineTo(0.26, -0.24);
+    ctx.quadraticCurveTo(0.39, -0.24, 0.39, -0.36);
+    ctx.lineTo(0.39, -0.62);
+    ctx.closePath();
+  };
+  half();
   ctx.fillStyle = color;
   ctx.fill();
+  if (skin && skin !== 'none') {
+    ctx.save();
+    half();
+    ctx.clip();
+    drawSkinTorso(ctx, skin, color, shadow);
+    ctx.restore();
+  }
+  half();
   ctx.stroke();
   // Cut, bone.
   ctx.beginPath();
@@ -201,51 +309,85 @@ export class SpriteCache {
     }
   }
 
-  get(key, color, shadow, draw) {
+  /** A cached bitmap; box: BOX for characters, BIG for hats. */
+  get(key, color, shadow, draw, box = BOX) {
     let c = this.map.get(key);
     if (!c) {
       c = document.createElement('canvas');
-      c.width = Math.ceil(W * this.scale);
-      c.height = Math.ceil(H * this.scale);
+      c.width = Math.ceil(box.W * this.scale);
+      c.height = Math.ceil(box.H * this.scale);
+      c.box = box;
       const ctx = c.getContext('2d');
       ctx.scale(this.scale, this.scale);
-      ctx.translate(OX, OY);
+      ctx.translate(box.OX, box.OY);
       draw(ctx, color, shadow);
       this.map.set(key, c);
     }
     return c;
   }
 
-  /** Blit at screen position of the feet. facing: 1 right, -1 left. */
-  blit(ctx, bmp, sx, sy, facing, ppc, alpha = 1) {
+  /** Blit at screen position of the feet. facing: 1 right, -1 left. pose: lean and bob like a body. */
+  blit(ctx, bmp, sx, sy, facing, ppc, alpha = 1, pose = null) {
     const k = (ppc * K) / this.scale;
+    const box = bmp.box || BOX;
     ctx.save();
     if (alpha !== 1) ctx.globalAlpha = alpha;
     ctx.translate(sx, sy);
     ctx.scale(facing * k, k);
-    ctx.drawImage(bmp, -OX * this.scale, -OY * this.scale);
+    if (pose) {
+      ctx.scale(this.scale, this.scale);
+      poseBody(ctx, pose);
+      ctx.scale(1 / this.scale, 1 / this.scale);
+    }
+    ctx.drawImage(bmp, -box.OX * this.scale, -box.OY * this.scale);
     ctx.restore();
   }
 
   crewmate(p, frame, withVisor = true) {
-    const key = `c${p.colorIndex}:${frame}${withVisor ? '' : ':nv'}`;
-    return this.get(key, p.color, p.shadow, (c, a, b) => drawCrewmate(c, a, b, frame, withVisor));
+    const skin = p.outfit?.skin || 'none';
+    const key = `c${p.colorIndex}:${frame}:${skin}${withVisor ? '' : ':nv'}`;
+    return this.get(key, p.color, p.shadow, (c, a, b) => drawCrewmate(c, a, b, frame, withVisor, skin));
   }
 
-  /** Draw a visor live at a character's feet position (screen px), matching blit's transform. */
-  visor(ctx, sx, sy, facing, ppc, fwd, up, frame) {
+  /** A hat layer ('back' or 'front'), or null for no hat. */
+  hat(id, layer) {
+    if (!id || id === 'none') return null;
+    return this.get(
+      `h${id}:${layer}`,
+      null,
+      null,
+      (c) => {
+        ink(c);
+        drawHat(c, id, layer);
+      },
+      BIG,
+    );
+  }
+
+  pet(id, frame) {
+    return this.get(`p${id}:${frame}`, null, null, (c) => {
+      ink(c);
+      drawPet(c, id, frame);
+    });
+  }
+
+  /** Draw the visor (and any accessory over it) live at a character's feet (screen px), matching blit. */
+  visor(ctx, sx, sy, facing, ppc, fwd, up, frame, acc = 'none') {
     const k = ppc * K;
     ctx.save();
-    ctx.translate(sx, sy + walkBob(frame) * k);
+    ctx.translate(sx, sy);
     ctx.scale(facing * k, k);
-    ctx.lineWidth = 0.075;
-    ctx.lineJoin = 'round';
-    ctx.strokeStyle = INK;
+    poseBody(ctx, walkPose(frame));
+    ink(ctx);
     drawVisor(ctx, fwd, up);
+    if (acc && acc !== 'none') {
+      ink(ctx);
+      drawVisorAcc(ctx, acc, fwd, up);
+    }
     ctx.restore();
   }
 
-  body(b, colorIndex) {
-    return this.get(`b${colorIndex}`, b.color, b.shadow, drawBody);
+  body(b, colorIndex, skin = 'none') {
+    return this.get(`b${colorIndex}:${skin}`, b.color, b.shadow, (c, a, s) => drawBody(c, a, s, skin));
   }
 }

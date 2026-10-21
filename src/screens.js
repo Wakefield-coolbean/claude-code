@@ -1,27 +1,32 @@
 // Full-screen moments: menu, role reveal, meeting splash, kill, ejection, game over, pause.
 
 import { TIMING } from './config.js';
-import { drawCrewmate, drawGhost, drawBody } from './sprites.js';
+import { drawCharacter } from './sprites.js';
 import { sfx, isMuted, setMuted } from './audio.js';
 import { icon } from './hud.js';
 
-/** Canvas with one character drawn at a CSS height of `size` px. */
+const HAT_ROOM = 0.6; // extra cells above the head for hats, overlapping whatever is above
+
+/**
+ * Canvas with one character (and its outfit) drawn at a CSS height of `size` px.
+ * p: { color, shadow, outfit? }; kind: 'alive' | 'ghost' | 'body'.
+ */
 export function bean(p, size = 64, { kind = 'alive', facing = 1, frame = -1 } = {}) {
   const c = document.createElement('canvas');
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const s = size / 1.45; // px per cell so a 1.3-cell character fills `size`
+  const room = p.outfit?.hat && p.outfit.hat !== 'none' && kind !== 'body' ? HAT_ROOM : 0;
   c.width = Math.ceil(1.6 * s * dpr);
-  c.height = Math.ceil(1.5 * s * dpr);
+  c.height = Math.ceil((1.5 + room) * s * dpr);
   c.style.width = `${1.6 * s}px`;
-  c.style.height = `${1.5 * s}px`;
+  c.style.height = `${(1.5 + room) * s}px`;
+  if (room) c.style.marginTop = `${-room * s}px`;
   c.className = 'bean';
   const ctx = c.getContext('2d');
   ctx.scale(s * dpr, s * dpr);
-  ctx.translate(0.8, 1.42);
+  ctx.translate(0.8, 1.42 + room);
   if (facing < 0) ctx.scale(-1, 1);
-  if (kind === 'ghost') drawGhost(ctx, p.color, p.shadow, 0);
-  else if (kind === 'body') drawBody(ctx, p.color, p.shadow);
-  else drawCrewmate(ctx, p.color, p.shadow, frame);
+  drawCharacter(ctx, p, { kind, frame });
   return c;
 }
 
