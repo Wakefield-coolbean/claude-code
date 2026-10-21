@@ -57,6 +57,8 @@ a public game list. Choose **Dedicated server** under Settings → Online. Deplo
 ## What's in it
 
 - **The Kestrel**: 14 rooms, 5 vent networks, doors, emergency button, admin table; crewmates in proportion to the ship
+- Furnished rooms: vending machines, beds, server racks, plants, pipes, lamps, signs, blinking lights and more
+- Your visor turns to follow the mouse; bots glance at whatever they are looking at
 - **Dropship lobby**: walk around before the game, customize at the laptop, room code, settings list, host Start with countdown
 - Line-of-sight vision with hard shadows; lights sabotage shrinks crew vision
 - 17 task minigames, 4 sabotage panels (Lights, Comms, O2, Reactor) and door locks

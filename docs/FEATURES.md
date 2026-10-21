@@ -132,6 +132,7 @@ See [PLAN.md](PLAN.md) for the milestones and the pacing numbers.
 | --- | --- | --- |
 | The Kestrel: 14 rooms, corridors, props, 5 vent networks | P0 | ✅ |
 | Distinct floor art and props per room; dark hull outside | P0 | ✅ |
+| Decor in every room and corridor: wall fittings, room signs, lamps, floor markings and direction signs, furniture, animated lights | P1 | ✅ |
 | Doors on Cafeteria, MedBay, Security, Electrical, Storage and both engines | P0 | ✅ |
 | Map overlay (Tab) with your position, task markers and sabotage markers | P0 | ✅ |
 | Admin table: live player counts per room | P1 | ✅ |
