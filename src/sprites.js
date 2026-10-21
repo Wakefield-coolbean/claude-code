@@ -294,6 +294,36 @@ export function drawBody(ctx, color, shadow, skin = 'none') {
   }
 }
 
+/** Where a kill cuts a crewmate in two (the dead body is everything below). */
+export const CUT_Y = -0.62;
+
+/** The upper half of a crewmate (helmet, visor, hat), cut at CUT_Y and seen from below. */
+export function drawTopHalf(ctx, look, { fwd = 1, up = 0 } = {}) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-2, -4, 4, 4 + CUT_Y);
+  ctx.clip();
+  drawCharacter(ctx, look, { fwd, up });
+  ctx.restore();
+  ink(ctx);
+  ctx.beginPath();
+  ctx.ellipse(0.01, CUT_Y, 0.38, 0.1, 0, 0, Math.PI * 2);
+  ctx.fillStyle = look.shadow;
+  ctx.fill();
+  ctx.stroke();
+}
+
+/** A crewmate drawn only above (keep 'above') or below ('below') a horizontal line at y. */
+export function drawCharacterPart(ctx, look, y, keep, opts = {}) {
+  ctx.save();
+  ctx.beginPath();
+  if (keep === 'above') ctx.rect(-3, -5, 6, 5 + y);
+  else ctx.rect(-3, y, 6, 3);
+  ctx.clip();
+  drawCharacter(ctx, look, opts);
+  ctx.restore();
+}
+
 /** Bitmap cache keyed by look; rebuilt when the zoom changes. Characters are drawn K times map scale. */
 export class SpriteCache {
   constructor() {

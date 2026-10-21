@@ -5,6 +5,7 @@ import { DIST } from './config.js';
 import { THEMES } from './map.js';
 import { SpriteCache, drawGhost, walkPose, WALK_FRAMES, WALK_FPS } from './sprites.js';
 import { PET_FRAMES } from './cosmetics.js';
+import { WorldFx } from './fx.js';
 import { World } from './grid.js';
 import { drawDecor, drawDecorProp, drawDecorLive, securityCam } from './decor.js';
 
@@ -72,6 +73,7 @@ export class Renderer {
     this.sprites = new SpriteCache();
     this.chunks = new Map();
     this.pets = new Map(); // player id -> { x, y, facing, moving, walk }
+    this.fx = new WorldFx(this);
     this.cam = { x: 0, y: 0 };
     this.shake = 0;
     if (game) this.setGame(game);
@@ -80,6 +82,7 @@ export class Renderer {
 
   setGame(game) {
     if (this.game !== game) this.pets.clear();
+    this.fx.setGame(game);
     this.game = game;
     this.map = game.map;
     // Static wall outlines with every door open.
@@ -742,11 +745,13 @@ export class Renderer {
     this.drawCameras(ctx, time, vx0, vy0, vx1, vy1);
     this.drawHighlights(ctx, me, time);
     this.updatePets(dt);
+    this.fx.tick(time);
 
     const seeAll = !g.local || g.phase === 'lobby';
     const shown = (p) => !p.inVent && (seeAll || (p.alive ? g.seesPlayer(me, p) : !me.alive));
-    const petShown = (pet) => seeAll || g.sees(me, pet.x, pet.y - 0.2);
-    this.drawActors(ctx, time, (b) => seeAll || g.sees(me, b.x, b.y - 0.3), shown, petShown);
+    const spot = (x, y) => seeAll || g.sees(me, x, y);
+    const petShown = (pet) => spot(pet.x, pet.y - 0.2);
+    this.drawActors(ctx, time, (b) => spot(b.x, b.y - 0.3), shown, petShown, spot);
     this.drawVisualFx(ctx, (p) => !g.local || g.seesPlayer(me, p), time);
 
     // Fog of war.
@@ -840,19 +845,21 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Bodies, crewmates, pets and closed doors, back to front. */
-  drawActors(ctx, time, showBody, showPlayer, showPet = () => true) {
+  /** Bodies, crewmates, pets, closed doors and in-world animations, back to front. */
+  drawActors(ctx, time, showBody, showPlayer, showPet = () => true, showSpot = () => true) {
     const g = this.game;
-    const items = [];
-    for (const b of g.bodies) if (showBody(b)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
+    const fx = this.fx;
+    const items = fx.items(ctx, time, showSpot);
+    for (const b of g.bodies) if (showBody(b) && !fx.hidesBody(b, time)) items.push({ y: b.y, draw: () => this.drawBody(ctx, b) });
     for (const p of g.players) {
       if (!showPlayer(p)) continue;
-      items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
+      if (!fx.hidesPlayer(p, time)) items.push({ y: p.y, draw: () => this.drawPlayer(ctx, p, time) });
       const pet = p.alive && !p.inVent ? this.pets.get(p.id) : null;
       if (pet && showPet(pet)) items.push({ y: pet.y, draw: () => this.drawPet(ctx, pet, time) });
     }
     for (const d of g.map.doors) {
-      if (g.world.doorClosed[d.id]) items.push({ y: d.rect[3], draw: () => this.drawDoor(ctx, d) });
+      const k = fx.doorK(d, !!g.world.doorClosed[d.id], time);
+      if (k > 0.01) items.push({ y: d.rect[3], draw: () => this.drawDoor(ctx, d, k) });
     }
     items.sort((a, b) => a.y - b.y);
     for (const it of items) it.draw();
@@ -866,9 +873,11 @@ export class Renderer {
     ctx.textBaseline = 'bottom';
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(2, ppc * 0.07);
+    const time = performance.now() / 1000;
     for (const p of this.game.players) {
       if (!show(p)) continue;
-      const [sx, sy] = toS(p.x, p.y - 1.32 * DIST.char);
+      const [nx, ny] = this.fx.pos(p, time) || [p.x, p.y];
+      const [sx, sy] = toS(nx, ny - 1.32 * DIST.char);
       const teammate = me.role === 'impostor' && p.role === 'impostor';
       ctx.globalAlpha = p.alive ? 1 : 0.6;
       ctx.strokeStyle = INK;
@@ -929,6 +938,7 @@ export class Renderer {
       (b) => inView(b.x, b.y),
       onFeed,
       (pet) => inView(pet.x, pet.y),
+      inView,
     );
     this.feeding = false;
     this.drawVisualFx(ctx, onFeed, time);
@@ -943,14 +953,18 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const hat = p.outfit?.hat;
     if (!p.alive) {
+      // Ghosts drift: a slow bob with a gentle sway, rising out of the body when new.
       const f = Math.floor(time * 6) % 6;
       const bmp = this.sprites.get(`g${p.colorIndex}:${f}`, p.color, p.shadow, (c, a, b) => drawGhost(c, a, b, f / 6));
-      const gy = sy - 0.2 * this.ppc + Math.sin(time * 3 + p.id) * 0.1 * this.ppc;
+      const rise = this.fx.ghostRise(p, time);
+      const alpha = 0.55 * (rise ? rise.alpha : 1);
+      const gy = sy + ((rise ? rise.dy : 0) - 0.2 + Math.sin(time * 2.2 + p.id) * 0.1) * this.ppc;
+      const sway = { bob: 0, tilt: Math.sin(time * 1.6 + p.id * 1.3) * 0.08 + (p.moving ? 0.12 : 0) };
       const back = this.sprites.hat(hat, 'back');
-      if (back) this.sprites.blit(ctx, back, sx, gy, p.facing, this.ppc, 0.55);
-      this.sprites.blit(ctx, bmp, sx, gy, p.facing, this.ppc, 0.55);
+      if (back) this.sprites.blit(ctx, back, sx, gy, p.facing, this.ppc, alpha, sway);
+      this.sprites.blit(ctx, bmp, sx, gy, p.facing, this.ppc, alpha, sway);
       const front = this.sprites.hat(hat, 'front');
-      if (front) this.sprites.blit(ctx, front, sx, gy, p.facing, this.ppc, 0.55);
+      if (front) this.sprites.blit(ctx, front, sx, gy, p.facing, this.ppc, alpha, sway);
       ctx.restore();
       return;
     }
@@ -996,31 +1010,40 @@ export class Renderer {
     return [x * m.a + m.e, y * m.d + m.f];
   }
 
-  drawDoor(ctx, d) {
+  /** A door; k is how far it has slid shut (0 open .. 1 closed). */
+  drawDoor(ctx, d, k = 1) {
     const [x0, y0, x1, y1] = d.rect;
     ctx.lineWidth = 0.08;
     ctx.strokeStyle = INK;
     if (d.vertical) {
+      // Slides down out of the frame above.
+      const full = y1 - y0 + 1.1;
+      const h = full * k;
       ctx.fillStyle = '#8c97a3';
       ctx.beginPath();
-      ctx.roundRect(x0 + 0.18, y0 - 1.1, 0.64, y1 - y0 + 1.1, 0.08);
+      ctx.roundRect(x0 + 0.18, y0 - 1.1, 0.64, h, 0.08);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#6c7682';
-      ctx.fillRect(x0 + 0.3, y0 - 0.9, 0.4, y1 - y0 + 0.7);
+      ctx.fillRect(x0 + 0.3, y0 - 0.9, 0.4, Math.max(0, h - 0.4));
     } else {
+      // Two leaves slide in from the sides and meet in the middle.
       const h = 1.7;
-      ctx.fillStyle = '#8c97a3';
-      ctx.beginPath();
-      ctx.roundRect(x0, y1 - h, x1 - x0, h, 0.08);
-      ctx.fill();
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo((x0 + x1) / 2, y1 - h);
-      ctx.lineTo((x0 + x1) / 2, y1);
-      ctx.stroke();
-      ctx.fillStyle = '#f5d90a';
-      for (let x = x0 + 0.2; x < x1 - 0.2; x += 0.6) ctx.fillRect(x, y1 - 0.55, 0.3, 0.2);
+      const mid = (x0 + x1) / 2;
+      const w = (mid - x0) * k;
+      for (const [lx, side] of [
+        [x0, 1],
+        [x1 - w, -1],
+      ]) {
+        ctx.fillStyle = '#8c97a3';
+        ctx.beginPath();
+        ctx.roundRect(lx, y1 - h, w, h, 0.08);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#f5d90a';
+        const inner = side > 0 ? lx + w : lx;
+        for (let x = 0.2; x < w - 0.2; x += 0.6) ctx.fillRect(side > 0 ? inner - x - 0.3 : inner + x, y1 - 0.55, 0.3, 0.2);
+      }
     }
   }
 

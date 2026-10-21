@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kill Cutscenes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap">
+<style>
+  body { margin: 0; background: #111; color: #eee; font: 700 14px "Baloo 2", sans-serif; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; }
+  figure { margin: 0; } canvas { display: block; width: 100%; aspect-ratio: 16 / 9; } figcaption { padding: 2px 4px; }
+</style>
+</head>
+<body>
+<script type="module">
+  // Every kill cutscene on a loop. ?t=seconds freezes them all at one moment (for screenshots);
+  // ?killer=&victim= color indexes; ?mirror=1 flips the stage.
+  import { playKillScene, KILL_VARIANTS } from '../src/cutscenes.js';
+  import { COLORS } from '../src/config.js';
+  const q = new URLSearchParams(location.search);
+  const look = (i, outfit) => ({ color: COLORS[i][1], shadow: COLORS[i][2], outfit });
+  const killer = look(Number(q.get('killer') ?? 0), { hat: q.get('hat') || 'none' });
+  const victim = look(Number(q.get('victim') ?? 5), { hat: q.get('vhat') || 'none' });
+  const freeze = q.get('t');
+  for (const variant of KILL_VARIANTS) {
+    const fig = document.createElement('figure');
+    const c = document.createElement('canvas');
+    const cap = document.createElement('figcaption');
+    cap.textContent = variant;
+    fig.append(c, cap);
+    document.body.append(fig);
+    playKillScene(c, killer, victim, { variant, mirror: q.get('mirror') === '1', loop: freeze == null, at: freeze == null ? null : Number(freeze) });
+  }
+</script>
+</body>
+</html>

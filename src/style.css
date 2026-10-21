@@ -2494,3 +2494,153 @@ kbd {
     font-size: 24px;
   }
 }
+
+/* ---------- Animated moments: kill cutscene, ejection, meeting splash ---------- */
+.screen.kill {
+  background: #0b0000;
+}
+
+.kill-canvas {
+  display: block;
+  width: 100vw;
+  height: min(56.25vw, 80vh);
+}
+
+.screen.kill.hit {
+  animation: kill-hit 0.35s ease-out;
+}
+
+@keyframes kill-hit {
+  from {
+    background: #6a0000;
+  }
+}
+
+.eject-body.go {
+  animation: eject-drift 7s linear forwards;
+}
+
+@keyframes eject-drift {
+  from {
+    transform: translate(-220px, 0);
+  }
+  35% {
+    transform: translate(calc(35vw - 77px), -14px);
+  }
+  70% {
+    transform: translate(calc(70vw - 154px), 10px);
+  }
+  to {
+    transform: translate(calc(100vw + 220px), -6px);
+  }
+}
+
+.eject-spin {
+  transform-origin: 50% 48%;
+  animation: eject-spin 7s linear forwards;
+}
+
+@keyframes eject-spin {
+  to {
+    transform: rotate(-700deg);
+  }
+}
+
+.screen.splash {
+  animation: splash-shake 0.42s 0.08s ease-out;
+}
+
+@keyframes splash-shake {
+  20% {
+    transform: translate(-7px, 4px);
+  }
+  40% {
+    transform: translate(6px, -5px);
+  }
+  60% {
+    transform: translate(-4px, 3px);
+  }
+  80% {
+    transform: translate(2px, -1px);
+  }
+}
+
+.splash-art {
+  position: relative;
+  animation: splash-punch 0.5s cubic-bezier(0.2, 1.5, 0.45, 1) both;
+}
+
+@keyframes splash-punch {
+  from {
+    transform: scale(2.6) rotate(-14deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.splash h1 {
+  animation: splash-slam 0.42s 0.12s cubic-bezier(0.25, 1.6, 0.5, 1) both;
+}
+
+@keyframes splash-slam {
+  from {
+    transform: translateY(-40px) scale(1.8);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.splash-megaphone {
+  position: absolute;
+  left: -64px;
+  top: -22px;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  transform-origin: 70% 50%;
+  animation: megaphone 0.36s ease-in-out infinite alternate;
+}
+
+.splash-megaphone .ico {
+  width: 100%;
+  height: 100%;
+  stroke: #ffd84a;
+}
+
+.splash-megaphone i {
+  position: absolute;
+  right: -26px;
+  top: 50%;
+  width: 22px;
+  height: 5px;
+  border-radius: 3px;
+  background: #ffd84a;
+  box-shadow: 0 2px 0 var(--ink);
+  animation: shout 0.36s ease-out infinite;
+}
+
+.splash-megaphone i:nth-of-type(1) {
+  transform: translateY(-18px) rotate(-28deg);
+}
+
+.splash-megaphone i:nth-of-type(3) {
+  transform: translateY(18px) rotate(28deg);
+}
+
+@keyframes megaphone {
+  to {
+    transform: rotate(-9deg) scale(1.06);
+  }
+}
+
+@keyframes shout {
+  from {
+    opacity: 0.2;
+    right: -14px;
+  }
+}

@@ -4,6 +4,7 @@ import { TIMING } from './config.js';
 import { drawCharacter } from './sprites.js';
 import { sfx, isMuted, setMuted } from './audio.js';
 import { icon } from './hud.js';
+import { playKillScene, KILL_SCENE } from './cutscenes.js';
 
 const HAT_ROOM = 0.6; // extra cells above the head for hats, overlapping whatever is above
 
@@ -97,6 +98,8 @@ export class Screens {
   clear() {
     this.timers.forEach(clearTimeout);
     this.timers = [];
+    this.anim?.();
+    this.anim = null;
     this.stars?.stop();
     this.stars = null;
     this.root.innerHTML = '';
@@ -170,6 +173,11 @@ export class Screens {
     if (body) {
       const victim = game.players[meeting.bodyId];
       art.appendChild(bean(victim, 150, { kind: 'body' }));
+      // The reporter's megaphone shouting over the body.
+      const mega = document.createElement('span');
+      mega.className = 'splash-megaphone';
+      mega.innerHTML = `${icon('report')}<i></i><i></i><i></i>`;
+      art.appendChild(mega);
     } else {
       art.appendChild(bean(caller, 170));
     }
@@ -177,18 +185,18 @@ export class Screens {
   }
 
   // ---------- kill (seen by the victim) ----------
-  killed(killer, victim, done) {
-    this.open('kill', `<div class="kill-stage"><div class="killer"></div><div class="victim"></div></div>`);
-    this.root.querySelector('.killer').appendChild(bean(killer, 170));
-    const v = this.root.querySelector('.victim');
-    v.appendChild(bean(victim, 170, { facing: -1 }));
-    sfx('kill');
-    this.later(650, () => {
-      v.innerHTML = '';
-      v.appendChild(bean(victim, 170, { kind: 'body', facing: -1 }));
-      this.root.classList.add('hit');
+  /** The victim's kill cutscene: one of several animated stagings, then the body. */
+  killed(killer, victim, done, variant) {
+    this.open('kill', `<canvas class="kill-canvas" role="img" aria-label="${killer.name || 'An impostor'} killed you"></canvas>`);
+    const scene = playKillScene(this.root.querySelector('.kill-canvas'), killer, victim, {
+      variant,
+      onHit: () => {
+        sfx('kill');
+        this.root.classList.add('hit');
+      },
     });
-    this.later(TIMING.killAnimation * 1000, () => {
+    this.anim = scene.stop;
+    this.later(KILL_SCENE * 1000, () => {
       this.clear();
       done();
     });
@@ -201,8 +209,12 @@ export class Screens {
       dense: 1.4,
     });
     if (ej.player) {
+      // Drifts across the starfield, tumbling end over end around its middle.
       const b = this.root.querySelector('.eject-body');
-      b.appendChild(bean(ej.player, 110));
+      const spin = document.createElement('div');
+      spin.className = 'eject-spin';
+      spin.appendChild(bean(ej.player, 110));
+      b.appendChild(spin);
       b.classList.add('go');
     }
     sfx('eject');
