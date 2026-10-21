@@ -305,7 +305,7 @@ export class Bots {
       return;
     }
     if (this.rng() < 0.22 && this.buddyUp(b, p)) return;
-    if (this.rng() < 0.08 && this.goWatch(b, p)) return;
+    if (this.rng() < 0.05 && this.goWatch(b, p)) return;
     this.pickTask(b, p) || this.wander(b);
   }
 
@@ -545,8 +545,8 @@ export class Bots {
       if (!q.alive || q.role === 'impostor' || q.inVent || !g.seesPlayer(p, q)) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
       if (d > 9) continue;
-      // The cameras' red lights are on: someone could be watching this spot.
-      if (g.camsInUse() && (g.onCamera(q.x, q.y) || g.onCamera(p.x, p.y))) continue;
+      // The cameras' red lights are on: someone could be watching this spot (unless we're overdue).
+      if (!risky && g.camsInUse() && (g.onCamera(q.x, q.y) || g.onCamera(p.x, p.y))) continue;
       // Only crewmates the impostor can actually see count, and a far one is sometimes misjudged.
       let others = this.watchers(q.x, q.y - 0.4, [q.id])
         .concat(this.watchers(p.x, p.y - 0.4, [q.id]))
