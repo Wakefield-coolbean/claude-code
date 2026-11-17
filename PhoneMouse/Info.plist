@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSCameraUsageDescription</key>
+	<string>PhoneMouse watches the surface under the phone with the back camera to work out which way you are moving it. Nothing is recorded or sent anywhere.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>PhoneMouse finds and connects to the receiver running on your computer over your local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_phonemouse._tcp</string>
+	</array>
+	<key>UIRequiresFullScreen</key>
+	<true/>
+	<key>UIStatusBarHidden</key>
+	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>
