@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # needed to publish the release
 
 jobs:
   build:
@@ -51,3 +51,14 @@ jobs:
             out/PhoneMouse-unsigned.ipa
             out/phonemouse_server.py
             out/requirements.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=phonemouse-latest
+          gh release delete "$TAG" --cleanup-tag --yes || true
+          gh release create "$TAG" --target "$GITHUB_SHA" \
+            --title "PhoneMouse (build ${{ github.run_number }})" \
+            --notes "Unsigned IPA of the PhoneMouse iPhone app plus the desktop receiver. Install the IPA with a sideloading tool such as AltStore or Sideloadly, then run phonemouse_server.py on your computer. See PhoneMouse/README.md for setup." \
+            out/PhoneMouse-unsigned.ipa out/phonemouse_server.py out/requirements.txt
