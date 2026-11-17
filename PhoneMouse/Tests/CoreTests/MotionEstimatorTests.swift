@@ -1,5 +1,5 @@
 import XCTest
-@testable import PhoneMouseCore
+import PhoneMouseCore
 
 /// Deterministic generator so the tests are reproducible.
 private struct LCG {

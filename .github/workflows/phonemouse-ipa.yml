@@ -22,7 +22,9 @@ jobs:
 
       - name: Unit-test the motion core
         working-directory: PhoneMouse
-        run: swift test 2>&1 | tail -n 60
+        run: |
+          set -o pipefail
+          swift test -c release 2>&1 | tail -n 60
 
       - name: Build the app (unsigned, device)
         working-directory: PhoneMouse
